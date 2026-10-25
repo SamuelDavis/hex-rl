@@ -11,6 +11,9 @@ export default function Layout(props: ParentProps) {
               <A href="/">Home</A>
             </li>
             <li>
+              <A href="/game">Game</A>
+            </li>
+            <li>
               <A href="/styleguide">Styleguide</A>
             </li>
           </ul>

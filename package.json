@@ -15,6 +15,7 @@
     "@picocss/pico": "^2.1.1",
     "@samueldavis/solidlib": "github:samueldavis/solidlib",
     "@solidjs/router": "^1.0.0",
+    "procgen": "file:../procgen",
     "solid-js": "^1.9.17"
   },
   "devDependencies": {
