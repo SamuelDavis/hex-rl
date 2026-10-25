@@ -1,0 +1,35 @@
+{
+  "name": "@samueldavis/hex-rl",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@picocss/pico": "^2.1.1",
+    "@samueldavis/solidlib": "github:samueldavis/solidlib",
+    "@solidjs/router": "^1.0.0",
+    "solid-js": "^1.9.17"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@solidjs/testing-library": "^0.8.10",
+    "@tailwindcss/vite": "^4.3.3",
+    "eslint": "^10.12.0",
+    "eslint-plugin-solid": "^0.18.1",
+    "jsdom": "^30.1.2",
+    "prettier": "^3.9.10",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^8.3.4",
+    "vite-plugin-solid": "^2.11.14",
+    "vitest": "^5.0.3"
+  }
+}
