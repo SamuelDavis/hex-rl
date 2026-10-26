@@ -10,7 +10,8 @@ import {
   type Game,
   type Land,
   type Monster,
-  watchesOf,
+  nextTarget,
+  sightOf,
 } from "./game";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
@@ -203,22 +204,34 @@ describe("act", () => {
   });
 });
 
-describe("watchesOf", () => {
-  test("lists what each monster in view can see", () => {
-    const [ahead, behind] = watchesOf(
-      gameWith([
-        monster({ q: 4, r: 0 }, "goblin", "se"),
-        monster({ q: 3, r: 0 }, "wolf", "nw"),
-      ]),
-    );
-    expect(ahead!.has(hexKey({ q: 8, r: 0 }))).toBe(true);
-    expect(ahead!.has(hexKey(origin))).toBe(false);
-    expect(behind!.has(hexKey(origin))).toBe(true);
-    expect(behind!.has(hexKey({ q: 8, r: 0 }))).toBe(false);
+describe("nextTarget", () => {
+  const near = monster({ q: 2, r: 0 }, "goblin", "se");
+  const far = monster({ q: 4, r: 0 });
+  const game = gameWith([far, near]);
+
+  test("cycles from none through visible monsters, nearest first, back to none", () => {
+    expect(nextTarget(game, undefined)).toBe(near.id);
+    expect(nextTarget(game, near.id)).toBe(far.id);
+    expect(nextTarget(game, far.id)).toBeUndefined();
   });
 
-  test("ignores monsters the player can't see", () => {
+  test("starts over when the target is gone", () => {
+    expect(nextTarget(game, "gone")).toBe(near.id);
+  });
+
+  test("skips monsters the player can't see", () => {
     const world = landOf({ "2,0": land(10, true) });
-    expect(watchesOf(gameWith([monster({ q: 4, r: 0 })], world))).toEqual([]);
+    expect(nextTarget(gameWith([far], world), undefined)).toBeUndefined();
+  });
+});
+
+describe("sightOf", () => {
+  test("is what the monster sees from where it faces", () => {
+    const sight = sightOf(
+      gameWith([]),
+      monster({ q: 4, r: 0 }, "goblin", "se"),
+    );
+    expect(sight.has(hexKey({ q: 8, r: 0 }))).toBe(true);
+    expect(sight.has(hexKey(origin))).toBe(false);
   });
 });

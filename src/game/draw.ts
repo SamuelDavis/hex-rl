@@ -23,7 +23,7 @@ const SIDE_SHADE = -14;
 const EDGE_SHADE = -6;
 const TOKEN_LIFT = 0.9;
 const SHADOW = "rgb(0 0 0 / 0.35)";
-const WATCHED = "hsl(0 90% 50% / 0.05)";
+const WATCHED = "hsl(0 90% 50% / 0.15)";
 const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
 const WATCHED_EDGE_WIDTH = 2;
 const EDGES = CORNERS.map((from, i) => {
@@ -90,7 +90,9 @@ export interface Scene {
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly visible: ReadonlySet<string>;
-  readonly watches: readonly ReadonlySet<string>[];
+  readonly target:
+    | { readonly monster: Monster; readonly sight: ReadonlySet<string> }
+    | undefined;
   readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
@@ -98,7 +100,7 @@ export interface Scene {
 
 export const drawScene = (
   context: CanvasRenderingContext2D,
-  { tileAt, player, monsters, visible, watches, seen, width, height }: Scene,
+  { tileAt, player, monsters, visible, target, seen, width, height }: Scene,
 ) => {
   const camera = centerOf(player.at);
   const eye = surfaceOf(tileAt(player.at));
@@ -178,8 +180,8 @@ export const drawScene = (
     context.strokeStyle = css(color, EDGE_SHADE);
     context.fill();
     context.stroke();
-    for (const watched of watches) {
-      if (!watched.has(hexKey(hex))) continue;
+    const watched = target?.sight;
+    if (watched?.has(hexKey(hex))) {
       polygon(face);
       context.fillStyle = WATCHED;
       context.fill();
@@ -206,6 +208,7 @@ export const drawScene = (
     const monster = monsterAt.get(hexKey(hex));
     if (monster) {
       const { hue, glyph } = MONSTERS[monster.kind];
+      if (monster === target?.monster) drawReticle(context, base);
       drawToken(context, base, [hue, 60, 30], glyph);
       drawChevron(context, base, headingOf(monster.facing));
     }
@@ -252,6 +255,16 @@ const tokenCenterOf = ({ x, y }: Vec2): Vec2 => ({
   x,
   y: y - TOKEN_SIZE * TOKEN_LIFT,
 });
+
+const drawReticle = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
+  const radius = TOKEN_SIZE * 1.5;
+  context.beginPath();
+  context.ellipse(x, y, radius, radius * TILT, 0, 0, 2 * Math.PI);
+  context.strokeStyle = WATCHED_EDGE;
+  context.lineWidth = WATCHED_EDGE_WIDTH;
+  context.stroke();
+  context.lineWidth = 0.6;
+};
 
 const drawChevron = (
   context: CanvasRenderingContext2D,

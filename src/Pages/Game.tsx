@@ -15,8 +15,10 @@ import {
   isOver,
   MAX_HP,
   newGame,
+  nextTarget,
+  sightOf,
+  targetsOf,
   visibleOf,
-  watchesOf,
   type Action,
   type Game as GameState,
 } from "../game/game";
@@ -37,6 +39,8 @@ const KEYS: Record<string, Action> = {
   " ": "wait",
   ".": "wait",
 };
+
+const TARGET_KEY = "t";
 
 const MOVE_ROWS = [
   Object.entries(MOVE_KEYS).slice(0, 3),
@@ -74,6 +78,15 @@ export default function Game() {
   const getGame = () => getState().game;
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() => visibleOf(getGame()));
+  const [getTargetId, setTargetId] = createSignal<string>();
+  const getTarget = createMemo(() => {
+    const monster = targetsOf(getGame()).find(({ id }) => id === getTargetId());
+    return monster && { monster, sight: sightOf(getGame(), monster) };
+  });
+
+  function cycleTarget() {
+    setTargetId(nextTarget(getGame(), getTarget()?.monster.id));
+  }
 
   function perform(action: Action) {
     setState((state) => ({ ...state, game: act(state.game, action) }));
@@ -84,8 +97,15 @@ export default function Game() {
   }
 
   function onKeyDown(event: KeyboardEvent) {
-    const action = KEYS[event.key.toLowerCase()];
-    if (!action || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (key === TARGET_KEY) {
+      event.preventDefault();
+      cycleTarget();
+      return;
+    }
+    const action = KEYS[key];
+    if (!action) return;
     event.preventDefault();
     perform(action);
   }
@@ -128,7 +148,7 @@ export default function Game() {
       player,
       monsters,
       visible: getVisible(),
-      watches: watchesOf(getGame()),
+      target: getTarget(),
       seen,
       width,
       height,
@@ -169,7 +189,12 @@ export default function Game() {
         </div>
         <Switch>
           <Match when={getTab() === "Play"}>
-            <PlayPanel game={getGame()} perform={perform} restart={restart} />
+            <PlayPanel
+              game={getGame()}
+              perform={perform}
+              restart={restart}
+              cycleTarget={cycleTarget}
+            />
           </Match>
           <Match when={getTab() === "Log"}>
             <LogPanel log={getGame().log} />
@@ -203,6 +228,7 @@ function PlayPanel(props: {
   game: GameState;
   perform: (action: Action) => void;
   restart: () => void;
+  cycleTarget: () => void;
 }) {
   return (
     <Show
@@ -243,6 +269,14 @@ function PlayPanel(props: {
         >
           Wait
         </button>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`Next target (${TARGET_KEY.toUpperCase()})`}
+          onClick={() => props.cycleTarget()}
+        >
+          Target
+        </button>
       </div>
     </Show>
   );
@@ -269,7 +303,8 @@ function OtherPanel(props: { restart: () => void }) {
         Face a direction, then step that way: tap toward it, use the Play
         buttons, or press <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd>{" "}
         <kbd>S</kbd> <kbd>D</kbd>; wait with <kbd>Space</kbd>. Bump monsters to
-        attack. Climb one block at a time; swim freely.
+        attack. Press <kbd>T</kbd> to cycle through monsters in view and see
+        what each can see. Climb one block at a time; swim freely.
       </p>
       <button type="button" onClick={() => props.restart()}>
         New world

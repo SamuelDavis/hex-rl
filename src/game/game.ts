@@ -66,11 +66,24 @@ const logged = (game: Game, ...messages: string[]): Game => ({
 export const visibleOf = ({ land, player }: Game): Set<string> =>
   visibleFrom(land.tileAt, player.at, player.facing);
 
-export const watchesOf = (game: Game): Set<string>[] => {
+export const sightOf = ({ land }: Game, { at, facing }: Monster) =>
+  visibleFrom(land.tileAt, at, facing);
+
+export const targetsOf = (game: Game): Monster[] => {
   const visible = visibleOf(game);
+  const distanceOf = ({ at }: Monster) => hexDistance(at, game.player.at);
   return game.monsters
     .filter(({ at }) => visible.has(hexKey(at)))
-    .map(({ at, facing }) => visibleFrom(game.land.tileAt, at, facing));
+    .sort((a, b) => distanceOf(a) - distanceOf(b));
+};
+
+export const nextTarget = (
+  game: Game,
+  current: string | undefined,
+): string | undefined => {
+  const ids = targetsOf(game).map(({ id }) => id);
+  const index = current === undefined ? -1 : ids.indexOf(current);
+  return index === -1 ? ids[0] : ids[index + 1];
 };
 
 const withSight = (game: Game): Game => ({
