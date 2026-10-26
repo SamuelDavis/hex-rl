@@ -8,6 +8,7 @@ import {
   onCleanup,
   Show,
   Switch,
+  type JSX,
 } from "solid-js";
 import { drawScene, groundOffsetOf, screenRadiusOf } from "../game/draw";
 import {
@@ -253,46 +254,52 @@ function PlayPanel(props: {
         </>
       }
     >
-      <MovePad perform={props.perform} />
-      <div role="group">
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label="Wait (Space)"
-          onClick={() => props.perform("wait")}
-        >
-          Wait
-        </button>
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label={`Next target (${TARGET_KEY.toUpperCase()})`}
-          onClick={() => props.cycleTarget()}
-        >
-          Target
-        </button>
+      <div class="mb-(--pico-spacing) flex items-center justify-between">
+        <div class="grid grid-cols-[repeat(3,4rem)] gap-(--pico-spacing)">
+          <For each={Object.entries(MOVE_KEYS)}>
+            {([key, direction]) => (
+              <PadButton
+                class="text-2xl"
+                label={`Move ${direction} (${key.toUpperCase()})`}
+                onPress={() => props.perform(direction)}
+              >
+                {ARROWS[direction]}
+              </PadButton>
+            )}
+          </For>
+        </div>
+        <div class="grid grid-cols-[4rem] gap-(--pico-spacing)">
+          <PadButton label="Wait (Space)" onPress={() => props.perform("wait")}>
+            Wait
+          </PadButton>
+          <PadButton
+            label={`Next target (${TARGET_KEY.toUpperCase()})`}
+            onPress={() => props.cycleTarget()}
+          >
+            Target
+          </PadButton>
+        </div>
       </div>
     </Show>
   );
 }
 
-function MovePad(props: { perform: (direction: Direction) => void }) {
+function PadButton(props: {
+  label: string;
+  onPress: () => void;
+  class?: string;
+  children: JSX.Element;
+}) {
   return (
-    <div class="mx-auto mb-(--pico-spacing) grid w-fit grid-cols-[repeat(3,4rem)] gap-(--pico-spacing)">
-      <For each={Object.entries(MOVE_KEYS)}>
-        {([key, direction]) => (
-          <button
-            type="button"
-            tabIndex={-1}
-            class="m-0 aspect-square p-0 text-2xl"
-            aria-label={`Move ${direction} (${key.toUpperCase()})`}
-            onClick={() => props.perform(direction)}
-          >
-            {ARROWS[direction]}
-          </button>
-        )}
-      </For>
-    </div>
+    <button
+      type="button"
+      tabIndex={-1}
+      class={`m-0 aspect-square p-0 ${props.class ?? ""}`}
+      aria-label={props.label}
+      onClick={() => props.onPress()}
+    >
+      {props.children}
+    </button>
   );
 }
 
