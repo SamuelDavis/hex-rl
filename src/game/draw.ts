@@ -29,6 +29,7 @@ const WATCHED_EDGE_WIDTH = 2;
 const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
 const WHITE: Hsl = [0, 0, 100];
 const HOSTILE: Hsl = [0, 90, 55];
+const TARGETED: Hsl = [110, 100, 55];
 const EDGES = CORNERS.map((from, i) => {
   const to = CORNERS[(i + 1) % CORNERS.length]!;
   const facing = directionToward({ x: from.x + to.x, y: from.y + to.y });
@@ -289,7 +290,7 @@ const drawReticle = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
   const radius = TOKEN_SIZE * 1.5;
   context.beginPath();
   context.ellipse(x, y, radius, radius * TILT, 0, 0, 2 * Math.PI);
-  context.strokeStyle = WATCHED_EDGE;
+  context.strokeStyle = css(TARGETED);
   context.lineWidth = WATCHED_EDGE_WIDTH;
   context.stroke();
   context.lineWidth = 0.6;
