@@ -25,10 +25,12 @@ import {
 } from "procgen/recipes";
 import {
   centerOf,
+  HEADINGS,
   hexAt,
   hexDistance,
   hexesCovering,
   hexKey,
+  type Direction,
   type Hex,
 } from "./hex";
 import { monsterWeightsAt, type MonsterKind } from "./monsters";
@@ -49,6 +51,7 @@ export type Biome = (typeof Biome)[keyof typeof Biome];
 export interface Lair {
   readonly kind: MonsterKind;
   readonly at: Hex;
+  readonly facing: Direction;
 }
 
 export interface Tile {
@@ -241,7 +244,8 @@ export const createTerrain = (seed: number) => {
         .map((at) => {
           const danger = 1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
           const kind = lairs.weighted(monsterWeightsAt(danger), at.q, at.r, 1);
-          return { kind, at };
+          const facing = lairs.pick(HEADINGS, at.q, at.r, 2);
+          return { kind, at, facing };
         });
     },
   });

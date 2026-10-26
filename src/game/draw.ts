@@ -114,8 +114,7 @@ export const drawScene = (
     .sort((a, b) => a.center.y - b.center.y || a.center.x - b.center.x);
 
   const polygon = (points: readonly Vec2[]) => {
-    context.beginPath();
-    points.forEach(({ x, y }) => context.lineTo(x, y));
+    polyline(context, points);
     context.closePath();
   };
 
@@ -181,6 +180,7 @@ export const drawScene = (
     if (monster) {
       const { hue, glyph } = MONSTERS[monster.kind];
       drawToken(context, base, [hue, 60, 30], glyph);
+      drawChevron(context, base, headingOf(monster.facing));
     }
     if (sameHex(hex, player.at))
       drawToken(context, base, [0, 80, 55], "@", headingOf(player.facing));
@@ -219,15 +219,53 @@ const headingOf = (direction: Direction): Vec2 => {
   return { x: x / length, y: y / length };
 };
 
+const TOKEN_SIZE = PIXELS_PER_UNIT * 0.5;
+
+const tokenCenterOf = ({ x, y }: Vec2): Vec2 => ({
+  x,
+  y: y - TOKEN_SIZE * TOKEN_LIFT,
+});
+
+const drawChevron = (
+  context: CanvasRenderingContext2D,
+  base: Vec2,
+  heading: Vec2,
+) => {
+  const center = tokenCenterOf(base);
+  const at = (along: number, across: number) => ({
+    x: center.x + TOKEN_SIZE * (heading.x * along - heading.y * across),
+    y: center.y + TOKEN_SIZE * (heading.y * along + heading.x * across),
+  });
+  polyline(context, [at(1.25, -0.55), at(1.75, 0), at(1.25, 0.55)]);
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.strokeStyle = SHADOW;
+  context.lineWidth = 5;
+  context.stroke();
+  context.strokeStyle = css([0, 0, 100]);
+  context.lineWidth = 2.5;
+  context.stroke();
+  context.lineWidth = 0.6;
+};
+
+const polyline = (
+  context: CanvasRenderingContext2D,
+  points: readonly Vec2[],
+) => {
+  context.beginPath();
+  points.forEach(({ x, y }) => context.lineTo(x, y));
+};
+
 const drawToken = (
   context: CanvasRenderingContext2D,
-  { x, y }: Vec2,
+  base: Vec2,
   fill: Hsl,
   glyph: string,
   heading: Vec2 = { x: 1, y: 0 },
 ) => {
-  const size = PIXELS_PER_UNIT * 0.5;
-  const center = { x, y: y - size * TOKEN_LIFT };
+  const { x, y } = base;
+  const size = TOKEN_SIZE;
+  const center = tokenCenterOf(base);
   context.fillStyle = SHADOW;
   context.beginPath();
   context.ellipse(x, y, size, size * TILT, 0, 0, 2 * Math.PI);

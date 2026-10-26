@@ -16,6 +16,8 @@ export const DIRECTIONS = {
 
 export type Direction = keyof typeof DIRECTIONS;
 
+export const HEADINGS = Object.keys(DIRECTIONS) as readonly Direction[];
+
 const SQRT3 = Math.sqrt(3);
 
 export const hexKey = ({ q, r }: Hex): string => `${q},${r}`;
@@ -28,16 +30,14 @@ export const neighborsOf = (hex: Hex): Hex[] =>
   Object.values(DIRECTIONS).map((direction) => add(hex, direction));
 
 export const directionBetween = (from: Hex, to: Hex): Direction | undefined =>
-  (Object.keys(DIRECTIONS) as Direction[]).find((direction) =>
-    sameHex(add(from, DIRECTIONS[direction]), to),
-  );
+  HEADINGS.find((direction) => sameHex(add(from, DIRECTIONS[direction]), to));
 
 export const directionToward = ({ x, y }: Vec2): Direction => {
   const alignment = (direction: Direction) => {
     const toward = centerOf(DIRECTIONS[direction]);
     return toward.x * x + toward.y * y;
   };
-  return (Object.keys(DIRECTIONS) as Direction[]).reduce((best, direction) =>
+  return HEADINGS.reduce((best, direction) =>
     alignment(direction) > alignment(best) ? direction : best,
   );
 };

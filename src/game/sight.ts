@@ -48,14 +48,22 @@ const isNoticed = (offset: Hex, facing: Direction): boolean =>
   hexDistance(offset, { q: 0, r: 0 }) <= AWARENESS ||
   isWithinCone(offset, facing);
 
+export const canNotice = (
+  tileAt: TileAt,
+  eye: Hex,
+  facing: Direction,
+  target: Hex,
+): boolean =>
+  isNoticed({ q: target.q - eye.q, r: target.r - eye.r }, facing) &&
+  canSee(tileAt, eye, target);
+
 export const visibleFrom = (
   tileAt: TileAt,
   eye: Hex,
   facing: Direction,
 ): Set<string> =>
   new Set(
-    SIGHT_OFFSETS.filter((offset) => isNoticed(offset, facing))
-      .map((offset) => add(eye, offset))
-      .filter((target) => canSee(tileAt, eye, target))
+    SIGHT_OFFSETS.map((offset) => add(eye, offset))
+      .filter((target) => canNotice(tileAt, eye, facing, target))
       .map(hexKey),
   );

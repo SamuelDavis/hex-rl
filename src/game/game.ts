@@ -4,6 +4,7 @@ import {
   add,
   centerOf,
   DIRECTIONS,
+  directionBetween,
   hexDistance,
   hexKey,
   neighborsOf,
@@ -12,7 +13,7 @@ import {
   type Hex,
 } from "./hex";
 import { MONSTERS, type MonsterKind } from "./monsters";
-import { canSee, SIGHT, visibleFrom } from "./sight";
+import { canNotice, SIGHT, visibleFrom } from "./sight";
 import type { Lair, Tile } from "./terrain";
 
 export const MAX_HP = 20;
@@ -39,6 +40,7 @@ export interface Monster {
   readonly id: string;
   readonly kind: MonsterKind;
   readonly at: Hex;
+  readonly facing: Direction;
   readonly hp: number;
 }
 
@@ -93,10 +95,11 @@ const populate = (game: Game): Game => {
       (lair) =>
         hexDistance(lair.at, player.at) <= ACTIVE_RADIUS && !isTaken(lair),
     )
-    .map(({ kind, at }) => ({
+    .map(({ kind, at, facing }) => ({
       id: hexKey(at),
       kind,
       at,
+      facing,
       hp: MONSTERS[kind].hp,
     }));
   return { ...game, monsters: [...kept, ...woken] };
@@ -161,29 +164,35 @@ const stepToward = (game: Game, monster: Monster): Hex | undefined => {
   return "path" in route ? route.path[1] : undefined;
 };
 
+const updated = (game: Game, monster: Monster, change: Partial<Monster>) => ({
+  ...game,
+  monsters: game.monsters.map((m) =>
+    m.id === monster.id ? { ...m, ...change } : m,
+  ),
+});
+
 const monsterTurn = (game: Game, monster: Monster): Game => {
   const { land, player } = game;
   if (isOver(game)) return game;
-  if (
-    hexDistance(monster.at, player.at) === 1 &&
-    canStep(land.tileAt, monster.at, player.at)
-  ) {
+  const toward = directionBetween(monster.at, player.at);
+  if (toward && canStep(land.tileAt, monster.at, player.at)) {
     const hp = player.hp - MONSTERS[monster.kind].damage;
     const hit = `The ${monster.kind} hits you.`;
     return logged(
-      { ...game, player: { ...player, hp } },
+      updated({ ...game, player: { ...player, hp } }, monster, {
+        facing: toward,
+      }),
       ...(hp > 0 ? [hit] : [hit, "You die."]),
     );
   }
-  if (!canSee(land.tileAt, monster.at, player.at)) return game;
+  if (!canNotice(land.tileAt, monster.at, monster.facing, player.at))
+    return game;
   const step = stepToward(game, monster);
   if (!step || sameHex(step, player.at)) return game;
-  return {
-    ...game,
-    monsters: game.monsters.map((m) =>
-      m.id === monster.id ? { ...m, at: step } : m,
-    ),
-  };
+  return updated(game, monster, {
+    at: step,
+    facing: directionBetween(monster.at, step)!,
+  });
 };
 
 const monstersTurn = (game: Game): Game =>

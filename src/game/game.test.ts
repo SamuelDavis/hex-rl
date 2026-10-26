@@ -11,7 +11,7 @@ import {
   type Land,
   type Monster,
 } from "./game";
-import { hexKey, type Hex } from "./hex";
+import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
 import { SIGHT } from "./sight";
 import { Biome, type Lair, type Tile } from "./terrain";
@@ -35,10 +35,15 @@ const landOf = (
   lairsIn: () => lairs,
 });
 
-const monster = (at: Hex, kind: Monster["kind"] = "goblin"): Monster => ({
+const monster = (
+  at: Hex,
+  kind: Monster["kind"] = "goblin",
+  facing: Direction = "nw",
+): Monster => ({
   id: hexKey(at),
   kind,
   at,
+  facing,
   hp: MONSTERS[kind].hp,
 });
 
@@ -66,8 +71,16 @@ describe("newGame", () => {
   });
 
   test("wakes the lairs within the active radius only", () => {
-    const near = { kind: "wolf", at: { q: ACTIVE_RADIUS, r: 0 } } as const;
-    const far = { kind: "wolf", at: { q: ACTIVE_RADIUS + 1, r: 0 } } as const;
+    const near = {
+      kind: "wolf",
+      at: { q: ACTIVE_RADIUS, r: 0 },
+      facing: "n",
+    } as const;
+    const far = {
+      kind: "wolf",
+      at: { q: ACTIVE_RADIUS + 1, r: 0 },
+      facing: "n",
+    } as const;
     const game = newGame(landOf({}, [near, far]));
     expect(game.monsters.map(({ at }) => at)).toEqual([near.at]);
   });
@@ -110,7 +123,7 @@ describe("act", () => {
   });
 
   test("a slain monster stays slain", () => {
-    const lair = { kind: "wolf", at: east } as const;
+    const lair = { kind: "wolf", at: east, facing: "n" } as const;
     const world = landOf({}, [lair]);
     const game = gameWith([{ ...monster(east), hp: 1 }], world);
     const next = act(game, "se");
@@ -133,6 +146,38 @@ describe("act", () => {
   test("monsters in sight close in", () => {
     const next = act(gameWith([monster({ q: 4, r: 0 })]), "wait");
     expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
+  });
+
+  test("monsters face the way they step", () => {
+    const next = act(
+      gameWith([monster({ q: 4, r: 0 }, "goblin", "n")]),
+      "wait",
+    );
+    expect(next.monsters[0]).toMatchObject({
+      at: { q: 3, r: 0 },
+      facing: "nw",
+    });
+  });
+
+  test("monsters facing away don't notice the player beyond their awareness", () => {
+    const next = act(
+      gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]),
+      "wait",
+    );
+    expect(next.monsters[0]!.at).toEqual({ q: 4, r: 0 });
+  });
+
+  test("monsters notice the player within their awareness, whatever their facing", () => {
+    const next = act(
+      gameWith([monster({ q: 2, r: 0 }, "goblin", "se")]),
+      "wait",
+    );
+    expect(next.monsters[0]).toMatchObject({ at: east, facing: "nw" });
+  });
+
+  test("monsters turn to face the player they strike", () => {
+    const next = act(gameWith([monster(east, "goblin", "se")]), "wait");
+    expect(next.monsters[0]!.facing).toBe("nw");
   });
 
   test("monsters out of sight stay put", () => {
