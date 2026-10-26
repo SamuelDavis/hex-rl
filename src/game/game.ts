@@ -42,6 +42,7 @@ export interface Monster {
   readonly at: Hex;
   readonly facing: Direction;
   readonly hp: number;
+  readonly isHostile: boolean;
 }
 
 export interface Game {
@@ -101,6 +102,7 @@ const populate = (game: Game): Game => {
       at,
       facing,
       hp: MONSTERS[kind].hp,
+      isHostile: false,
     }));
   return { ...game, monsters: [...kept, ...woken] };
 };
@@ -181,17 +183,20 @@ const monsterTurn = (game: Game, monster: Monster): Game => {
     return logged(
       updated({ ...game, player: { ...player, hp } }, monster, {
         facing: toward,
+        isHostile: true,
       }),
       ...(hp > 0 ? [hit] : [hit, "You die."]),
     );
   }
   if (!canNotice(land.tileAt, monster.at, monster.facing, player.at))
-    return game;
+    return updated(game, monster, { isHostile: false });
   const step = stepToward(game, monster);
-  if (!step || sameHex(step, player.at)) return game;
+  if (!step || sameHex(step, player.at))
+    return updated(game, monster, { isHostile: true });
   return updated(game, monster, {
     at: step,
     facing: directionBetween(monster.at, step)!,
+    isHostile: true,
   });
 };
 

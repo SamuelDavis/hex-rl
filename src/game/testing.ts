@@ -32,6 +32,7 @@ export const monster = (
   at,
   facing,
   hp: MONSTERS[kind].hp,
+  isHostile: false,
 });
 
 export const facingEast = (world = landOf()): Game => {

@@ -27,6 +27,8 @@ const WATCHED = "hsl(0 90% 50% / 0.15)";
 const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
 const WATCHED_EDGE_WIDTH = 2;
 const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
+const WHITE: Hsl = [0, 0, 100];
+const HOSTILE: Hsl = [0, 90, 55];
 const EDGES = CORNERS.map((from, i) => {
   const to = CORNERS[(i + 1) % CORNERS.length]!;
   const facing = directionToward({ x: from.x + to.x, y: from.y + to.y });
@@ -227,12 +229,20 @@ export const drawScene = (
     const monster = monsterAt.get(hexKey(hex));
     if (monster) {
       const { hue, glyph } = MONSTERS[monster.kind];
-      drawToken(context, base, [hue, 60, 30], glyph);
+      drawToken(context, base, {
+        fill: [hue, 60, 30],
+        glyph,
+        ring: monster.isHostile ? HOSTILE : WHITE,
+      });
       drawChevron(context, base, headingOf(monster.facing));
     } else if (target?.kind === "remembered" && sameHex(hex, target.at))
-      drawToken(context, base, REMEMBERED_TOKEN, "?");
+      drawToken(context, base, { fill: REMEMBERED_TOKEN, glyph: "?" });
     if (sameHex(hex, player.at))
-      drawToken(context, base, [0, 80, 55], "@", headingOf(player.facing));
+      drawToken(context, base, {
+        fill: [0, 80, 55],
+        glyph: "@",
+        heading: headingOf(player.facing),
+      });
   }
 };
 
@@ -301,7 +311,7 @@ const drawChevron = (
   context.strokeStyle = SHADOW;
   context.lineWidth = 5;
   context.stroke();
-  context.strokeStyle = css([0, 0, 100]);
+  context.strokeStyle = css(WHITE);
   context.lineWidth = 2.5;
   context.stroke();
   context.lineWidth = 0.6;
@@ -315,12 +325,17 @@ const polyline = (
   points.forEach(({ x, y }) => context.lineTo(x, y));
 };
 
+interface Token {
+  readonly fill: Hsl;
+  readonly glyph: string;
+  readonly ring?: Hsl;
+  readonly heading?: Vec2;
+}
+
 const drawToken = (
   context: CanvasRenderingContext2D,
   base: Vec2,
-  fill: Hsl,
-  glyph: string,
-  heading: Vec2 = { x: 1, y: 0 },
+  { fill, glyph, ring = WHITE, heading = { x: 1, y: 0 } }: Token,
 ) => {
   const { x, y } = base;
   const size = TOKEN_SIZE;
@@ -330,14 +345,14 @@ const drawToken = (
   context.ellipse(x, y, size, size * TILT, 0, 0, 2 * Math.PI);
   context.fill();
   context.fillStyle = css(fill);
-  context.strokeStyle = css([0, 0, 100]);
+  context.strokeStyle = css(ring);
   context.lineWidth = 2.5;
   context.beginPath();
   context.arc(center.x, center.y, size, 0, 2 * Math.PI);
   context.fill();
   context.stroke();
   context.lineWidth = 0.6;
-  context.fillStyle = css([0, 0, 100]);
+  context.fillStyle = css(WHITE);
   context.font = `bold ${size * 1.3}px monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";

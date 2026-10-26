@@ -139,6 +139,24 @@ describe("act", () => {
     expect(next.monsters[0]).toMatchObject({ at: east, facing: "nw" });
   });
 
+  test("monsters that notice the player turn hostile", () => {
+    const next = act(gameWith([monster({ q: 4, r: 0 })]), "wait");
+    expect(next.monsters[0]!.isHostile).toBe(true);
+  });
+
+  test("monsters that strike are hostile", () => {
+    const next = act(gameWith([monster(east, "goblin", "se")]), "wait");
+    expect(next.monsters[0]!.isHostile).toBe(true);
+  });
+
+  test("monsters that lose sight of the player calm down", () => {
+    const hostile = {
+      ...monster({ q: 4, r: 0 }, "goblin", "se"),
+      isHostile: true,
+    };
+    expect(act(gameWith([hostile]), "wait").monsters[0]!.isHostile).toBe(false);
+  });
+
   test("monsters turn to face the player they strike", () => {
     const next = act(gameWith([monster(east, "goblin", "se")]), "wait");
     expect(next.monsters[0]!.facing).toBe("nw");
