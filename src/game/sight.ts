@@ -1,14 +1,17 @@
 import {
   add,
+  DIRECTIONS,
   hexDistance,
   hexesWithin,
   hexKey,
   lineBetween,
+  type Direction,
   type Hex,
 } from "./hex";
 import { surfaceOf, type Tile } from "./terrain";
 
 export const SIGHT = 10;
+export const AWARENESS = 2;
 const EYE_HEIGHT = 1.5;
 const TREE_HEIGHT = 3;
 
@@ -32,9 +35,27 @@ export const canSee = (tileAt: TileAt, eye: Hex, target: Hex): boolean => {
 
 const SIGHT_OFFSETS = hexesWithin(SIGHT);
 
-export const visibleFrom = (tileAt: TileAt, eye: Hex): Set<string> =>
+const isWithinCone = (offset: Hex, facing: Direction): boolean => {
+  const { q, r } = DIRECTIONS[facing];
+  return (
+    offset.q * q >= 0 &&
+    offset.r * r >= 0 &&
+    (offset.q + offset.r) * (q + r) >= 0
+  );
+};
+
+const isNoticed = (offset: Hex, facing: Direction): boolean =>
+  hexDistance(offset, { q: 0, r: 0 }) <= AWARENESS ||
+  isWithinCone(offset, facing);
+
+export const visibleFrom = (
+  tileAt: TileAt,
+  eye: Hex,
+  facing: Direction,
+): Set<string> =>
   new Set(
-    SIGHT_OFFSETS.map((offset) => add(eye, offset))
+    SIGHT_OFFSETS.filter((offset) => isNoticed(offset, facing))
+      .map((offset) => add(eye, offset))
       .filter((target) => canSee(tileAt, eye, target))
       .map(hexKey),
   );

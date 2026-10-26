@@ -15,11 +15,11 @@ import {
   isOver,
   MAX_HP,
   newGame,
+  visibleOf,
   type Action,
   type Game as GameState,
 } from "../game/game";
 import { directionToward, type Direction } from "../game/hex";
-import { visibleFrom } from "../game/sight";
 import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "../game/terrain";
 
 const MOVE_KEYS: Record<string, Direction> = {
@@ -72,9 +72,7 @@ export default function Game() {
   const [getCanvas, setCanvas] = createSignal<HTMLCanvasElement>();
   const getGame = () => getState().game;
   const getTile = () => getGame().land.tileAt(getGame().player.at);
-  const getVisible = createMemo(() =>
-    visibleFrom(getGame().land.tileAt, getGame().player.at),
-  );
+  const getVisible = createMemo(() => visibleOf(getGame()));
 
   function perform(action: Action) {
     setState((state) => ({ ...state, game: act(state.game, action) }));

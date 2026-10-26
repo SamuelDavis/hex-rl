@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { hexKey, type Hex } from "./hex";
-import { canSee, SIGHT, visibleFrom } from "./sight";
+import { AWARENESS, canSee, SIGHT, visibleFrom } from "./sight";
 import { Biome, type Tile } from "./terrain";
 
 const land = (ground: number, tree = false): Tile => ({
@@ -39,9 +39,28 @@ test("high ground sees over trees below", () => {
   expect(canSee(tileAt, origin, ahead)).toBe(true);
 });
 
-test("visibleFrom lists every hex in sight", () => {
-  const visible = visibleFrom(tilesOf({ "1,0": land(10, true) }), origin);
+test("visibleFrom lists every hex in sight within the cone faced", () => {
+  const visible = visibleFrom(tilesOf({ "1,0": land(10, true) }), origin, "s");
   expect(visible.has("1,0")).toBe(true);
   expect(visible.has("2,0")).toBe(false);
   expect(visible.has(hexKey({ q: 0, r: SIGHT }))).toBe(true);
+});
+
+test("the cone spans the directions flanking the one faced", () => {
+  const visible = visibleFrom(tilesOf({}), origin, "n");
+  expect(visible.has(hexKey({ q: SIGHT, r: -SIGHT }))).toBe(true);
+  expect(visible.has(hexKey({ q: -SIGHT, r: 0 }))).toBe(true);
+  expect(visible.has(hexKey({ q: SIGHT, r: 0 }))).toBe(false);
+  expect(visible.has(hexKey({ q: 0, r: SIGHT }))).toBe(false);
+});
+
+test("awareness sees all around, but no farther", () => {
+  const visible = visibleFrom(tilesOf({}), origin, "n");
+  expect(visible.has(hexKey({ q: 0, r: AWARENESS }))).toBe(true);
+  expect(visible.has(hexKey({ q: 0, r: AWARENESS + 1 }))).toBe(false);
+});
+
+test("awareness is still blocked by obstacles", () => {
+  const visible = visibleFrom(tilesOf({ "0,1": land(10, true) }), origin, "n");
+  expect(visible.has("0,2")).toBe(false);
 });

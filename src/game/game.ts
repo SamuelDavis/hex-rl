@@ -31,6 +31,7 @@ export interface Land {
 
 export interface Player {
   readonly at: Hex;
+  readonly facing: Direction;
   readonly hp: number;
 }
 
@@ -60,12 +61,12 @@ const logged = (game: Game, ...messages: string[]): Game => ({
   log: [...game.log, ...messages].slice(-LOG_LENGTH),
 });
 
+export const visibleOf = ({ land, player }: Game): Set<string> =>
+  visibleFrom(land.tileAt, player.at, player.facing);
+
 const withSight = (game: Game): Game => ({
   ...game,
-  seen: new Set([
-    ...game.seen,
-    ...visibleFrom(game.land.tileAt, game.player.at),
-  ]),
+  seen: new Set([...game.seen, ...visibleOf(game)]),
 });
 
 const monsterAt = (game: Game, hex: Hex) =>
@@ -105,7 +106,7 @@ export const newGame = (land: Land): Game =>
   withSight(
     populate({
       land,
-      player: { at: land.spawn, hp: MAX_HP },
+      player: { at: land.spawn, facing: "n", hp: MAX_HP },
       monsters: [],
       slain: new Set(),
       seen: new Set(),
@@ -134,11 +135,13 @@ const attack = (game: Game, target: Monster): Game => {
   );
 };
 
-const playerTurn = (game: Game, to: Hex): Game => {
-  const target = monsterAt(game, to);
+const playerTurn = (game: Game, facing: Direction): Game => {
+  const to = add(game.player.at, DIRECTIONS[facing]);
+  const faced = { ...game, player: { ...game.player, facing } };
+  const target = monsterAt(faced, to);
   return target
-    ? attack(game, target)
-    : { ...game, player: { ...game.player, at: to } };
+    ? attack(faced, target)
+    : { ...faced, player: { ...faced.player, at: to } };
 };
 
 const stepToward = (game: Game, monster: Monster): Hex | undefined => {
@@ -210,7 +213,7 @@ export const act = (game: Game, action: Action): Game => {
       ? game.player.at
       : add(game.player.at, DIRECTIONS[action]);
   if (!canStep(game.land.tileAt, game.player.at, to)) return game;
-  const acted = action === "wait" ? game : playerTurn(game, to);
+  const acted = action === "wait" ? game : playerTurn(game, action);
   return withSight(
     populate(regenerate(monstersTurn({ ...acted, turn: game.turn + 1 }))),
   );

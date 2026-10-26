@@ -13,6 +13,7 @@ import {
 } from "./game";
 import { hexKey, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
+import { SIGHT } from "./sight";
 import { Biome, type Lair, type Tile } from "./terrain";
 
 const land = (ground: number, tree = false): Tile => ({
@@ -49,8 +50,14 @@ const gameWith = (monsters: Monster[], world = landOf()): Game => ({
 describe("newGame", () => {
   test("starts at the spawn with full health", () => {
     const game = newGame(landOf());
-    expect(game.player).toEqual({ at: origin, hp: MAX_HP });
+    expect(game.player).toMatchObject({ at: origin, hp: MAX_HP });
     expect(game.seen.has(hexKey(origin))).toBe(true);
+  });
+
+  test("sees only what lies ahead beyond its awareness", () => {
+    const game = newGame(landOf());
+    expect(game.seen.has(hexKey({ q: 0, r: -SIGHT }))).toBe(true);
+    expect(game.seen.has(hexKey({ q: 0, r: SIGHT }))).toBe(false);
   });
 
   test("wakes the lairs within the active radius only", () => {
@@ -71,6 +78,13 @@ describe("act", () => {
     const next = act(newGame(landOf()), "se");
     expect(next.player.at).toEqual(east);
     expect(next.turn).toBe(1);
+  });
+
+  test("moving or attacking faces that way; waiting keeps facing", () => {
+    expect(act(newGame(landOf()), "se").player.facing).toBe("se");
+    expect(act(gameWith([monster(east)]), "se").player.facing).toBe("se");
+    const facing = newGame(landOf()).player.facing;
+    expect(act(newGame(landOf()), "wait").player.facing).toBe(facing);
   });
 
   test("bumping a monster attacks it", () => {
@@ -119,7 +133,7 @@ describe("act", () => {
   test("the game ends when the player dies, and accepts no more actions", () => {
     const game = {
       ...gameWith([monster(east)]),
-      player: { at: origin, hp: 1 },
+      player: { ...newGame(landOf()).player, hp: 1 },
     };
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
