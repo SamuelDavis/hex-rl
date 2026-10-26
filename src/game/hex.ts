@@ -46,9 +46,7 @@ export const CORNERS: readonly Vec2[] = [
   { x: 0.5, y: -SQRT3 / 2 },
 ];
 
-export const hexAt = ({ x, y }: Vec2): Hex => {
-  const q = x / 1.5;
-  const r = y / SQRT3 - q / 2;
+const roundAxial = (q: number, r: number): Hex => {
   const s = -q - r;
   let rq = Math.round(q);
   let rr = Math.round(r);
@@ -59,6 +57,40 @@ export const hexAt = ({ x, y }: Vec2): Hex => {
   if (dq > dr && dq > ds) rq = -rr - rs;
   else if (dr > ds) rr = -rq - rs;
   return { q: rq + 0, r: rr + 0 };
+};
+
+export const hexAt = ({ x, y }: Vec2): Hex =>
+  roundAxial(x / 1.5, y / SQRT3 - x / 3);
+
+export const hexDistance = (a: Hex, b: Hex): number => {
+  const dq = a.q - b.q;
+  const dr = a.r - b.r;
+  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+};
+
+const NUDGE = 1e-6;
+
+export const lineBetween = (from: Hex, to: Hex): Hex[] => {
+  const steps = hexDistance(from, to);
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const t = steps === 0 ? 0 : i / steps;
+    return roundAxial(
+      from.q + NUDGE + (to.q - from.q) * t,
+      from.r + NUDGE + (to.r - from.r) * t,
+    );
+  });
+};
+
+export const hexesWithin = (radius: number): Hex[] => {
+  const hexes: Hex[] = [];
+  for (let q = -radius; q <= radius; q++)
+    for (
+      let r = Math.max(-radius, -q - radius);
+      r <= Math.min(radius, -q + radius);
+      r++
+    )
+      hexes.push({ q, r });
+  return hexes;
 };
 
 export const hexesCovering = ({ minX, minY, maxX, maxY }: Bounds): Hex[] => {

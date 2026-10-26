@@ -10,6 +10,8 @@ import {
   rngOf,
   simplex2,
   stage,
+  type Bounds,
+  type Cell,
   type Vec2,
 } from "procgen";
 import {
@@ -21,7 +23,15 @@ import {
   type Landform,
   type River,
 } from "procgen/recipes";
-import { centerOf, hexAt, hexesCovering, hexKey, type Hex } from "./hex";
+import {
+  centerOf,
+  hexAt,
+  hexDistance,
+  hexesCovering,
+  hexKey,
+  type Hex,
+} from "./hex";
+import { monsterWeightsAt, type MonsterKind } from "./monsters";
 
 export const Biome = {
   Ocean: 0,
@@ -35,6 +45,11 @@ export const Biome = {
   Peak: 8,
 } as const;
 export type Biome = (typeof Biome)[keyof typeof Biome];
+
+export interface Lair {
+  readonly kind: MonsterKind;
+  readonly at: Hex;
+}
 
 export interface Tile {
   readonly ground: number;
@@ -52,6 +67,9 @@ const PEAK_HEIGHT = 17;
 const LAPSE_PER_BLOCK = 0.03;
 const TILES_PER_LANDFORM_UNIT = 0.15;
 const CHUNK = 16;
+export const LAIR_CLEARANCE = 8;
+const LAIR_DENSITY = 0.006;
+const DANGER_RING = 40;
 
 const TREE_DENSITY: Record<Biome, number> = {
   [Biome.Ocean]: 0,
@@ -97,7 +115,7 @@ const waterLevelOf = (
       )
       .map(({ level }) => level),
   ]);
-  return levels.length > 0 ? Math.min(...levels) : undefined;
+  return levels.length > 0 ? Math.floor(Math.min(...levels)) : undefined;
 };
 
 const blocksOf = (landform: Landform) =>
@@ -157,6 +175,12 @@ export const createTerrain = (seed: number) => {
   const riversNear = waterways.near(chunks, 1);
   const trees = rngOf(seed, "trees");
 
+  const hexesIn = (cell: Cell) =>
+    hexesCovering(expand(chunks.boundsOf(cell), 1)).filter((hex) => {
+      const owner = chunks.cellOf(centerOf(hex));
+      return owner.col === cell.col && owner.row === cell.row;
+    });
+
   const tileOf = (hex: Hex, nearby: readonly River[]): Tile => {
     const p = centerOf(hex);
     const { ground, biome } = conditionsAt(p.x, p.y);
@@ -176,14 +200,8 @@ export const createTerrain = (seed: number) => {
     reads: [{ stage: riversNear, radius: 0 }],
     compute: (cell, { read }): ReadonlyMap<string, Tile> => {
       const nearby = read(riversNear, cell);
-      const isInCell = (hex: Hex) => {
-        const owner = chunks.cellOf(centerOf(hex));
-        return owner.col === cell.col && owner.row === cell.row;
-      };
       return new Map(
-        hexesCovering(expand(chunks.boundsOf(cell), 1))
-          .filter(isInCell)
-          .map((hex) => [hexKey(hex), tileOf(hex, nearby)]),
+        hexesIn(cell).map((hex) => [hexKey(hex), tileOf(hex, nearby)]),
       );
     },
   });
@@ -203,7 +221,33 @@ export const createTerrain = (seed: number) => {
   });
   const spawn = hexAt(spawnPoint ?? { x: 0, y: 0 });
 
-  return { chunks, chunkAt, tileAt, spawn };
+  const lairs = rngOf(seed, "lairs");
+  const lairsAt = stage({
+    name: "lairs",
+    grid: chunks,
+    reads: [{ stage: chunkAt, radius: 0 }],
+    compute: (cell, { read }): readonly Lair[] => {
+      const tiles = read(chunkAt, cell);
+      return hexesIn(cell)
+        .filter((hex) => {
+          const tile = tiles.get(hexKey(hex))!;
+          return (
+            tile.water === undefined &&
+            !tile.tree &&
+            hexDistance(hex, spawn) >= LAIR_CLEARANCE &&
+            lairs.chance(LAIR_DENSITY, hex.q, hex.r)
+          );
+        })
+        .map((at) => {
+          const danger = 1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
+          const kind = lairs.weighted(monsterWeightsAt(danger), at.q, at.r, 1);
+          return { kind, at };
+        });
+    },
+  });
+  const lairsIn = (bounds: Bounds) => world.gather(lairsAt, bounds);
+
+  return { chunks, chunkAt, tileAt, spawn, lairsAt, lairsIn };
 };
 
 export type Terrain = ReturnType<typeof createTerrain>;

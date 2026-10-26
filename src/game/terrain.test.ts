@@ -1,7 +1,13 @@
 import { expectOrderIndependent } from "procgen/testing";
 import { describe, expect, test } from "vitest";
-import { hexesCovering } from "./hex";
-import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "./terrain";
+import { centerOf, hexDistance, hexesCovering, hexKey } from "./hex";
+import {
+  Biome,
+  createTerrain,
+  LAIR_CLEARANCE,
+  SEA_LEVEL,
+  surfaceOf,
+} from "./terrain";
 
 const SEED = 3;
 const terrain = createTerrain(SEED);
@@ -37,6 +43,13 @@ describe("createTerrain", () => {
     expect(tiles.some(({ tree }) => tree)).toBe(true);
   });
 
+  test("heights are whole blocks", () => {
+    for (const { ground, water } of tiles) {
+      expect(Number.isInteger(ground)).toBe(true);
+      if (water !== undefined) expect(Number.isInteger(water)).toBe(true);
+    }
+  });
+
   test("water always lies above the ground beneath it", () => {
     for (const tile of tiles)
       if (tile.water !== undefined)
@@ -55,5 +68,46 @@ describe("createTerrain", () => {
     expect(area.slice(0, 500).map(other.tileAt)).not.toEqual(
       tiles.slice(0, 500),
     );
+  });
+
+  describe("lairs", () => {
+    const center = centerOf(terrain.spawn);
+    const bounds = {
+      minX: center.x - 150,
+      maxX: center.x + 150,
+      minY: center.y - 150,
+      maxY: center.y + 150,
+    };
+    const lairs = terrain.lairsIn(bounds);
+
+    test("are scattered across the land", () => {
+      expect(lairs.length).toBeGreaterThan(20);
+      expect(new Set(lairs.map(({ at }) => hexKey(at))).size).toBe(
+        lairs.length,
+      );
+    });
+
+    test("stand on dry, treeless land away from the spawn", () => {
+      for (const { at } of lairs) {
+        const tile = terrain.tileAt(at);
+        expect(tile.water).toBeUndefined();
+        expect(tile.tree).toBe(false);
+        expect(hexDistance(at, terrain.spawn)).toBeGreaterThanOrEqual(
+          LAIR_CLEARANCE,
+        );
+      }
+    });
+
+    test("are a pure function of seed and place", () => {
+      expect(createTerrain(SEED).lairsIn(bounds)).toEqual(lairs);
+    });
+
+    test("are independent of generation order", () => {
+      expectOrderIndependent({
+        seed: SEED,
+        stage: terrain.lairsAt,
+        cells: terrain.chunks.cellsAround({ col: 0, row: 0 }, 2),
+      });
+    });
   });
 });

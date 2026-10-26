@@ -1,10 +1,13 @@
 import type { Vec2 } from "procgen";
+import type { Monster } from "./game";
+import { MONSTERS } from "./monsters";
 import {
   add,
   centerOf,
   CORNERS,
   DIRECTIONS,
   hexesCovering,
+  hexKey,
   sameHex,
   type Hex,
 } from "./hex";
@@ -51,6 +54,10 @@ const CONIFERS: ReadonlySet<Biome> = new Set([
   Biome.Mountain,
 ]);
 
+const FOG: Hsl = [220, 15, 12];
+
+const remembered = ([h, s, l]: Hsl): Hsl => [h, s * 0.3, l * 0.55];
+
 const css = ([h, s, l]: Hsl, shade = 0) =>
   `hsl(${h} ${s}% ${Math.min(100, Math.max(0, l + shade))}%)`;
 
@@ -64,13 +71,16 @@ const colorOf = (tile: Tile): Hsl => {
 export interface Scene {
   readonly tileAt: (hex: Hex) => Tile;
   readonly player: Hex;
+  readonly monsters: readonly Monster[];
+  readonly visible: ReadonlySet<string>;
+  readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
 }
 
 export const drawScene = (
   context: CanvasRenderingContext2D,
-  { tileAt, player, width, height }: Scene,
+  { tileAt, player, monsters, visible, seen, width, height }: Scene,
 ) => {
   const camera = centerOf(player);
   const eye = surfaceOf(tileAt(player));
@@ -91,6 +101,7 @@ export const drawScene = (
     minY: camera.y - reach.y,
     maxY: camera.y + reach.y,
   })
+    .filter((hex) => seen.has(hexKey(hex)))
     .map((hex) => ({ hex, center: centerOf(hex) }))
     .sort((a, b) => a.center.y - b.center.y || a.center.x - b.center.x);
 
@@ -100,7 +111,13 @@ export const drawScene = (
     context.closePath();
   };
 
-  context.fillStyle = css([205, 60, 80]);
+  const monsterAt = new Map(
+    monsters
+      .filter(({ at }) => visible.has(hexKey(at)))
+      .map((monster) => [hexKey(monster.at), monster]),
+  );
+
+  context.fillStyle = css(FOG);
   context.fillRect(0, 0, width, height);
   context.lineWidth = 0.6;
 
@@ -118,7 +135,9 @@ export const drawScene = (
       );
     const relief = top - surfaceOf(tileAt(add(hex, DIRECTIONS.n)));
     const [h, sat, l] = colorOf(tile);
-    const color: Hsl = [
+    const isVisible = visible.has(hexKey(hex));
+    const lit = (color: Hsl) => (isVisible ? color : remembered(color));
+    const color = lit([
       h,
       sat,
       l +
@@ -126,7 +145,7 @@ export const drawScene = (
           -MAX_HILLSHADE,
           Math.min(MAX_HILLSHADE, HILLSHADE_PER_BLOCK * relief),
         ),
-    ];
+    ]);
 
     if (bottom < top) {
       polygon([
@@ -144,8 +163,18 @@ export const drawScene = (
 
     const base = project(center, top);
     if (tile.tree)
-      drawTree(context, base, CANOPY[tile.biome], CONIFERS.has(tile.biome));
-    if (sameHex(hex, player)) drawPlayer(context, base);
+      drawTree(
+        context,
+        base,
+        lit(CANOPY[tile.biome]),
+        CONIFERS.has(tile.biome),
+      );
+    const monster = monsterAt.get(hexKey(hex));
+    if (monster) {
+      const { hue, glyph } = MONSTERS[monster.kind];
+      drawToken(context, base, [hue, 60, 30], glyph);
+    }
+    if (sameHex(hex, player)) drawToken(context, base, [0, 80, 55], "@");
   }
 };
 
@@ -174,14 +203,25 @@ const drawTree = (
   context.stroke();
 };
 
-const drawPlayer = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
+const drawToken = (
+  context: CanvasRenderingContext2D,
+  { x, y }: Vec2,
+  fill: Hsl,
+  glyph: string,
+) => {
   const size = PIXELS_PER_UNIT * 0.5;
-  context.fillStyle = css([0, 80, 55]);
+  const center = { x, y: y - size * 1.6 };
+  context.fillStyle = css(fill);
   context.strokeStyle = css([0, 0, 100]);
   context.lineWidth = 2.5;
   context.beginPath();
-  context.arc(x, y - size * 1.6, size, 0, 2 * Math.PI);
+  context.arc(center.x, center.y, size, 0, 2 * Math.PI);
   context.fill();
   context.stroke();
   context.lineWidth = 0.6;
+  context.fillStyle = css([0, 0, 100]);
+  context.font = `bold ${size * 1.3}px monospace`;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(glyph, center.x, center.y);
 };

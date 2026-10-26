@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { stepFrom } from "./explorer";
+import { canStep } from "./explorer";
 import { hexKey, type Hex } from "./hex";
 import { Biome, type Tile } from "./terrain";
 
@@ -16,33 +16,25 @@ const tilesOf =
     tiles[hexKey(hex)] ?? rest;
 
 const origin = { q: 0, r: 0 };
+const east = { q: 1, r: 0 };
 
 test("steps onto level ground", () => {
-  expect(stepFrom(tilesOf({}), origin, "se")).toEqual({ q: 1, r: 0 });
+  expect(canStep(tilesOf({}), origin, east)).toBe(true);
 });
 
 test("climbs one block", () => {
-  expect(stepFrom(tilesOf({ "1,0": land(11) }), origin, "se")).toEqual({
-    q: 1,
-    r: 0,
-  });
+  expect(canStep(tilesOf({ "1,0": land(11) }), origin, east)).toBe(true);
 });
 
 test("can't climb two blocks", () => {
-  expect(stepFrom(tilesOf({ "1,0": land(12) }), origin, "se")).toBe(origin);
+  expect(canStep(tilesOf({ "1,0": land(12) }), origin, east)).toBe(false);
 });
 
 test("drops any height", () => {
-  expect(stepFrom(tilesOf({ "1,0": land(2) }), origin, "se")).toEqual({
-    q: 1,
-    r: 0,
-  });
+  expect(canStep(tilesOf({ "1,0": land(2) }), origin, east)).toBe(true);
 });
 
 test("swims at the water's surface", () => {
   const lake: Tile = { ground: 4, water: 11, biome: Biome.Plains, tree: false };
-  expect(stepFrom(tilesOf({ "1,0": lake }), origin, "se")).toEqual({
-    q: 1,
-    r: 0,
-  });
+  expect(canStep(tilesOf({ "1,0": lake }), origin, east)).toBe(true);
 });

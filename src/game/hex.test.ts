@@ -5,6 +5,9 @@ import {
   DIRECTIONS,
   directionBetween,
   hexAt,
+  hexDistance,
+  hexesWithin,
+  lineBetween,
   hexesCovering,
   hexKey,
   neighborsOf,
@@ -58,4 +61,38 @@ test("hexesCovering lists exactly the hexes centered within bounds", () => {
     for (let r = -10; r <= 10; r++)
       if (inside({ q, r })) expected.push({ q, r });
   expect(listed.map(hexKey).sort()).toEqual(expected.map(hexKey).sort());
+});
+
+describe("hexDistance", () => {
+  test("is zero to itself and one to each neighbor", () => {
+    const origin = { q: 2, r: -1 };
+    expect(hexDistance(origin, origin)).toBe(0);
+    for (const neighbor of neighborsOf(origin))
+      expect(hexDistance(origin, neighbor)).toBe(1);
+  });
+
+  test("counts steps along both axes", () => {
+    expect(hexDistance({ q: 0, r: 0 }, { q: 3, r: -1 })).toBe(3);
+    expect(hexDistance({ q: 0, r: 0 }, { q: 2, r: 2 })).toBe(4);
+  });
+});
+
+describe("lineBetween", () => {
+  test("includes both ends, one hex per step", () => {
+    const line = lineBetween({ q: 0, r: 0 }, { q: 3, r: -2 });
+    expect(line).toHaveLength(4);
+    expect(line[0]).toEqual({ q: 0, r: 0 });
+    expect(line.at(-1)).toEqual({ q: 3, r: -2 });
+  });
+
+  test("each step is adjacent", () => {
+    const line = lineBetween({ q: -2, r: 1 }, { q: 3, r: -1 });
+    line
+      .slice(1)
+      .forEach((hex, i) => expect(hexDistance(line[i]!, hex)).toBe(1));
+  });
+});
+
+test("hexesWithin a radius forms a hexagon of 3r(r+1)+1 hexes", () => {
+  expect(hexesWithin(2)).toHaveLength(19);
 });

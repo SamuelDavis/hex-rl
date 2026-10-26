@@ -1,13 +1,10 @@
-import { add, DIRECTIONS, type Direction, type Hex } from "./hex";
+import type { Hex } from "./hex";
 import { surfaceOf, type Tile } from "./terrain";
 
 export const CLIMB = 1;
 
-export const stepFrom = (
+export const canStep = (
   tileAt: (hex: Hex) => Tile,
-  at: Hex,
-  direction: Direction,
-): Hex => {
-  const to = add(at, DIRECTIONS[direction]);
-  return surfaceOf(tileAt(to)) - surfaceOf(tileAt(at)) <= CLIMB ? to : at;
-};
+  from: Hex,
+  to: Hex,
+): boolean => surfaceOf(tileAt(to)) - surfaceOf(tileAt(from)) <= CLIMB;

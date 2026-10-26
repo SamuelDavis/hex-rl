@@ -1,16 +1,25 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  Show,
+} from "solid-js";
 import { drawScene } from "../game/draw";
-import { stepFrom } from "../game/explorer";
-import type { Direction } from "../game/hex";
+import { act, isOver, MAX_HP, newGame, type Action } from "../game/game";
+import { visibleFrom } from "../game/sight";
 import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "../game/terrain";
 
-const KEYS: Record<string, Direction> = {
+const KEYS: Record<string, Action> = {
   w: "n",
   e: "ne",
   d: "se",
   s: "s",
   a: "sw",
   q: "nw",
+  " ": "wait",
+  ".": "wait",
 };
 
 const BIOME_NAMES = Object.fromEntries(
@@ -19,25 +28,27 @@ const BIOME_NAMES = Object.fromEntries(
 
 const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
-const explore = (seed: number) => {
-  const terrain = createTerrain(seed);
-  return { seed, terrain, player: terrain.spawn };
-};
+const explore = (seed: number) => ({
+  seed,
+  game: newGame(createTerrain(seed)),
+});
 
 export default function Game() {
   const [getState, setState] = createSignal(explore(randomSeed()));
   const [getSize, setSize] = createSignal({ width: 0, height: 0 });
-  const getTile = () => getState().terrain.tileAt(getState().player);
   const [getCanvas, setCanvas] = createSignal<HTMLCanvasElement>();
+  const getGame = () => getState().game;
+  const getHp = () => Math.max(0, getGame().player.hp);
+  const getTile = () => getGame().land.tileAt(getGame().player.at);
+  const getVisible = createMemo(() =>
+    visibleFrom(getGame().land.tileAt, getGame().player.at),
+  );
 
   function onKeyDown(event: KeyboardEvent) {
-    const direction = KEYS[event.key.toLowerCase()];
-    if (!direction || event.ctrlKey || event.metaKey || event.altKey) return;
+    const action = KEYS[event.key.toLowerCase()];
+    if (!action || event.ctrlKey || event.metaKey || event.altKey) return;
     event.preventDefault();
-    setState((state) => ({
-      ...state,
-      player: stepFrom(state.terrain.tileAt, state.player, direction),
-    }));
+    setState((state) => ({ ...state, game: act(state.game, action) }));
   }
 
   window.addEventListener("keydown", onKeyDown);
@@ -57,13 +68,21 @@ export default function Game() {
     const canvas = getCanvas();
     if (!canvas) return;
     const { width, height } = getSize();
-    const { terrain, player } = getState();
+    const { land, player, monsters, seen } = getGame();
     const ratio = window.devicePixelRatio;
     canvas.width = width * ratio;
     canvas.height = height * ratio;
     const context = canvas.getContext("2d")!;
     context.scale(ratio, ratio);
-    drawScene(context, { tileAt: terrain.tileAt, player, width, height });
+    drawScene(context, {
+      tileAt: land.tileAt,
+      player: player.at,
+      monsters,
+      visible: getVisible(),
+      seen,
+      width,
+      height,
+    });
   });
 
   return (
@@ -72,22 +91,34 @@ export default function Game() {
         <hgroup>
           <h1>{BIOME_NAMES[getTile().biome]}</h1>
           <p>
-            Height {surfaceOf(getTile()) - SEA_LEVEL} · Position{" "}
-            {getState().player.q}, {getState().player.r} · Seed{" "}
-            {getState().seed}
+            HP {getHp()}/{MAX_HP} · Height {surfaceOf(getTile()) - SEA_LEVEL} ·
+            Turn {getGame().turn} · Position {getGame().player.at.q},{" "}
+            {getGame().player.at.r} · Seed {getState().seed}
           </p>
         </hgroup>
+        <progress value={getHp()} max={MAX_HP} />
       </header>
       <canvas
         ref={setCanvas}
         class="block h-[70vh] w-full"
         aria-label="World"
       />
+      <ul>
+        <For each={getGame().log}>{(message) => <li>{message}</li>}</For>
+      </ul>
       <footer>
-        <small>
-          Move <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd> <kbd>S</kbd>{" "}
-          <kbd>D</kbd>. Climb one block at a time; swim freely.
-        </small>{" "}
+        <Show
+          when={isOver(getGame())}
+          fallback={
+            <small>
+              Move <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd>{" "}
+              <kbd>S</kbd> <kbd>D</kbd>; wait <kbd>Space</kbd>. Bump monsters to
+              attack. Climb one block at a time; swim freely.
+            </small>
+          }
+        >
+          <p>You died after {getGame().turn} turns.</p>
+        </Show>{" "}
         <button type="button" onClick={() => setState(explore(randomSeed()))}>
           New world
         </button>
