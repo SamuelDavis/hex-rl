@@ -3,6 +3,7 @@ import {
   createMemo,
   createSignal,
   For,
+  on,
   onCleanup,
   Show,
 } from "solid-js";
@@ -46,6 +47,7 @@ export default function Game() {
   const [getState, setState] = createSignal(explore(randomSeed()));
   const [getSize, setSize] = createSignal({ width: 0, height: 0 });
   const [getCanvas, setCanvas] = createSignal<HTMLCanvasElement>();
+  const [getLog, setLog] = createSignal<HTMLUListElement>();
   const getGame = () => getState().game;
   const getHp = () => Math.max(0, getGame().player.hp);
   const getTile = () => getGame().land.tileAt(getGame().player.at);
@@ -62,6 +64,12 @@ export default function Game() {
 
   window.addEventListener("keydown", onKeyDown);
   onCleanup(() => window.removeEventListener("keydown", onKeyDown));
+
+  createEffect(
+    on([getLog, () => getGame().log], ([log]) => {
+      if (log) log.scrollTop = log.scrollHeight;
+    }),
+  );
 
   createEffect(() => {
     const canvas = getCanvas();
@@ -115,12 +123,14 @@ export default function Game() {
         />
         <details
           open
-          class="absolute bottom-3 left-3 m-0 max-w-[60%] rounded px-3 py-2 text-sm"
+          class="absolute bottom-3 left-3 m-0 w-1/4 rounded px-3 py-2 text-sm"
           style={LOG_STYLE}
         >
           <summary>Log</summary>
-          <ul class="m-0">
-            <For each={getGame().log}>{(message) => <li>{message}</li>}</For>
+          <ul ref={setLog} class="m-0 h-[5lh] overflow-y-auto wrap-break-word">
+            <For each={getGame().log}>
+              {(message) => <li class="mb-0">{message}</li>}
+            </For>
           </ul>
         </details>
       </div>

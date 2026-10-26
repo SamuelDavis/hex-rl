@@ -20,7 +20,7 @@ export const PLAYER_DAMAGE = 2;
 export const ACTIVE_RADIUS = SIGHT + 4;
 export const FORGET_RADIUS = ACTIVE_RADIUS + 8;
 const REGEN_INTERVAL = 10;
-const LOG_LENGTH = 5;
+const LOG_LENGTH = 50;
 const PATH_BUDGET = 200;
 
 export interface Land {
