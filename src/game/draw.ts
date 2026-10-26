@@ -63,11 +63,6 @@ export const groundOffsetOf = ({ x, y }: Vec2): Vec2 => ({
   y: y / (PIXELS_PER_UNIT * TILT),
 });
 
-export const fogTint = (alpha: number) => {
-  const [h, s, l] = FOG;
-  return `hsl(${h} ${s}% ${l}% / ${alpha})`;
-};
-
 const remembered = ([h, s, l]: Hsl): Hsl => [h, s * 0.3, l * 0.55];
 
 const css = ([h, s, l]: Hsl, shade = 0) =>

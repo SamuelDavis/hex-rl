@@ -24,6 +24,11 @@ layer(icons);
     margin-bottom: 0;
   }
 
+  [role="group"]
+    :is(button, [type="submit"], [type="button"], [role="button"]) {
+    --pico-form-element-spacing-horizontal: inherit;
+  }
+
   @media (pointer: coarse) {
     :root {
       --pico-form-element-spacing-vertical: 0.5625rem;

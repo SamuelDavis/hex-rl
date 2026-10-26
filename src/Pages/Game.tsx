@@ -3,13 +3,22 @@ import {
   createMemo,
   createSignal,
   For,
+  Match,
   on,
   onCleanup,
   Show,
+  Switch,
 } from "solid-js";
-import { drawScene, fogTint, groundOffsetOf } from "../game/draw";
+import { drawScene, groundOffsetOf } from "../game/draw";
+import {
+  act,
+  isOver,
+  MAX_HP,
+  newGame,
+  type Action,
+  type Game as GameState,
+} from "../game/game";
 import { directionToward, type Direction } from "../game/hex";
-import { act, isOver, MAX_HP, newGame, type Action } from "../game/game";
 import { visibleFrom } from "../game/sight";
 import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "../game/terrain";
 
@@ -28,30 +37,26 @@ const KEYS: Record<string, Action> = {
   ".": "wait",
 };
 
+const MOVE_ROWS = [
+  Object.entries(MOVE_KEYS).slice(0, 3),
+  Object.entries(MOVE_KEYS).slice(3),
+];
+
 const ARROWS: Record<Direction, string> = {
-  nw: "↖\uFE0E",
-  n: "↑\uFE0E",
-  ne: "↗\uFE0E",
-  sw: "↙\uFE0E",
-  s: "↓\uFE0E",
-  se: "↘\uFE0E",
+  nw: "↖︎",
+  n: "↑︎",
+  ne: "↗︎",
+  sw: "↙︎",
+  s: "↓︎",
+  se: "↘︎",
 };
+
+const TABS = ["Play", "Log", "Other", "Debug"] as const;
+type Tab = (typeof TABS)[number];
 
 const BIOME_NAMES = Object.fromEntries(
   Object.entries(Biome).map(([name, biome]) => [biome, name]),
 );
-
-const OVERLAY_STYLE = {
-  background: fogTint(0.3),
-  "--pico-border-color": "transparent",
-  color: "white",
-  "--pico-color": "white",
-  "--pico-accordion-close-summary-color": "white",
-  "--pico-accordion-open-summary-color": "white",
-  "--pico-accordion-active-summary-color": "white",
-};
-
-const BUTTON_STYLE = { ...OVERLAY_STYLE, background: fogTint(0.6) };
 
 const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
@@ -62,25 +67,28 @@ const explore = (seed: number) => ({
 
 export default function Game() {
   const [getState, setState] = createSignal(explore(randomSeed()));
+  const [getTab, setTab] = createSignal<Tab>("Play");
   const [getSize, setSize] = createSignal({ width: 0, height: 0 });
   const [getCanvas, setCanvas] = createSignal<HTMLCanvasElement>();
-  const [getLog, setLog] = createSignal<HTMLUListElement>();
   const getGame = () => getState().game;
-  const getHp = () => Math.max(0, getGame().player.hp);
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() =>
     visibleFrom(getGame().land.tileAt, getGame().player.at),
   );
+
+  function perform(action: Action) {
+    setState((state) => ({ ...state, game: act(state.game, action) }));
+  }
+
+  function restart() {
+    setState(explore(randomSeed()));
+  }
 
   function onKeyDown(event: KeyboardEvent) {
     const action = KEYS[event.key.toLowerCase()];
     if (!action || event.ctrlKey || event.metaKey || event.altKey) return;
     event.preventDefault();
     perform(action);
-  }
-
-  function perform(action: Action) {
-    setState((state) => ({ ...state, game: act(state.game, action) }));
   }
 
   function onTap(event: MouseEvent & { currentTarget: HTMLCanvasElement }) {
@@ -95,12 +103,6 @@ export default function Game() {
 
   window.addEventListener("keydown", onKeyDown);
   onCleanup(() => window.removeEventListener("keydown", onKeyDown));
-
-  createEffect(
-    on([getLog, () => getGame().log], ([log]) => {
-      if (log) log.scrollTop = log.scrollHeight;
-    }),
-  );
 
   createEffect(() => {
     const canvas = getCanvas();
@@ -134,87 +136,144 @@ export default function Game() {
   });
 
   return (
-    <article>
+    <article class="mx-auto max-w-lg">
       <header>
-        <hgroup>
+        <div>
           <h1>{BIOME_NAMES[getTile().biome]}</h1>
-          <p>
-            HP {getHp()}/{MAX_HP} · Height {surfaceOf(getTile()) - SEA_LEVEL} ·
-            Turn {getGame().turn} · Position {getGame().player.at.q},{" "}
-            {getGame().player.at.r} · Seed {getState().seed}
+          <p data-cap="end">
+            HP {Math.max(0, getGame().player.hp)}/{MAX_HP} · Turn{" "}
+            {getGame().turn}
           </p>
-        </hgroup>
-        <progress value={getHp()} max={MAX_HP} />
+        </div>
+        <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
       </header>
-      <div class="relative">
-        <canvas
-          ref={setCanvas}
-          class="block h-[70vh] w-full touch-manipulation"
-          aria-label="World"
-          onClick={onTap}
-        />
-        <div class="pointer-events-none absolute inset-x-3 bottom-3 flex flex-col items-end gap-2 md:flex-row md:justify-between">
-          <details
-            open
-            class="order-last m-0 w-full rounded px-3 py-2 text-sm text-shadow-md text-shadow-black md:pointer-events-auto md:order-first md:w-1/2 lg:w-1/4"
-            style={OVERLAY_STYLE}
-          >
-            <summary class="pointer-events-auto">Log</summary>
-            <ul
-              ref={setLog}
-              class="m-0 h-[5lh] overflow-y-auto wrap-break-word"
-            >
-              <For each={getGame().log}>
-                {(message) => <li class="mb-0">{message}</li>}
-              </For>
-            </ul>
-          </details>
-          <div class="pointer-events-auto grid shrink-0 grid-cols-3 gap-1 text-shadow-md text-shadow-black">
-            <For each={Object.entries(MOVE_KEYS)}>
+      <canvas
+        ref={setCanvas}
+        class="block aspect-square w-full touch-manipulation"
+        aria-label="World"
+        onClick={onTap}
+      />
+      <footer>
+        <div role="group">
+          <For each={TABS}>
+            {(tab) => (
+              <button
+                type="button"
+                aria-current={getTab() === tab}
+                onClick={() => setTab(tab)}
+              >
+                {tab}
+              </button>
+            )}
+          </For>
+        </div>
+        <Switch>
+          <Match when={getTab() === "Play"}>
+            <PlayPanel game={getGame()} perform={perform} restart={restart} />
+          </Match>
+          <Match when={getTab() === "Log"}>
+            <LogPanel log={getGame().log} />
+          </Match>
+          <Match when={getTab() === "Other"}>
+            <OtherPanel restart={restart} />
+          </Match>
+          <Match when={getTab() === "Debug"}>
+            <dl>
+              <dt>Height</dt>
+              <dd>{surfaceOf(getTile()) - SEA_LEVEL}</dd>
+              <dt>Position</dt>
+              <dd>
+                {getGame().player.at.q}, {getGame().player.at.r}
+              </dd>
+              <dt>Seed</dt>
+              <dd>{getState().seed}</dd>
+              <dt>Monsters awake</dt>
+              <dd>{getGame().monsters.length}</dd>
+              <dt>Monsters slain</dt>
+              <dd>{getGame().slain.size}</dd>
+            </dl>
+          </Match>
+        </Switch>
+      </footer>
+    </article>
+  );
+}
+
+function PlayPanel(props: {
+  game: GameState;
+  perform: (action: Action) => void;
+  restart: () => void;
+}) {
+  return (
+    <Show
+      when={!isOver(props.game)}
+      fallback={
+        <>
+          <p>You died after {props.game.turn} turns.</p>
+          <button type="button" onClick={() => props.restart()}>
+            New world
+          </button>
+        </>
+      }
+    >
+      <For each={MOVE_ROWS}>
+        {(row) => (
+          <div role="group">
+            <For each={row}>
               {([key, direction]) => (
                 <button
                   type="button"
                   tabIndex={-1}
-                  class="m-0 size-11 p-0 text-xl"
-                  style={BUTTON_STYLE}
                   aria-label={`Move ${direction} (${key.toUpperCase()})`}
-                  onClick={() => perform(direction)}
+                  onClick={() => props.perform(direction)}
                 >
                   {ARROWS[direction]}
                 </button>
               )}
             </For>
-            <button
-              type="button"
-              tabIndex={-1}
-              class="col-span-3 m-0 h-11 p-0"
-              style={BUTTON_STYLE}
-              aria-label="Wait (Space)"
-              onClick={() => perform("wait")}
-            >
-              Wait
-            </button>
           </div>
-        </div>
-      </div>
-      <footer>
-        <Show
-          when={isOver(getGame())}
-          fallback={
-            <small>
-              Tap toward a direction, or press <kbd>Q</kbd> <kbd>W</kbd>{" "}
-              <kbd>E</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>; wait{" "}
-              <kbd>Space</kbd>. Bump monsters to attack. Climb one block at a
-              time; swim freely.
-            </small>
-          }
+        )}
+      </For>
+      <div role="group">
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="Wait (Space)"
+          onClick={() => props.perform("wait")}
         >
-          <p>You died after {getGame().turn} turns.</p>
-        </Show>{" "}
-        <button type="button" onClick={() => setState(explore(randomSeed()))}>
-          New world
+          Wait
         </button>
-      </footer>
-    </article>
+      </div>
+    </Show>
+  );
+}
+
+function LogPanel(props: { log: readonly string[] }) {
+  const [getList, setList] = createSignal<HTMLUListElement>();
+  createEffect(
+    on([getList, () => props.log], ([list]) => {
+      if (list) list.scrollTop = list.scrollHeight;
+    }),
+  );
+  return (
+    <ul ref={setList} class="h-[5lh] overflow-y-auto">
+      <For each={props.log}>{(message) => <li>{message}</li>}</For>
+    </ul>
+  );
+}
+
+function OtherPanel(props: { restart: () => void }) {
+  return (
+    <>
+      <p>
+        Tap toward a direction, use the Play buttons, or press <kbd>Q</kbd>{" "}
+        <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>; wait
+        with <kbd>Space</kbd>. Bump monsters to attack. Climb one block at a
+        time; swim freely.
+      </p>
+      <button type="button" onClick={() => props.restart()}>
+        New world
+      </button>
+    </>
   );
 }

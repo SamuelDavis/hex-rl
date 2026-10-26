@@ -14,6 +14,7 @@ Order is declared in `src/pico.css`.
 - Override `--pico-*`; don't replace Pico. Its components are the value, its density isn't. Values approximate the median of water.css, mvp.css, and simple.css.
 - Root font size is fixed: below 16px, iOS zooms focused inputs.
 - `pointer: coarse` raises controls to Apple's 44pt touch-target minimum.
+- Pico pads `[role="group"]` buttons `2rem` inline, so groups of four or more overflow phone widths; the `theme` layer makes them inherit the theme's form spacing.
 - Pico's dialog-footer `margin-bottom: 0` loses to its own `[type=button]` margin on specificity; the `theme` layer restores it.
 
 ## `data-icon`
