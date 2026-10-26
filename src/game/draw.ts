@@ -23,7 +23,7 @@ const SIDE_SHADE = -14;
 const EDGE_SHADE = -6;
 const TOKEN_LIFT = 0.9;
 const SHADOW = "rgb(0 0 0 / 0.35)";
-const WATCHED = "hsl(0 90% 50% / 0.1)";
+const WATCHED = "hsl(0 90% 50% / 0.05)";
 const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
 const WATCHED_EDGE_WIDTH = 2;
 const EDGES = CORNERS.map((from, i) => {
@@ -90,7 +90,7 @@ export interface Scene {
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly visible: ReadonlySet<string>;
-  readonly watched: ReadonlySet<string>;
+  readonly watches: readonly ReadonlySet<string>[];
   readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
@@ -98,7 +98,7 @@ export interface Scene {
 
 export const drawScene = (
   context: CanvasRenderingContext2D,
-  { tileAt, player, monsters, visible, watched, seen, width, height }: Scene,
+  { tileAt, player, monsters, visible, watches, seen, width, height }: Scene,
 ) => {
   const camera = centerOf(player.at);
   const eye = surfaceOf(tileAt(player.at));
@@ -172,21 +172,22 @@ export const drawScene = (
       context.fillStyle = css(color, SIDE_SHADE);
       context.fill();
     }
-    polygon(CORNERS.map((_, i) => corner(i, top)));
+    const face = CORNERS.map((_, i) => corner(i, top));
+    polygon(face);
     context.fillStyle = css(color);
     context.strokeStyle = css(color, EDGE_SHADE);
     context.fill();
     context.stroke();
-    if (watched.has(hexKey(hex))) {
+    for (const watched of watches) {
+      if (!watched.has(hexKey(hex))) continue;
+      polygon(face);
       context.fillStyle = WATCHED;
       context.fill();
       context.beginPath();
       for (const { from, to, facing } of EDGES) {
         if (watched.has(hexKey(add(hex, DIRECTIONS[facing])))) continue;
-        const start = corner(from, top);
-        const end = corner(to, top);
-        context.moveTo(start.x, start.y);
-        context.lineTo(end.x, end.y);
+        context.moveTo(face[from]!.x, face[from]!.y);
+        context.lineTo(face[to]!.x, face[to]!.y);
       }
       context.strokeStyle = WATCHED_EDGE;
       context.lineWidth = WATCHED_EDGE_WIDTH;

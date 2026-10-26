@@ -10,7 +10,7 @@ import {
   type Game,
   type Land,
   type Monster,
-  watchedOf,
+  watchesOf,
 } from "./game";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
@@ -203,17 +203,22 @@ describe("act", () => {
   });
 });
 
-describe("watchedOf", () => {
-  test("lists what monsters in view can see", () => {
-    const watched = watchedOf(
-      gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]),
+describe("watchesOf", () => {
+  test("lists what each monster in view can see", () => {
+    const [ahead, behind] = watchesOf(
+      gameWith([
+        monster({ q: 4, r: 0 }, "goblin", "se"),
+        monster({ q: 3, r: 0 }, "wolf", "nw"),
+      ]),
     );
-    expect(watched.has(hexKey({ q: 8, r: 0 }))).toBe(true);
-    expect(watched.has(hexKey(origin))).toBe(false);
+    expect(ahead!.has(hexKey({ q: 8, r: 0 }))).toBe(true);
+    expect(ahead!.has(hexKey(origin))).toBe(false);
+    expect(behind!.has(hexKey(origin))).toBe(true);
+    expect(behind!.has(hexKey({ q: 8, r: 0 }))).toBe(false);
   });
 
   test("ignores monsters the player can't see", () => {
     const world = landOf({ "2,0": land(10, true) });
-    expect(watchedOf(gameWith([monster({ q: 4, r: 0 })], world)).size).toBe(0);
+    expect(watchesOf(gameWith([monster({ q: 4, r: 0 })], world))).toEqual([]);
   });
 });
