@@ -135,9 +135,14 @@ const attack = (game: Game, target: Monster): Game => {
   );
 };
 
+const facedTo = (game: Game, facing: Direction): Game => ({
+  ...game,
+  player: { ...game.player, facing },
+});
+
 const playerTurn = (game: Game, facing: Direction): Game => {
   const to = add(game.player.at, DIRECTIONS[facing]);
-  const faced = { ...game, player: { ...game.player, facing } };
+  const faced = facedTo(game, facing);
   const target = monsterAt(faced, to);
   return target
     ? attack(faced, target)
@@ -206,6 +211,11 @@ const regenerate = (game: Game): Game =>
       }
     : game;
 
+const endTurn = (acted: Game): Game =>
+  withSight(
+    populate(regenerate(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
+  );
+
 export const act = (game: Game, action: Action): Game => {
   if (isOver(game)) return game;
   const to =
@@ -213,8 +223,8 @@ export const act = (game: Game, action: Action): Game => {
       ? game.player.at
       : add(game.player.at, DIRECTIONS[action]);
   if (!canStep(game.land.tileAt, game.player.at, to)) return game;
-  const acted = action === "wait" ? game : playerTurn(game, action);
-  return withSight(
-    populate(regenerate(monstersTurn({ ...acted, turn: game.turn + 1 }))),
-  );
+  return endTurn(action === "wait" ? game : playerTurn(game, action));
 };
+
+export const face = (game: Game, facing: Direction): Game =>
+  isOver(game) ? game : endTurn(facedTo(game, facing));

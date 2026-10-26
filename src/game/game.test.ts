@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   act,
   ACTIVE_RADIUS,
+  face,
   FORGET_RADIUS,
   isOver,
   MAX_HP,
@@ -138,5 +139,23 @@ describe("act", () => {
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
     expect(act(dead, "se")).toBe(dead);
+  });
+});
+
+describe("face", () => {
+  test("turns in place and spends a turn", () => {
+    const next = face(gameWith([monster({ q: 4, r: 0 })]), "se");
+    expect(next.player).toMatchObject({ at: origin, facing: "se" });
+    expect(next.turn).toBe(1);
+    expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
+    expect(next.seen.has(hexKey({ q: SIGHT, r: 0 }))).toBe(true);
+  });
+
+  test("the dead can't turn", () => {
+    const dead = {
+      ...newGame(landOf()),
+      player: { ...newGame(landOf()).player, hp: 0 },
+    };
+    expect(face(dead, "se")).toBe(dead);
   });
 });

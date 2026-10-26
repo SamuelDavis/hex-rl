@@ -1,5 +1,5 @@
 import type { Vec2 } from "procgen";
-import type { Monster } from "./game";
+import type { Monster, Player } from "./game";
 import { MONSTERS } from "./monsters";
 import {
   add,
@@ -9,6 +9,7 @@ import {
   hexesCovering,
   hexKey,
   sameHex,
+  type Direction,
   type Hex,
 } from "./hex";
 import { Biome, SEA_LEVEL, surfaceOf, type Tile } from "./terrain";
@@ -77,7 +78,7 @@ const colorOf = (tile: Tile): Hsl => {
 
 export interface Scene {
   readonly tileAt: (hex: Hex) => Tile;
-  readonly player: Hex;
+  readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly visible: ReadonlySet<string>;
   readonly seen: ReadonlySet<string>;
@@ -89,8 +90,8 @@ export const drawScene = (
   context: CanvasRenderingContext2D,
   { tileAt, player, monsters, visible, seen, width, height }: Scene,
 ) => {
-  const camera = centerOf(player);
-  const eye = surfaceOf(tileAt(player));
+  const camera = centerOf(player.at);
+  const eye = surfaceOf(tileAt(player.at));
   const project = ({ x, y }: Vec2, level: number): Vec2 => ({
     x: width / 2 + (x - camera.x) * PIXELS_PER_UNIT,
     y:
@@ -181,7 +182,8 @@ export const drawScene = (
       const { hue, glyph } = MONSTERS[monster.kind];
       drawToken(context, base, [hue, 60, 30], glyph);
     }
-    if (sameHex(hex, player)) drawToken(context, base, [0, 80, 55], "@");
+    if (sameHex(hex, player.at))
+      drawToken(context, base, [0, 80, 55], "@", headingOf(player.facing));
   }
 };
 
@@ -210,11 +212,19 @@ const drawTree = (
   context.stroke();
 };
 
+const headingOf = (direction: Direction): Vec2 => {
+  const { x, y: depth } = centerOf(DIRECTIONS[direction]);
+  const y = depth * TILT;
+  const length = Math.sqrt(x * x + y * y);
+  return { x: x / length, y: y / length };
+};
+
 const drawToken = (
   context: CanvasRenderingContext2D,
   { x, y }: Vec2,
   fill: Hsl,
   glyph: string,
+  heading: Vec2 = { x: 1, y: 0 },
 ) => {
   const size = PIXELS_PER_UNIT * 0.5;
   const center = { x, y: y - size * TOKEN_LIFT };
@@ -234,5 +244,15 @@ const drawToken = (
   context.font = `bold ${size * 1.3}px monospace`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(glyph, center.x, center.y);
+  context.save();
+  context.transform(
+    heading.x,
+    heading.y,
+    -heading.y,
+    heading.x,
+    center.x,
+    center.y,
+  );
+  context.fillText(glyph, 0, 0);
+  context.restore();
 };
