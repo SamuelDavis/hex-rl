@@ -46,11 +46,6 @@ const KEYS: Record<string, Action> = {
 
 const TARGET_KEY = "t";
 
-const MOVE_ROWS = [
-  Object.entries(MOVE_KEYS).slice(0, 3),
-  Object.entries(MOVE_KEYS).slice(3),
-];
-
 const ARROWS: Record<Direction, string> = {
   nw: "↖︎",
   n: "↑︎",
@@ -258,24 +253,7 @@ function PlayPanel(props: {
         </>
       }
     >
-      <For each={MOVE_ROWS}>
-        {(row) => (
-          <div role="group">
-            <For each={row}>
-              {([key, direction]) => (
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={`Move ${direction} (${key.toUpperCase()})`}
-                  onClick={() => props.perform(direction)}
-                >
-                  {ARROWS[direction]}
-                </button>
-              )}
-            </For>
-          </div>
-        )}
-      </For>
+      <MovePad perform={props.perform} />
       <div role="group">
         <button
           type="button"
@@ -295,6 +273,26 @@ function PlayPanel(props: {
         </button>
       </div>
     </Show>
+  );
+}
+
+function MovePad(props: { perform: (direction: Direction) => void }) {
+  return (
+    <div class="mx-auto mb-(--pico-spacing) grid w-fit grid-cols-[repeat(3,4rem)] gap-(--pico-spacing)">
+      <For each={Object.entries(MOVE_KEYS)}>
+        {([key, direction]) => (
+          <button
+            type="button"
+            tabIndex={-1}
+            class="m-0 aspect-square p-0 text-2xl"
+            aria-label={`Move ${direction} (${key.toUpperCase()})`}
+            onClick={() => props.perform(direction)}
+          >
+            {ARROWS[direction]}
+          </button>
+        )}
+      </For>
+    </div>
   );
 }
 
