@@ -5,6 +5,7 @@ import {
   add,
   centerOf,
   CORNERS,
+  directionToward,
   DIRECTIONS,
   hexesCovering,
   hexKey,
@@ -24,6 +25,12 @@ const TOKEN_LIFT = 0.9;
 const SHADOW = "rgb(0 0 0 / 0.35)";
 const WATCHED = "hsl(0 90% 50% / 0.1)";
 const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
+const WATCHED_EDGE_WIDTH = 2;
+const EDGES = CORNERS.map((from, i) => {
+  const to = CORNERS[(i + 1) % CORNERS.length]!;
+  const facing = directionToward({ x: from.x + to.x, y: from.y + to.y });
+  return { from: i, to: (i + 1) % CORNERS.length, facing };
+});
 const HILLSHADE_PER_BLOCK = 4;
 const MAX_HILLSHADE = 12;
 const FRONT = [DIRECTIONS.sw, DIRECTIONS.s, DIRECTIONS.se];
@@ -172,9 +179,19 @@ export const drawScene = (
     context.stroke();
     if (watched.has(hexKey(hex))) {
       context.fillStyle = WATCHED;
-      context.strokeStyle = WATCHED_EDGE;
       context.fill();
+      context.beginPath();
+      for (const { from, to, facing } of EDGES) {
+        if (watched.has(hexKey(add(hex, DIRECTIONS[facing])))) continue;
+        const start = corner(from, top);
+        const end = corner(to, top);
+        context.moveTo(start.x, start.y);
+        context.lineTo(end.x, end.y);
+      }
+      context.strokeStyle = WATCHED_EDGE;
+      context.lineWidth = WATCHED_EDGE_WIDTH;
       context.stroke();
+      context.lineWidth = 0.6;
     }
 
     const base = project(center, top);
