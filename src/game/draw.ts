@@ -58,6 +58,11 @@ const CONIFERS: ReadonlySet<Biome> = new Set([
 
 const FOG: Hsl = [220, 15, 12];
 
+export const groundOffsetOf = ({ x, y }: Vec2): Vec2 => ({
+  x: x / PIXELS_PER_UNIT,
+  y: y / (PIXELS_PER_UNIT * TILT),
+});
+
 export const fogTint = (alpha: number) => {
   const [h, s, l] = FOG;
   return `hsl(${h} ${s}% ${l}% / ${alpha})`;

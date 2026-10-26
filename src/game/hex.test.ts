@@ -4,6 +4,7 @@ import {
   centerOf,
   DIRECTIONS,
   directionBetween,
+  directionToward,
   hexAt,
   hexDistance,
   hexesWithin,
@@ -95,4 +96,18 @@ describe("lineBetween", () => {
 
 test("hexesWithin a radius forms a hexagon of 3r(r+1)+1 hexes", () => {
   expect(hexesWithin(2)).toHaveLength(19);
+});
+
+describe("directionToward", () => {
+  test("names each neighbor's own direction", () => {
+    for (const [direction, offset] of Object.entries(DIRECTIONS))
+      expect(directionToward(centerOf(offset))).toBe(direction);
+  });
+
+  test("splits the plane into six 60° sectors", () => {
+    expect(directionToward({ x: 0, y: -5 })).toBe("n");
+    expect(directionToward({ x: 5, y: -1 })).toBe("ne");
+    expect(directionToward({ x: 5, y: 1 })).toBe("se");
+    expect(directionToward({ x: -1, y: 5 })).toBe("s");
+  });
 });

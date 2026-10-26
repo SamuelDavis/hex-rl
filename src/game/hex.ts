@@ -32,6 +32,16 @@ export const directionBetween = (from: Hex, to: Hex): Direction | undefined =>
     sameHex(add(from, DIRECTIONS[direction]), to),
   );
 
+export const directionToward = ({ x, y }: Vec2): Direction => {
+  const alignment = (direction: Direction) => {
+    const toward = centerOf(DIRECTIONS[direction]);
+    return toward.x * x + toward.y * y;
+  };
+  return (Object.keys(DIRECTIONS) as Direction[]).reduce((best, direction) =>
+    alignment(direction) > alignment(best) ? direction : best,
+  );
+};
+
 export const centerOf = ({ q, r }: Hex): Vec2 => ({
   x: 1.5 * q,
   y: SQRT3 * (r + q / 2),

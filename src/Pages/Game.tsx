@@ -7,7 +7,8 @@ import {
   onCleanup,
   Show,
 } from "solid-js";
-import { drawScene, fogTint } from "../game/draw";
+import { drawScene, fogTint, groundOffsetOf } from "../game/draw";
+import { directionToward } from "../game/hex";
 import { act, isOver, MAX_HP, newGame, type Action } from "../game/game";
 import { visibleFrom } from "../game/sight";
 import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "../game/terrain";
@@ -59,7 +60,21 @@ export default function Game() {
     const action = KEYS[event.key.toLowerCase()];
     if (!action || event.ctrlKey || event.metaKey || event.altKey) return;
     event.preventDefault();
+    perform(action);
+  }
+
+  function perform(action: Action) {
     setState((state) => ({ ...state, game: act(state.game, action) }));
+  }
+
+  function onTap(event: MouseEvent & { currentTarget: HTMLCanvasElement }) {
+    const { left, top, width, height } =
+      event.currentTarget.getBoundingClientRect();
+    const fromPlayer = {
+      x: event.clientX - left - width / 2,
+      y: event.clientY - top - height / 2,
+    };
+    perform(directionToward(groundOffsetOf(fromPlayer)));
   }
 
   window.addEventListener("keydown", onKeyDown);
@@ -118,15 +133,16 @@ export default function Game() {
       <div class="relative">
         <canvas
           ref={setCanvas}
-          class="block h-[70vh] w-full"
+          class="block h-[70vh] w-full touch-manipulation"
           aria-label="World"
+          onClick={onTap}
         />
         <details
           open
-          class="absolute inset-x-3 bottom-3 m-0 rounded px-3 py-2 text-sm md:right-auto md:w-1/2 lg:w-1/4"
+          class="absolute inset-x-3 bottom-3 m-0 rounded max-md:pointer-events-none px-3 py-2 text-sm text-shadow-md text-shadow-black md:right-auto md:w-1/2 lg:w-1/4"
           style={LOG_STYLE}
         >
-          <summary>Log</summary>
+          <summary class="pointer-events-auto">Log</summary>
           <ul ref={setLog} class="m-0 h-[5lh] overflow-y-auto wrap-break-word">
             <For each={getGame().log}>
               {(message) => <li class="mb-0">{message}</li>}
@@ -139,9 +155,10 @@ export default function Game() {
           when={isOver(getGame())}
           fallback={
             <small>
-              Move <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd>{" "}
-              <kbd>S</kbd> <kbd>D</kbd>; wait <kbd>Space</kbd>. Bump monsters to
-              attack. Climb one block at a time; swim freely.
+              Tap toward a direction, or press <kbd>Q</kbd> <kbd>W</kbd>{" "}
+              <kbd>E</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd>; wait{" "}
+              <kbd>Space</kbd>. Bump monsters to attack. Climb one block at a
+              time; swim freely.
             </small>
           }
         >
