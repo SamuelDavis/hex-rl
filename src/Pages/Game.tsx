@@ -9,20 +9,24 @@ import {
   Show,
   Switch,
 } from "solid-js";
-import { drawScene, groundOffsetOf } from "../game/draw";
+import { drawScene, groundOffsetOf, screenRadiusOf } from "../game/draw";
 import {
   act,
   isOver,
   MAX_HP,
   newGame,
-  nextTarget,
-  sightOf,
-  targetsOf,
   visibleOf,
   type Action,
   type Game as GameState,
 } from "../game/game";
 import { directionToward, type Direction } from "../game/hex";
+import {
+  nextTarget,
+  sightOf,
+  targetInView,
+  tracked,
+  type Target,
+} from "../game/target";
 import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "../game/terrain";
 
 const MOVE_KEYS: Record<string, Direction> = {
@@ -68,6 +72,7 @@ const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 const explore = (seed: number) => ({
   seed,
   game: newGame(createTerrain(seed)),
+  target: undefined as Target | undefined,
 });
 
 export default function Game() {
@@ -78,18 +83,29 @@ export default function Game() {
   const getGame = () => getState().game;
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() => visibleOf(getGame()));
-  const [getTargetId, setTargetId] = createSignal<string>();
-  const getTarget = createMemo(() => {
-    const monster = targetsOf(getGame()).find(({ id }) => id === getTargetId());
-    return monster && { monster, sight: sightOf(getGame(), monster) };
+  const getRange = createMemo(() => screenRadiusOf(getSize()));
+  const getTargetMark = createMemo(() => {
+    const { game, target } = getState();
+    if (!target) return undefined;
+    const monster = targetInView(game, getRange(), target);
+    return monster
+      ? { kind: "seen" as const, at: monster.at, sight: sightOf(game, monster) }
+      : { kind: "remembered" as const, at: target.lastSeen };
   });
 
   function cycleTarget() {
-    setTargetId(nextTarget(getGame(), getTarget()?.monster.id));
+    setState((state) => ({
+      ...state,
+      target: nextTarget(state.game, getRange(), state.target),
+    }));
   }
 
   function perform(action: Action) {
-    setState((state) => ({ ...state, game: act(state.game, action) }));
+    setState((state) => {
+      const game = act(state.game, action);
+      const target = state.target && tracked(game, getRange(), state.target);
+      return { ...state, game, target };
+    });
   }
 
   function restart() {
@@ -148,7 +164,7 @@ export default function Game() {
       player,
       monsters,
       visible: getVisible(),
-      target: getTarget(),
+      target: getTargetMark(),
       seen,
       width,
       height,

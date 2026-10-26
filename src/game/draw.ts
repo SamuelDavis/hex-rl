@@ -26,6 +26,7 @@ const SHADOW = "rgb(0 0 0 / 0.35)";
 const WATCHED = "hsl(0 90% 50% / 0.15)";
 const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
 const WATCHED_EDGE_WIDTH = 2;
+const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
 const EDGES = CORNERS.map((from, i) => {
   const to = CORNERS[(i + 1) % CORNERS.length]!;
   const facing = directionToward({ x: from.x + to.x, y: from.y + to.y });
@@ -68,6 +69,17 @@ const CONIFERS: ReadonlySet<Biome> = new Set([
 
 const FOG: Hsl = [220, 15, 12];
 
+export const screenRadiusOf = ({
+  width,
+  height,
+}: Pick<Scene, "width" | "height">): number =>
+  Math.floor(
+    Math.min(
+      width / 2 / (centerOf(DIRECTIONS.se).x * PIXELS_PER_UNIT),
+      height / 2 / (centerOf(DIRECTIONS.s).y * PIXELS_PER_UNIT * TILT),
+    ),
+  );
+
 export const groundOffsetOf = ({ x, y }: Vec2): Vec2 => ({
   x: x / PIXELS_PER_UNIT,
   y: y / (PIXELS_PER_UNIT * TILT),
@@ -85,14 +97,20 @@ const colorOf = (tile: Tile): Hsl => {
   return [h, s, l + 0.8 * (tile.ground - SEA_LEVEL)];
 };
 
+export type TargetMark =
+  | {
+      readonly kind: "seen";
+      readonly at: Hex;
+      readonly sight: ReadonlySet<string>;
+    }
+  | { readonly kind: "remembered"; readonly at: Hex };
+
 export interface Scene {
   readonly tileAt: (hex: Hex) => Tile;
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly visible: ReadonlySet<string>;
-  readonly target:
-    | { readonly monster: Monster; readonly sight: ReadonlySet<string> }
-    | undefined;
+  readonly target: TargetMark | undefined;
   readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
@@ -180,7 +198,7 @@ export const drawScene = (
     context.strokeStyle = css(color, EDGE_SHADE);
     context.fill();
     context.stroke();
-    const watched = target?.sight;
+    const watched = target?.kind === "seen" ? target.sight : undefined;
     if (watched?.has(hexKey(hex))) {
       polygon(face);
       context.fillStyle = WATCHED;
@@ -205,13 +223,14 @@ export const drawScene = (
         lit(CANOPY[tile.biome]),
         CONIFERS.has(tile.biome),
       );
+    if (target && sameHex(hex, target.at)) drawReticle(context, base);
     const monster = monsterAt.get(hexKey(hex));
     if (monster) {
       const { hue, glyph } = MONSTERS[monster.kind];
-      if (monster === target?.monster) drawReticle(context, base);
       drawToken(context, base, [hue, 60, 30], glyph);
       drawChevron(context, base, headingOf(monster.facing));
-    }
+    } else if (target?.kind === "remembered" && sameHex(hex, target.at))
+      drawToken(context, base, REMEMBERED_TOKEN, "?");
     if (sameHex(hex, player.at))
       drawToken(context, base, [0, 80, 55], "@", headingOf(player.facing));
   }

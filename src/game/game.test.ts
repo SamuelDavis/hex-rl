@@ -7,57 +7,19 @@ import {
   MAX_HP,
   newGame,
   PLAYER_DAMAGE,
-  type Game,
-  type Land,
-  type Monster,
-  nextTarget,
-  sightOf,
 } from "./game";
-import { hexKey, type Direction, type Hex } from "./hex";
+import { hexKey } from "./hex";
 import { MONSTERS } from "./monsters";
 import { SIGHT } from "./sight";
-import { Biome, type Lair, type Tile } from "./terrain";
-
-const land = (ground: number, tree = false): Tile => ({
-  ground,
-  water: undefined,
-  biome: Biome.Plains,
-  tree,
-});
-
-const origin = { q: 0, r: 0 };
-const east = { q: 1, r: 0 };
-
-const landOf = (
-  tiles: Record<string, Tile> = {},
-  lairs: readonly Lair[] = [],
-): Land => ({
-  spawn: origin,
-  tileAt: (hex: Hex) => tiles[hexKey(hex)] ?? land(10),
-  lairsIn: () => lairs,
-});
-
-const monster = (
-  at: Hex,
-  kind: Monster["kind"] = "goblin",
-  facing: Direction = "nw",
-): Monster => ({
-  id: hexKey(at),
-  kind,
-  at,
-  facing,
-  hp: MONSTERS[kind].hp,
-});
-
-const facingEast = (world = landOf()): Game => {
-  const game = newGame(world);
-  return { ...game, player: { ...game.player, facing: "se" } };
-};
-
-const gameWith = (monsters: Monster[], world = landOf()): Game => ({
-  ...facingEast(world),
-  monsters,
-});
+import {
+  east,
+  facingEast,
+  gameWith,
+  land,
+  landOf,
+  monster,
+  origin,
+} from "./testing";
 
 describe("newGame", () => {
   test("starts at the spawn with full health", () => {
@@ -201,37 +163,5 @@ describe("act", () => {
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
     expect(act(dead, "se")).toBe(dead);
-  });
-});
-
-describe("nextTarget", () => {
-  const near = monster({ q: 2, r: 0 }, "goblin", "se");
-  const far = monster({ q: 4, r: 0 });
-  const game = gameWith([far, near]);
-
-  test("cycles from none through visible monsters, nearest first, back to none", () => {
-    expect(nextTarget(game, undefined)).toBe(near.id);
-    expect(nextTarget(game, near.id)).toBe(far.id);
-    expect(nextTarget(game, far.id)).toBeUndefined();
-  });
-
-  test("starts over when the target is gone", () => {
-    expect(nextTarget(game, "gone")).toBe(near.id);
-  });
-
-  test("skips monsters the player can't see", () => {
-    const world = landOf({ "2,0": land(10, true) });
-    expect(nextTarget(gameWith([far], world), undefined)).toBeUndefined();
-  });
-});
-
-describe("sightOf", () => {
-  test("is what the monster sees from where it faces", () => {
-    const sight = sightOf(
-      gameWith([]),
-      monster({ q: 4, r: 0 }, "goblin", "se"),
-    );
-    expect(sight.has(hexKey({ q: 8, r: 0 }))).toBe(true);
-    expect(sight.has(hexKey(origin))).toBe(false);
   });
 });
