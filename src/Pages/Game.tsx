@@ -123,7 +123,7 @@ export default function Game() {
         />
         <details
           open
-          class="absolute bottom-3 left-3 m-0 w-1/4 rounded px-3 py-2 text-sm"
+          class="absolute inset-x-3 bottom-3 m-0 rounded px-3 py-2 text-sm md:right-auto md:w-1/2 lg:w-1/4"
           style={LOG_STYLE}
         >
           <summary>Log</summary>
