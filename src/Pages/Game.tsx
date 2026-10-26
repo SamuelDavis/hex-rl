@@ -12,7 +12,6 @@ import {
 import { drawScene, groundOffsetOf } from "../game/draw";
 import {
   act,
-  face,
   isOver,
   MAX_HP,
   newGame,
@@ -75,20 +74,8 @@ export default function Game() {
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() => visibleOf(getGame()));
 
-  function advance(next: (game: GameState) => GameState) {
-    setState((state) => ({ ...state, game: next(state.game) }));
-  }
-
   function perform(action: Action) {
-    advance((game) => act(game, action));
-  }
-
-  function approach(direction: Direction) {
-    advance((game) =>
-      game.player.facing === direction
-        ? act(game, direction)
-        : face(game, direction),
-    );
+    setState((state) => ({ ...state, game: act(state.game, action) }));
   }
 
   function restart() {
@@ -109,7 +96,7 @@ export default function Game() {
       x: event.clientX - left - width / 2,
       y: event.clientY - top - height / 2,
     };
-    approach(directionToward(groundOffsetOf(fromPlayer)));
+    perform(directionToward(groundOffsetOf(fromPlayer)));
   }
 
   window.addEventListener("keydown", onKeyDown);
@@ -277,8 +264,8 @@ function OtherPanel(props: { restart: () => void }) {
   return (
     <>
       <p>
-        Tap toward a direction to face it, again to step; or use the Play
-        buttons or press <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd>{" "}
+        Face a direction, then step that way: tap toward it, use the Play
+        buttons, or press <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd>{" "}
         <kbd>S</kbd> <kbd>D</kbd>; wait with <kbd>Space</kbd>. Bump monsters to
         attack. Climb one block at a time; swim freely.
       </p>

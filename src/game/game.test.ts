@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import {
   act,
   ACTIVE_RADIUS,
-  face,
   FORGET_RADIUS,
   isOver,
   MAX_HP,
@@ -43,8 +42,13 @@ const monster = (at: Hex, kind: Monster["kind"] = "goblin"): Monster => ({
   hp: MONSTERS[kind].hp,
 });
 
+const facingEast = (world = landOf()): Game => {
+  const game = newGame(world);
+  return { ...game, player: { ...game.player, facing: "se" } };
+};
+
 const gameWith = (monsters: Monster[], world = landOf()): Game => ({
-  ...newGame(world),
+  ...facingEast(world),
   monsters,
 });
 
@@ -71,21 +75,32 @@ describe("newGame", () => {
 
 describe("act", () => {
   test("a step too high to climb spends no turn", () => {
-    const game = newGame(landOf({ "1,0": land(12) }));
+    const game = facingEast(landOf({ "1,0": land(12) }));
     expect(act(game, "se")).toBe(game);
   });
 
   test("a step onto level ground moves and spends a turn", () => {
-    const next = act(newGame(landOf()), "se");
+    const next = act(facingEast(), "se");
     expect(next.player.at).toEqual(east);
     expect(next.turn).toBe(1);
   });
 
-  test("moving or attacking faces that way; waiting keeps facing", () => {
-    expect(act(newGame(landOf()), "se").player.facing).toBe("se");
-    expect(act(gameWith([monster(east)]), "se").player.facing).toBe("se");
-    const facing = newGame(landOf()).player.facing;
-    expect(act(newGame(landOf()), "wait").player.facing).toBe(facing);
+  test("a direction not faced turns in place and spends a turn", () => {
+    const game = { ...newGame(landOf()), monsters: [monster({ q: 4, r: 0 })] };
+    const next = act(game, "se");
+    expect(next.player).toMatchObject({ at: origin, facing: "se" });
+    expect(next.turn).toBe(1);
+    expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
+    expect(next.seen.has(hexKey({ q: SIGHT, r: 0 }))).toBe(true);
+  });
+
+  test("turning toward a cliff is allowed", () => {
+    const next = act(newGame(landOf({ "1,0": land(12) })), "se");
+    expect(next.player.facing).toBe("se");
+  });
+
+  test("waiting keeps facing", () => {
+    expect(act(facingEast(), "wait").player.facing).toBe("se");
   });
 
   test("bumping a monster attacks it", () => {
@@ -97,7 +112,7 @@ describe("act", () => {
   test("a slain monster stays slain", () => {
     const lair = { kind: "wolf", at: east } as const;
     const world = landOf({}, [lair]);
-    const game = { ...newGame(world), monsters: [{ ...monster(east), hp: 1 }] };
+    const game = gameWith([{ ...monster(east), hp: 1 }], world);
     const next = act(game, "se");
     expect(next.monsters).toEqual([]);
     expect(act(next, "wait").monsters).toEqual([]);
@@ -139,23 +154,5 @@ describe("act", () => {
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
     expect(act(dead, "se")).toBe(dead);
-  });
-});
-
-describe("face", () => {
-  test("turns in place and spends a turn", () => {
-    const next = face(gameWith([monster({ q: 4, r: 0 })]), "se");
-    expect(next.player).toMatchObject({ at: origin, facing: "se" });
-    expect(next.turn).toBe(1);
-    expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
-    expect(next.seen.has(hexKey({ q: SIGHT, r: 0 }))).toBe(true);
-  });
-
-  test("the dead can't turn", () => {
-    const dead = {
-      ...newGame(landOf()),
-      player: { ...newGame(landOf()).player, hp: 0 },
-    };
-    expect(face(dead, "se")).toBe(dead);
   });
 });

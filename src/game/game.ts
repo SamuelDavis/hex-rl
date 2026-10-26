@@ -135,18 +135,11 @@ const attack = (game: Game, target: Monster): Game => {
   );
 };
 
-const facedTo = (game: Game, facing: Direction): Game => ({
-  ...game,
-  player: { ...game.player, facing },
-});
-
-const playerTurn = (game: Game, facing: Direction): Game => {
-  const to = add(game.player.at, DIRECTIONS[facing]);
-  const faced = facedTo(game, facing);
-  const target = monsterAt(faced, to);
+const playerTurn = (game: Game, to: Hex): Game => {
+  const target = monsterAt(game, to);
   return target
-    ? attack(faced, target)
-    : { ...faced, player: { ...faced.player, at: to } };
+    ? attack(game, target)
+    : { ...game, player: { ...game.player, at: to } };
 };
 
 const stepToward = (game: Game, monster: Monster): Hex | undefined => {
@@ -218,13 +211,11 @@ const endTurn = (acted: Game): Game =>
 
 export const act = (game: Game, action: Action): Game => {
   if (isOver(game)) return game;
-  const to =
-    action === "wait"
-      ? game.player.at
-      : add(game.player.at, DIRECTIONS[action]);
-  if (!canStep(game.land.tileAt, game.player.at, to)) return game;
-  return endTurn(action === "wait" ? game : playerTurn(game, action));
+  const { player, land } = game;
+  if (action === "wait") return endTurn(game);
+  if (action !== player.facing)
+    return endTurn({ ...game, player: { ...player, facing: action } });
+  const to = add(player.at, DIRECTIONS[action]);
+  if (!canStep(land.tileAt, player.at, to)) return game;
+  return endTurn(playerTurn(game, to));
 };
-
-export const face = (game: Game, facing: Direction): Game =>
-  isOver(game) ? game : endTurn(facedTo(game, facing));
