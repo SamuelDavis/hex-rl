@@ -66,6 +66,17 @@ const logged = (game: Game, ...messages: string[]): Game => ({
 export const visibleOf = ({ land, player }: Game): Set<string> =>
   visibleFrom(land.tileAt, player.at, player.facing);
 
+export const watchedOf = (game: Game): Set<string> => {
+  const visible = visibleOf(game);
+  return new Set(
+    game.monsters
+      .filter(({ at }) => visible.has(hexKey(at)))
+      .flatMap(({ at, facing }) => [
+        ...visibleFrom(game.land.tileAt, at, facing),
+      ]),
+  );
+};
+
 const withSight = (game: Game): Game => ({
   ...game,
   seen: new Set([...game.seen, ...visibleOf(game)]),

@@ -22,6 +22,8 @@ const SIDE_SHADE = -14;
 const EDGE_SHADE = -6;
 const TOKEN_LIFT = 0.9;
 const SHADOW = "rgb(0 0 0 / 0.35)";
+const WATCHED = "hsl(0 90% 50% / 0.25)";
+const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
 const HILLSHADE_PER_BLOCK = 4;
 const MAX_HILLSHADE = 12;
 const FRONT = [DIRECTIONS.sw, DIRECTIONS.s, DIRECTIONS.se];
@@ -81,6 +83,7 @@ export interface Scene {
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly visible: ReadonlySet<string>;
+  readonly watched: ReadonlySet<string>;
   readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
@@ -88,7 +91,7 @@ export interface Scene {
 
 export const drawScene = (
   context: CanvasRenderingContext2D,
-  { tileAt, player, monsters, visible, seen, width, height }: Scene,
+  { tileAt, player, monsters, visible, watched, seen, width, height }: Scene,
 ) => {
   const camera = centerOf(player.at);
   const eye = surfaceOf(tileAt(player.at));
@@ -167,6 +170,12 @@ export const drawScene = (
     context.strokeStyle = css(color, EDGE_SHADE);
     context.fill();
     context.stroke();
+    if (watched.has(hexKey(hex))) {
+      context.fillStyle = WATCHED;
+      context.strokeStyle = WATCHED_EDGE;
+      context.fill();
+      context.stroke();
+    }
 
     const base = project(center, top);
     if (tile.tree)

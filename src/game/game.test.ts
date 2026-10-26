@@ -10,6 +10,7 @@ import {
   type Game,
   type Land,
   type Monster,
+  watchedOf,
 } from "./game";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
@@ -199,5 +200,20 @@ describe("act", () => {
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
     expect(act(dead, "se")).toBe(dead);
+  });
+});
+
+describe("watchedOf", () => {
+  test("lists what monsters in view can see", () => {
+    const watched = watchedOf(
+      gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]),
+    );
+    expect(watched.has(hexKey({ q: 8, r: 0 }))).toBe(true);
+    expect(watched.has(hexKey(origin))).toBe(false);
+  });
+
+  test("ignores monsters the player can't see", () => {
+    const world = landOf({ "2,0": land(10, true) });
+    expect(watchedOf(gameWith([monster({ q: 4, r: 0 })], world)).size).toBe(0);
   });
 });

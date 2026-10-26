@@ -16,6 +16,7 @@ import {
   MAX_HP,
   newGame,
   visibleOf,
+  watchedOf,
   type Action,
   type Game as GameState,
 } from "../game/game";
@@ -127,6 +128,7 @@ export default function Game() {
       player,
       monsters,
       visible: getVisible(),
+      watched: watchedOf(getGame()),
       seen,
       width,
       height,
