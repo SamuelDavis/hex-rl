@@ -58,6 +58,11 @@ const CONIFERS: ReadonlySet<Biome> = new Set([
 
 const FOG: Hsl = [220, 15, 12];
 
+export const fogTint = (alpha: number) => {
+  const [h, s, l] = FOG;
+  return `hsl(${h} ${s}% ${l}% / ${alpha})`;
+};
+
 const remembered = ([h, s, l]: Hsl): Hsl => [h, s * 0.3, l * 0.55];
 
 const css = ([h, s, l]: Hsl, shade = 0) =>

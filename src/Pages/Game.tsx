@@ -6,7 +6,7 @@ import {
   onCleanup,
   Show,
 } from "solid-js";
-import { drawScene } from "../game/draw";
+import { drawScene, fogTint } from "../game/draw";
 import { act, isOver, MAX_HP, newGame, type Action } from "../game/game";
 import { visibleFrom } from "../game/sight";
 import { Biome, createTerrain, SEA_LEVEL, surfaceOf } from "../game/terrain";
@@ -25,6 +25,15 @@ const KEYS: Record<string, Action> = {
 const BIOME_NAMES = Object.fromEntries(
   Object.entries(Biome).map(([name, biome]) => [biome, name]),
 );
+
+const LOG_STYLE = {
+  background: fogTint(0.3),
+  color: "white",
+  "--pico-color": "white",
+  "--pico-accordion-close-summary-color": "white",
+  "--pico-accordion-open-summary-color": "white",
+  "--pico-accordion-active-summary-color": "white",
+};
 
 const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
@@ -98,14 +107,23 @@ export default function Game() {
         </hgroup>
         <progress value={getHp()} max={MAX_HP} />
       </header>
-      <canvas
-        ref={setCanvas}
-        class="block h-[70vh] w-full"
-        aria-label="World"
-      />
-      <ul>
-        <For each={getGame().log}>{(message) => <li>{message}</li>}</For>
-      </ul>
+      <div class="relative">
+        <canvas
+          ref={setCanvas}
+          class="block h-[70vh] w-full"
+          aria-label="World"
+        />
+        <details
+          open
+          class="absolute bottom-3 left-3 m-0 max-w-[60%] rounded px-3 py-2 text-sm"
+          style={LOG_STYLE}
+        >
+          <summary>Log</summary>
+          <ul class="m-0">
+            <For each={getGame().log}>{(message) => <li>{message}</li>}</For>
+          </ul>
+        </details>
+      </div>
       <footer>
         <Show
           when={isOver(getGame())}
