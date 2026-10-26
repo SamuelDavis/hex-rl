@@ -19,6 +19,8 @@ const PIXELS_PER_BLOCK = 7;
 const MAX_RELIEF = 40;
 const SIDE_SHADE = -14;
 const EDGE_SHADE = -6;
+const TOKEN_LIFT = 0.9;
+const SHADOW = "rgb(0 0 0 / 0.35)";
 const HILLSHADE_PER_BLOCK = 4;
 const MAX_HILLSHADE = 12;
 const FRONT = [DIRECTIONS.sw, DIRECTIONS.s, DIRECTIONS.se];
@@ -210,7 +212,11 @@ const drawToken = (
   glyph: string,
 ) => {
   const size = PIXELS_PER_UNIT * 0.5;
-  const center = { x, y: y - size * 1.6 };
+  const center = { x, y: y - size * TOKEN_LIFT };
+  context.fillStyle = SHADOW;
+  context.beginPath();
+  context.ellipse(x, y, size, size * TILT, 0, 0, 2 * Math.PI);
+  context.fill();
   context.fillStyle = css(fill);
   context.strokeStyle = css([0, 0, 100]);
   context.lineWidth = 2.5;
