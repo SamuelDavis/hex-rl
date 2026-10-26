@@ -6,7 +6,7 @@ Personal starting point for SolidJS SPAs: classless semantic HTML styled by Pico
 
 - Template: `Hex RL` and `hex-rl` placeholders are replaced when bootstrapping.
 - [solidlib](https://github.com/SamuelDavis/solidlib) should track latest; update it when bootstrapping.
-- `/game`: a hex-grid roguelike. Rules and generation are pure functions in `src/game/` (axial flat-top hexes, levels from `(seed, depth)`); `src/Pages/Game.tsx` only renders and dispatches actions.
+- `/game`: an infinite, seeded, 2.5D hex world to walk around: landform-driven heights in whole blocks, temperature and humidity biomes, rivers, lakes and trees. Generation is `src/game/terrain.ts` (continuous space; each hex samples it at its center, chunked on procgen's grid); movement rules are `src/game/explorer.ts`; `src/game/draw.ts` paints an oblique canvas view.
 - `/styleguide` renders every styled element; check it after changing `src/pico.css`.
 
 ## Conventions

@@ -1,4 +1,4 @@
-import type { Vec2 } from "procgen";
+import type { Bounds, Vec2 } from "procgen";
 
 export interface Hex {
   readonly q: number;
@@ -32,24 +32,6 @@ export const directionBetween = (from: Hex, to: Hex): Direction | undefined =>
     sameHex(add(from, DIRECTIONS[direction]), to),
   );
 
-export const hexDistance = (a: Hex, b: Hex): number => {
-  const dq = a.q - b.q;
-  const dr = a.r - b.r;
-  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
-};
-
-export const hexesWithin = (radius: number): Hex[] => {
-  const hexes: Hex[] = [];
-  for (let q = -radius; q <= radius; q++)
-    for (
-      let r = Math.max(-radius, -q - radius);
-      r <= Math.min(radius, -q + radius);
-      r++
-    )
-      hexes.push({ q, r });
-  return hexes;
-};
-
 export const centerOf = ({ q, r }: Hex): Vec2 => ({
   x: 1.5 * q,
   y: SQRT3 * (r + q / 2),
@@ -64,7 +46,9 @@ export const CORNERS: readonly Vec2[] = [
   { x: 0.5, y: -SQRT3 / 2 },
 ];
 
-const roundHex = (q: number, r: number): Hex => {
+export const hexAt = ({ x, y }: Vec2): Hex => {
+  const q = x / 1.5;
+  const r = y / SQRT3 - q / 2;
   const s = -q - r;
   let rq = Math.round(q);
   let rr = Math.round(r);
@@ -77,33 +61,14 @@ const roundHex = (q: number, r: number): Hex => {
   return { q: rq + 0, r: rr + 0 };
 };
 
-const NUDGE = 1e-6;
-
-export const lineBetween = (from: Hex, to: Hex): Hex[] => {
-  const steps = hexDistance(from, to);
-  return Array.from({ length: steps + 1 }, (_, i) => {
-    const t = steps === 0 ? 0 : i / steps;
-    return roundHex(
-      from.q + NUDGE + (to.q - from.q) * t,
-      from.r + NUDGE + (to.r - from.r) * t,
-    );
-  });
-};
-
-export const distancesFrom = (
-  start: Hex,
-  isPassable: (hex: Hex) => boolean,
-): Map<string, number> => {
-  const distances = new Map([[hexKey(start), 0]]);
-  const frontier = [start];
-  for (let hex = frontier.shift(); hex; hex = frontier.shift()) {
-    const next = distances.get(hexKey(hex))! + 1;
-    for (const neighbor of neighborsOf(hex)) {
-      const key = hexKey(neighbor);
-      if (distances.has(key) || !isPassable(neighbor)) continue;
-      distances.set(key, next);
-      frontier.push(neighbor);
-    }
-  }
-  return distances;
+export const hexesCovering = ({ minX, minY, maxX, maxY }: Bounds): Hex[] => {
+  const hexes: Hex[] = [];
+  for (let q = Math.ceil(minX / 1.5); q <= Math.floor(maxX / 1.5); q++)
+    for (
+      let r = Math.ceil(minY / SQRT3 - q / 2);
+      r <= Math.floor(maxY / SQRT3 - q / 2);
+      r++
+    )
+      hexes.push({ q, r });
+  return hexes;
 };
