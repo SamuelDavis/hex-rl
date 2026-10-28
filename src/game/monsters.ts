@@ -5,6 +5,7 @@ export const MONSTERS = {
     hp: 3,
     damage: 1,
     gold: { chance: 0.2, min: 1, max: 2 },
+    items: { chance: 0.1, rolls: 1 },
   },
   cub: {
     glyph: "c",
@@ -12,6 +13,7 @@ export const MONSTERS = {
     hp: 1,
     damage: 1,
     gold: { chance: 0.1, min: 1, max: 1 },
+    items: { chance: 0.05, rolls: 1 },
   },
   bandit: {
     glyph: "b",
@@ -19,6 +21,7 @@ export const MONSTERS = {
     hp: 4,
     damage: 2,
     gold: { chance: 0.8, min: 3, max: 10 },
+    items: { chance: 0.4, rolls: 2 },
   },
   thief: {
     glyph: "t",
@@ -26,6 +29,7 @@ export const MONSTERS = {
     hp: 2,
     damage: 1,
     gold: { chance: 0.9, min: 2, max: 8 },
+    items: { chance: 0.4, rolls: 2 },
   },
   kobold: {
     glyph: "k",
@@ -33,6 +37,7 @@ export const MONSTERS = {
     hp: 2,
     damage: 1,
     gold: { chance: 0.5, min: 1, max: 4 },
+    items: { chance: 0.25, rolls: 1 },
   },
   goblin: {
     glyph: "g",
@@ -40,6 +45,7 @@ export const MONSTERS = {
     hp: 4,
     damage: 2,
     gold: { chance: 0.5, min: 2, max: 6 },
+    items: { chance: 0.3, rolls: 2 },
   },
   troll: {
     glyph: "T",
@@ -47,6 +53,7 @@ export const MONSTERS = {
     hp: 8,
     damage: 3,
     gold: { chance: 1, min: 10, max: 25 },
+    items: { chance: 0.5, rolls: 3 },
   },
   "alpha wolf": {
     glyph: "W",
@@ -54,6 +61,7 @@ export const MONSTERS = {
     hp: 8,
     damage: 2,
     gold: { chance: 1, min: 5, max: 12 },
+    items: { chance: 0.8, rolls: 2 },
   },
   "bandit chief": {
     glyph: "B",
@@ -61,6 +69,7 @@ export const MONSTERS = {
     hp: 10,
     damage: 3,
     gold: { chance: 1, min: 20, max: 40 },
+    items: { chance: 0.8, rolls: 3 },
   },
   "goblin chief": {
     glyph: "G",
@@ -68,6 +77,7 @@ export const MONSTERS = {
     hp: 10,
     damage: 3,
     gold: { chance: 1, min: 15, max: 30 },
+    items: { chance: 0.8, rolls: 3 },
   },
   "kobold foreman": {
     glyph: "K",
@@ -75,6 +85,7 @@ export const MONSTERS = {
     hp: 6,
     damage: 2,
     gold: { chance: 1, min: 10, max: 20 },
+    items: { chance: 0.8, rolls: 2 },
   },
   "troll elder": {
     glyph: "E",
@@ -82,6 +93,7 @@ export const MONSTERS = {
     hp: 16,
     damage: 4,
     gold: { chance: 1, min: 40, max: 80 },
+    items: { chance: 0.9, rolls: 4 },
   },
 } as const;
 
