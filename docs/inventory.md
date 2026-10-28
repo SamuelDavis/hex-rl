@@ -88,22 +88,20 @@ Not used (fetch failed or not read): RePoE `mods.json` (exceeds 10 MB fetch limi
 
 Override conflicting recommendations above.
 
-- Turn cost: equip, unequip, and loadout slot swaps are `Action`s that end the turn. Replaces `session.ts:87-92` free `equip` intent.
+- Turn cost: every transfer is an `Action` that ends the turn: equip, unequip, loadout slot swap, chest→pack, pack→chest, drop. Replaces `session.ts:87-92` free `equip` intent.
 - Quaff: free (skips `endTurn`); allowed at full HP/MP; no aim interaction, since aim is UI state (`mode.ts`) and the game only sees the quaff `Action`.
 - Chest: a marker for "one or more items on this hex", not an item. Exists iff contents non-empty; no loot, no chest. Gold-only chest valid. Monster drop is one chest holding all rolled loot.
-- Chest interaction: stepping onto a chest opens a modal with paper doll, pack, and chest contents; drag-and-drop between any two. Player picks which items to take. Chest offers "destroy": deletes chest and contents.
-- Drop: player can drop from pack via inventory screen, creating (or adding to) a chest on the ground.
-- Capacity: size-based. Each item has a `size`; pack total ≤ capacity. Bags are equipment that raise capacity; bags drop as loot. On capacity decrease (e.g. unequip bag), remove last N pack items until within limit; overflow goes into a chest on an adjacent hex.
+- Chest modal: stepping onto a chest opens it immediately; shows paper doll, pack, chest contents; drag-and-drop between any two. Player picks which items to take; "take all" button. "Destroy" (deletes chest and contents) sits alone in a corner far from "dismiss". Dismissed modal reopens only after stepping off and back on.
+- Drop: player can drop from pack via inventory screen, creating (or adding to) a chest at the player's hex.
+- Capacity: size-based. Each item has a `size`; pack total ≤ capacity. Gold and potions: size 0 (provisional).
+- Bags: equipment in dedicated `bag` paper-doll slots (3), never the loadout. Size 0; raise capacity only while equipped. On capacity decrease, drop pack items largest-size first until within limit, into a chest at the player's hex.
+- Paper doll: `helm`, `chest`, `pants`, `boots`, `gloves`, 3 × `bag`.
+- Potion loadout slot: binds to potion kind; shows pack count; at 0 shows 0 and dims like a cooldown.
 - Names: `[prefix] base [suffix]`, prefix and suffix optional. Base = item kind ("boots"); prefix = material ("leather"); suffix = quality (future, e.g. "of speed"); until stats exist, suffix = source monster ("of the goblin"). Example: "chain boots of the goblin".
 
 ## Unresolved
 
-- Turn cost of non-equip transfers in the modal: chest→pack, pack→chest, destroy. Monsters act during each turn-costing drag.
-- "Last N items" order: acquisition order? Does the unequipped bag itself count toward the overflow?
-- Overflow placement: which adjacent hex; merge into an existing adjacent chest; fallback when no adjacent floor (own hex?).
-- Size of gold (0?) and potions (per unit or per stack); do equipped items count against capacity (assume no)?
-- Bag slot: new `Slot` member; one bag or several?
-- Step onto chest: always open modal, or auto-take gold?
-- Potion in loadout slot: binds to potion kind; slot behaviour at zero stock (empty vs show 0).
-- Destroy: confirmation prompt?
+- "Take all": one turn total or one per item? Over capacity: take what fits (largest first? order?) or reject?
+- Size ties in overflow drop: tiebreak rule.
+- Base capacity and item sizes per kind.
 - Brogue potion frequency and monster carried-item chance values not verified; RePoE `mods.json` not read.
