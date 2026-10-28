@@ -43,6 +43,9 @@ export const sighted = (mind: Mind, at: Hex, quarry: Quarry): Hostile => ({
   unseenFor: 0,
 });
 
+export const tetherOf = (mind: Mind, home: Hex): Hex =>
+  mind.state === "idle" ? home : mind.anchor;
+
 const hunting = ({ anchor, lastSeen, heading }: Pursuit): Hunting => ({
   state: "hunting",
   anchor,

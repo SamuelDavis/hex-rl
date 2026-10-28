@@ -14,7 +14,7 @@ import {
   type Direction,
   type Hex,
 } from "./hex";
-import { IDLE, sighted, unsighted, type Mind } from "./mind";
+import { IDLE, sighted, tetherOf, unsighted, type Mind } from "./mind";
 import { MONSTERS, SPAWNERS, spawnerHpOf, type MonsterKind } from "./monsters";
 import { canNotice, SIGHT, visibleFrom } from "./sight";
 import {
@@ -496,7 +496,7 @@ interface Leash {
 }
 
 const leashOf = ({ home, mind }: Monster): Leash => ({
-  center: mind.state === "idle" ? home.at : mind.anchor,
+  center: tetherOf(mind, home.at),
   radius: SPAWNERS[home.kind].leash,
 });
 

@@ -3,6 +3,7 @@ import {
   HUNT_TURNS,
   IDLE,
   sighted,
+  tetherOf,
   TRACK_TURNS,
   unsighted,
   type Hostile,
@@ -47,6 +48,16 @@ describe("sighted", () => {
       anchor,
       unseenFor: 0,
     });
+  });
+});
+
+describe("tetherOf", () => {
+  test("idle minds are tethered home", () => {
+    expect(tetherOf(IDLE, at)).toBe(at);
+  });
+
+  test("engaged minds are tethered to their anchor", () => {
+    expect(tetherOf(hostile, at)).toBe(anchor);
   });
 });
 

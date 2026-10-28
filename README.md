@@ -16,3 +16,4 @@ Personal starting point for SolidJS SPAs: classless semantic HTML styled by Pico
 - Render into `document.body` so Pico's `body > header/main/footer` styles apply.
 - `src/pico.css` is the app-agnostic classless layer: Pico, its theme, and its extensions. `src/index.css` holds per-app styles and Tailwind.
 - Styling contracts and rationale: [docs/styling.md](docs/styling.md).
+- Monster AI state machines, prior art, and refactor recommendations: [docs/monster-ai.md](docs/monster-ai.md).
