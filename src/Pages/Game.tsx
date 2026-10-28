@@ -501,8 +501,8 @@ function Inventory(props: {
       <button
         type="button"
         draggable="true"
-        class="m-0 block w-full px-1 py-0.5 text-left text-xs"
-        classList={{ outline: getHeld() !== cargoProps.id }}
+        class="m-0 block w-full px-1 py-0.5 text-left text-xs aria-pressed:ring-4 aria-pressed:ring-amber-400"
+        aria-pressed={getHeld() === cargoProps.id}
         onDragStart={(event) =>
           event.dataTransfer?.setData(CARGO_TYPE, cargoProps.id)
         }
