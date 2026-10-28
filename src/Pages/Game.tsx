@@ -150,7 +150,7 @@ export default function Game() {
     const canvas = getCanvas();
     if (!canvas) return;
     const { width, height } = getSize();
-    const { land, player, monsters, seen } = getGame();
+    const { land, player, monsters, gold, seen } = getGame();
     const ratio = window.devicePixelRatio;
     canvas.width = width * ratio;
     canvas.height = height * ratio;
@@ -162,6 +162,7 @@ export default function Game() {
       isWrecked: (spawner) => isWrecked(getGame(), spawner),
       player,
       monsters,
+      gold,
       visible: getVisible(),
       target: getTargetMark(),
       seen,
@@ -176,8 +177,8 @@ export default function Game() {
         <div>
           <h1>{BIOME_NAMES[getTile().biome]}</h1>
           <p data-cap="end">
-            HP {Math.max(0, getGame().player.hp)}/{MAX_HP} · Turn{" "}
-            {getGame().turn}
+            HP {Math.max(0, getGame().player.hp)}/{MAX_HP} · Gold{" "}
+            {getGame().player.gold} · Turn {getGame().turn}
           </p>
         </div>
         <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />

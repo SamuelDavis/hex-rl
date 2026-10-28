@@ -215,6 +215,33 @@ describe("act", () => {
     expect(next.kills).toBe(1);
   });
 
+  test("slain monsters may drop a variable amount of gold where they fell", () => {
+    const { min, max } = MONSTERS.kobold.gold;
+    const drops = Array.from(
+      { length: 50 },
+      (_, i) =>
+        act(
+          gameWith([{ ...monster(east, "kobold"), id: `${i}`, hp: 1 }]),
+          "se",
+        ).gold.get(hexKey(east)) ?? 0,
+    );
+    const amounts = drops.filter((amount) => amount > 0);
+    expect(amounts.length).toBeGreaterThan(0);
+    expect(amounts.length).toBeLessThan(drops.length);
+    expect(new Set(amounts).size).toBeGreaterThan(1);
+    for (const amount of amounts) {
+      expect(amount).toBeGreaterThanOrEqual(min);
+      expect(amount).toBeLessThanOrEqual(max);
+    }
+  });
+
+  test("stepping onto gold picks it up", () => {
+    const game = { ...facingEast(), gold: new Map([[hexKey(east), 5]]) };
+    const next = act(game, "se");
+    expect(next.player.gold).toBe(5);
+    expect(next.gold.has(hexKey(east))).toBe(false);
+  });
+
   test("adjacent monsters attack after the player acts", () => {
     const next = act(gameWith([monster(east)]), "wait");
     expect(next.player.hp).toBe(MAX_HP - MONSTERS.goblin.damage);

@@ -41,6 +41,7 @@ export interface Player {
   readonly at: Hex;
   readonly facing: Direction;
   readonly hp: number;
+  readonly gold: number;
 }
 
 export interface Monster {
@@ -81,6 +82,8 @@ export interface Game {
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly spawners: ReadonlyMap<string, SpawnerState>;
+  /** Gold lying on the ground, by hex key. */
+  readonly gold: ReadonlyMap<string, number>;
   readonly kills: number;
   readonly seen: ReadonlySet<string>;
   readonly turn: number;
@@ -196,15 +199,47 @@ export const newGame = (land: Land): Game =>
   withSight(
     populate({
       land,
-      player: { at: land.spawn, facing: "n", hp: MAX_HP },
+      player: { at: land.spawn, facing: "n", hp: MAX_HP, gold: 0 },
       monsters: [],
       spawners: new Map(),
+      gold: new Map(),
       kills: 0,
       seen: new Set(),
       turn: 0,
       log: ["You set out into the wilds."],
     }),
   );
+
+const dropGold = (game: Game, { id, kind, at }: Monster): Game => {
+  const { chance, min, max } = MONSTERS[kind].gold;
+  const rng = rngOf(game.land.seed, "gold").child(id);
+  if (!rng.chance(chance, game.turn)) return game;
+  const amount = rng.int(min, max, game.turn, 1);
+  const key = hexKey(at);
+  return logged(
+    {
+      ...game,
+      gold: new Map([...game.gold, [key, (game.gold.get(key) ?? 0) + amount]]),
+    },
+    `The ${kind} drops ${amount} gold.`,
+  );
+};
+
+const pickUpGold = (game: Game): Game => {
+  const key = hexKey(game.player.at);
+  const amount = game.gold.get(key);
+  if (!amount) return game;
+  const gold = new Map(game.gold);
+  gold.delete(key);
+  return logged(
+    {
+      ...game,
+      gold,
+      player: { ...game.player, gold: game.player.gold + amount },
+    },
+    `You pick up ${amount} gold.`,
+  );
+};
 
 const attackMonster = (game: Game, target: Monster): Game => {
   const hp = target.hp - PLAYER_DAMAGE;
@@ -216,13 +251,16 @@ const attackMonster = (game: Game, target: Monster): Game => {
       },
       `You hit the ${target.kind}.`,
     );
-  return logged(
-    {
-      ...game,
-      monsters: game.monsters.filter((m) => m !== target),
-      kills: game.kills + 1,
-    },
-    `You kill the ${target.kind}.`,
+  return dropGold(
+    logged(
+      {
+        ...game,
+        monsters: game.monsters.filter((m) => m !== target),
+        kills: game.kills + 1,
+      },
+      `You kill the ${target.kind}.`,
+    ),
+    target,
   );
 };
 
@@ -246,7 +284,7 @@ const playerTurn = (game: Game, to: Hex): Game => {
   if (target) return attackMonster(game, target);
   const spawner = spawnerAt(game, to);
   if (spawner) return attackSpawner(game, spawner);
-  return { ...game, player: { ...game.player, at: to } };
+  return pickUpGold({ ...game, player: { ...game.player, at: to } });
 };
 
 const stepToward = (

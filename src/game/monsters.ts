@@ -1,11 +1,53 @@
 export const MONSTERS = {
-  wolf: { glyph: "w", hue: 30, hp: 3, damage: 1 },
-  cub: { glyph: "c", hue: 35, hp: 1, damage: 1 },
-  bandit: { glyph: "b", hue: 0, hp: 4, damage: 2 },
-  thief: { glyph: "t", hue: 320, hp: 2, damage: 1 },
-  kobold: { glyph: "k", hue: 60, hp: 2, damage: 1 },
-  goblin: { glyph: "g", hue: 90, hp: 4, damage: 2 },
-  troll: { glyph: "T", hue: 280, hp: 8, damage: 3 },
+  wolf: {
+    glyph: "w",
+    hue: 30,
+    hp: 3,
+    damage: 1,
+    gold: { chance: 0.2, min: 1, max: 2 },
+  },
+  cub: {
+    glyph: "c",
+    hue: 35,
+    hp: 1,
+    damage: 1,
+    gold: { chance: 0.1, min: 1, max: 1 },
+  },
+  bandit: {
+    glyph: "b",
+    hue: 0,
+    hp: 4,
+    damage: 2,
+    gold: { chance: 0.8, min: 3, max: 10 },
+  },
+  thief: {
+    glyph: "t",
+    hue: 320,
+    hp: 2,
+    damage: 1,
+    gold: { chance: 0.9, min: 2, max: 8 },
+  },
+  kobold: {
+    glyph: "k",
+    hue: 60,
+    hp: 2,
+    damage: 1,
+    gold: { chance: 0.5, min: 1, max: 4 },
+  },
+  goblin: {
+    glyph: "g",
+    hue: 90,
+    hp: 4,
+    damage: 2,
+    gold: { chance: 0.5, min: 2, max: 6 },
+  },
+  troll: {
+    glyph: "T",
+    hue: 280,
+    hp: 8,
+    damage: 3,
+    gold: { chance: 1, min: 10, max: 25 },
+  },
 } as const;
 
 export type MonsterKind = keyof typeof MONSTERS;

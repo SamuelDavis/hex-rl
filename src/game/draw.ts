@@ -36,6 +36,7 @@ const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
 const WHITE: Hsl = [0, 0, 100];
 const HOSTILE: Hsl = [0, 90, 55];
 const TARGETED: Hsl = [110, 100, 55];
+const GOLD: Hsl = [48, 95, 55];
 const RINGS: Record<Monster["mind"]["state"], Hsl> = {
   idle: WHITE,
   hostile: HOSTILE,
@@ -127,6 +128,7 @@ export interface Scene {
   readonly isWrecked: (spawner: Spawner) => boolean;
   readonly player: Player;
   readonly monsters: readonly Monster[];
+  readonly gold: ReadonlyMap<string, number>;
   readonly visible: ReadonlySet<string>;
   readonly target: TargetMark | undefined;
   readonly seen: ReadonlySet<string>;
@@ -142,6 +144,7 @@ export const drawScene = (
     isWrecked,
     player,
     monsters,
+    gold,
     visible,
     target,
     seen,
@@ -263,6 +266,7 @@ export const drawScene = (
         base,
         lit([SPAWNERS[spawner.kind].hue, isWrecked(spawner) ? 0 : 35, 30]),
       );
+    if (isVisible && gold.has(hexKey(hex))) drawGold(context, base);
     if (target && sameHex(hex, target.at)) drawReticle(context, base);
     const monster = monsterAt.get(hexKey(hex));
     if (monster) {
@@ -329,6 +333,30 @@ const drawSpawner = (
   context.arc(x, y, size * 0.35, Math.PI, 0);
   context.fillStyle = css(color, -20);
   context.fill();
+};
+
+const drawGold = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
+  const radius = PIXELS_PER_UNIT * 0.18;
+  for (const [dx, dy] of [
+    [-0.6, 0.3],
+    [0.6, 0.3],
+    [0, -0.3],
+  ] as const) {
+    context.beginPath();
+    context.ellipse(
+      x + dx * radius * 2,
+      y + dy * radius * 2,
+      radius,
+      radius * TILT,
+      0,
+      0,
+      2 * Math.PI,
+    );
+    context.fillStyle = css(GOLD);
+    context.strokeStyle = css(GOLD, -25);
+    context.fill();
+    context.stroke();
+  }
 };
 
 const headingOf = (direction: Direction): Vec2 => {
