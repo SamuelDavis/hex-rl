@@ -149,6 +149,23 @@ const withSpawner = (
   spawners: new Map([...game.spawners, [hexKey(at), state]]),
 });
 
+const spawnedFrom = (
+  { land, turn }: Game,
+  spawner: Spawner,
+  kind: MonsterKind,
+): Monster => {
+  const { at } = spawner;
+  return {
+    id: `${hexKey(at)}@${turn}`,
+    kind,
+    home: spawner,
+    at,
+    facing: rngOf(land.seed, "spawns").pick(HEADINGS, at.q, at.r, turn, 2),
+    hp: MONSTERS[kind].hp,
+    mind: IDLE,
+  };
+};
+
 const spawnFrom = (game: Game, spawner: Spawner): Game => {
   const { land, monsters, turn } = game;
   const { kind, at } = spawner;
@@ -167,16 +184,11 @@ const spawnFrom = (game: Game, spawner: Spawner): Game => {
     (turn < state.readyAt || !rng.chance(chance, at.q, at.r, turn))
   )
     return game;
-  const spawned = rng.weighted(pool, at.q, at.r, turn, 1);
-  const monster: Monster = {
-    id: `${hexKey(at)}@${turn}`,
-    kind: spawned,
-    home: spawner,
-    at,
-    facing: rng.pick(HEADINGS, at.q, at.r, turn, 2),
-    hp: MONSTERS[spawned].hp,
-    mind: IDLE,
-  };
+  const monster = spawnedFrom(
+    game,
+    spawner,
+    rng.weighted(pool, at.q, at.r, turn, 1),
+  );
   return withSpawner({ ...game, monsters: [...monsters, monster] }, spawner, {
     ...state,
     readyAt: turn + interval,
@@ -264,19 +276,35 @@ const attackMonster = (game: Game, target: Monster): Game => {
   );
 };
 
+const unleashBoss = (game: Game, spawner: Spawner): Game => {
+  const { boss } = SPAWNERS[spawner.kind];
+  const monster = spawnedFrom(game, spawner, boss);
+  return logged(
+    {
+      ...game,
+      monsters: [
+        ...game.monsters,
+        { ...monster, mind: sighted(game, monster) },
+      ],
+    },
+    `The ${boss} emerges!`,
+  );
+};
+
 const attackSpawner = (game: Game, spawner: Spawner): Game => {
   const hp = Math.max(0, spawnerHp(game, spawner) - PLAYER_DAMAGE);
-  const wasWrecked = isWrecked(game, spawner);
   const { name } = SPAWNERS[spawner.kind];
-  return logged(
+  const wasWrecked = isWrecked(game, spawner);
+  const hurt = (wrecked: boolean) =>
     withSpawner(game, spawner, {
       ...stateOf(game, spawner),
       hp,
       hurtAt: game.turn,
-      isWrecked: wasWrecked || hp === 0,
-    }),
-    hp === 0 && !wasWrecked ? `You wreck the ${name}.` : `You hit the ${name}.`,
-  );
+      isWrecked: wrecked,
+    });
+  if (hp > 0 || wasWrecked)
+    return logged(hurt(wasWrecked), `You hit the ${name}.`);
+  return unleashBoss(logged(hurt(true), `You wreck the ${name}.`), spawner);
 };
 
 const playerTurn = (game: Game, to: Hex): Game => {

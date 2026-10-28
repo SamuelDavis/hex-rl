@@ -153,6 +153,31 @@ describe("spawners", () => {
     expect(isWrecked(games.at(-1)!, adjacent)).toBe(true);
   });
 
+  test("unleash their hostile boss when wrecked", () => {
+    const adjacent = { kind: "den", at: east } as const;
+    const idle = withState(gameWith([], landOf(out, [adjacent])), adjacent, {
+      readyAt: Infinity,
+    });
+    const hits = Math.ceil(spawnerHpOf("den") / PLAYER_DAMAGE);
+    const games = historyOf(idle, hits, "se");
+    expect(games.at(-2)!.monsters).toEqual([]);
+    expect(games.at(-1)!.monsters).toMatchObject([
+      { kind: SPAWNERS.den.boss, home: adjacent, mind: { state: "hostile" } },
+    ]);
+  });
+
+  test("have bosses stronger and richer than the monsters they spawn", () => {
+    for (const kind of Object.keys(SPAWNERS) as SpawnerKind[]) {
+      const boss = MONSTERS[SPAWNERS[kind].boss];
+      for (const [spawned] of SPAWNERS[kind].pool) {
+        const { hp, damage, gold } = MONSTERS[spawned];
+        expect(boss.hp).toBeGreaterThan(hp);
+        expect(boss.damage).toBeGreaterThanOrEqual(damage);
+        expect(boss.gold.min).toBeGreaterThan(gold.max);
+      }
+    }
+  });
+
   test("heal once wrecked, then spawn at once and restart their timer", () => {
     const wrecked = withState(newGame(landOf(out, [den])), den, {
       hp: 0,

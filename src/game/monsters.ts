@@ -48,6 +48,41 @@ export const MONSTERS = {
     damage: 3,
     gold: { chance: 1, min: 10, max: 25 },
   },
+  "alpha wolf": {
+    glyph: "W",
+    hue: 20,
+    hp: 8,
+    damage: 2,
+    gold: { chance: 1, min: 5, max: 12 },
+  },
+  "bandit chief": {
+    glyph: "B",
+    hue: 350,
+    hp: 10,
+    damage: 3,
+    gold: { chance: 1, min: 20, max: 40 },
+  },
+  "goblin chief": {
+    glyph: "G",
+    hue: 100,
+    hp: 10,
+    damage: 3,
+    gold: { chance: 1, min: 15, max: 30 },
+  },
+  "kobold foreman": {
+    glyph: "K",
+    hue: 50,
+    hp: 6,
+    damage: 2,
+    gold: { chance: 1, min: 10, max: 20 },
+  },
+  "troll elder": {
+    glyph: "E",
+    hue: 270,
+    hp: 16,
+    damage: 4,
+    gold: { chance: 1, min: 40, max: 80 },
+  },
 } as const;
 
 export type MonsterKind = keyof typeof MONSTERS;
@@ -56,6 +91,7 @@ export interface SpawnerType {
   readonly name: string;
   readonly hue: number;
   readonly pool: readonly (readonly [MonsterKind, number])[];
+  readonly boss: MonsterKind;
   readonly cap: number;
   readonly leash: number;
   readonly interval: number;
@@ -70,6 +106,7 @@ export const SPAWNERS = {
       ["wolf", 3],
       ["cub", 2],
     ],
+    boss: "alpha wolf",
     cap: 4,
     leash: 8,
     interval: 15,
@@ -82,6 +119,7 @@ export const SPAWNERS = {
       ["bandit", 3],
       ["thief", 1],
     ],
+    boss: "bandit chief",
     cap: 3,
     leash: 6,
     interval: 20,
@@ -91,6 +129,7 @@ export const SPAWNERS = {
     name: "goblin village",
     hue: 90,
     pool: [["goblin", 1]],
+    boss: "goblin chief",
     cap: 4,
     leash: 6,
     interval: 15,
@@ -100,6 +139,7 @@ export const SPAWNERS = {
     name: "kobold mine",
     hue: 60,
     pool: [["kobold", 1]],
+    boss: "kobold foreman",
     cap: 5,
     leash: 4,
     interval: 10,
@@ -109,6 +149,7 @@ export const SPAWNERS = {
     name: "troll cave",
     hue: 280,
     pool: [["troll", 1]],
+    boss: "troll elder",
     cap: 1,
     leash: 4,
     interval: 40,
