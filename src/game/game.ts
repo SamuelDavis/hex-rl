@@ -1,10 +1,11 @@
-import { findPath, type Bounds } from "procgen";
+import { findPath, rngOf, type Bounds } from "procgen";
 import { canStep } from "./explorer";
 import {
   add,
   centerOf,
   DIRECTIONS,
   directionBetween,
+  HEADINGS,
   hexDistance,
   hexKey,
   neighborsOf,
@@ -12,22 +13,28 @@ import {
   type Direction,
   type Hex,
 } from "./hex";
-import { MONSTERS, type MonsterKind } from "./monsters";
+import { MONSTERS, SPAWNERS, spawnerHpOf, type MonsterKind } from "./monsters";
 import { canNotice, SIGHT, visibleFrom } from "./sight";
-import type { Lair, Tile } from "./terrain";
+import type { Spawner, Tile } from "./terrain";
 
 export const MAX_HP = 20;
 export const PLAYER_DAMAGE = 2;
 export const ACTIVE_RADIUS = SIGHT + 4;
 export const FORGET_RADIUS = ACTIVE_RADIUS + 8;
+export const TRACK_TURNS = 3;
+export const HUNT_TURNS = 10;
+export const HUNT_RADIUS = 4;
+export const SPAWNER_HEAL_INTERVAL = 5;
+const WANDER_CHANCE = 0.3;
 const REGEN_INTERVAL = 10;
 const LOG_LENGTH = 50;
 const PATH_BUDGET = 200;
 
 export interface Land {
+  readonly seed: number;
   readonly spawn: Hex;
   tileAt(hex: Hex): Tile;
-  lairsIn(bounds: Bounds): readonly Lair[];
+  spawnersIn(bounds: Bounds): readonly Spawner[];
 }
 
 export interface Player {
@@ -39,17 +46,42 @@ export interface Player {
 export interface Monster {
   readonly id: string;
   readonly kind: MonsterKind;
+  readonly home: Spawner;
   readonly at: Hex;
   readonly facing: Direction;
   readonly hp: number;
-  readonly isHostile: boolean;
+  readonly mind: Mind;
+}
+
+export interface Engaged {
+  readonly state: "hostile" | "hunting";
+  /** Where it stood idle when it found the player; its leash while engaged. */
+  readonly anchor: Hex;
+  readonly lastSeen: Hex;
+  /** The player's facing when last seen. */
+  readonly heading: Direction;
+  /** Turns since last seen while hostile; since losing track while hunting. */
+  readonly unseenFor: number;
+}
+
+export type Mind = { readonly state: "idle" } | Engaged;
+
+export const IDLE: Mind = { state: "idle" };
+
+export interface SpawnerState {
+  readonly readyAt: number;
+  readonly hp: number;
+  readonly hurtAt: number;
+  /** Wrecked spawners stop spawning until fully healed. */
+  readonly isWrecked: boolean;
 }
 
 export interface Game {
   readonly land: Land;
   readonly player: Player;
   readonly monsters: readonly Monster[];
-  readonly slain: ReadonlySet<string>;
+  readonly spawners: ReadonlyMap<string, SpawnerState>;
+  readonly kills: number;
   readonly seen: ReadonlySet<string>;
   readonly turn: number;
   readonly log: readonly string[];
@@ -58,6 +90,24 @@ export interface Game {
 export type Action = Direction | "wait";
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
+
+const stateOf = (game: Game, { kind, at }: Spawner): SpawnerState =>
+  game.spawners.get(hexKey(at)) ?? {
+    readyAt: 0,
+    hp: spawnerHpOf(kind),
+    hurtAt: 0,
+    isWrecked: false,
+  };
+
+export const spawnerHp = (game: Game, spawner: Spawner): number => {
+  const { hp, hurtAt } = stateOf(game, spawner);
+  const healed = Math.floor((game.turn - hurtAt) / SPAWNER_HEAL_INTERVAL);
+  return Math.min(spawnerHpOf(spawner.kind), hp + healed);
+};
+
+export const isWrecked = (game: Game, spawner: Spawner): boolean =>
+  stateOf(game, spawner).isWrecked &&
+  spawnerHp(game, spawner) < spawnerHpOf(spawner.kind);
 
 const logged = (game: Game, ...messages: string[]): Game => ({
   ...game,
@@ -75,36 +125,71 @@ const withSight = (game: Game): Game => ({
 const monsterAt = (game: Game, hex: Hex) =>
   game.monsters.find(({ at }) => sameHex(at, hex));
 
+const isOccupied = (game: Game, hex: Hex) =>
+  sameHex(hex, game.player.at) || monsterAt(game, hex) !== undefined;
+
 const boundsAround = (hex: Hex, radius: number): Bounds => {
   const { x, y } = centerOf(hex);
   const reach = 2 * radius;
   return { minX: x - reach, minY: y - reach, maxX: x + reach, maxY: y + reach };
 };
 
+const spawnerAt = (game: Game, hex: Hex) =>
+  game.land.spawnersIn(boundsAround(hex, 1)).find(({ at }) => sameHex(at, hex));
+
+const withSpawner = (
+  game: Game,
+  { at }: Spawner,
+  state: SpawnerState,
+): Game => ({
+  ...game,
+  spawners: new Map([...game.spawners, [hexKey(at), state]]),
+});
+
+const spawnFrom = (game: Game, spawner: Spawner): Game => {
+  const { land, monsters, turn } = game;
+  const { kind, at } = spawner;
+  const { pool, cap, interval, chance } = SPAWNERS[kind];
+  const state = stateOf(game, spawner);
+  const rng = rngOf(land.seed, "spawns");
+  if (
+    isWrecked(game, spawner) ||
+    isOccupied(game, at) ||
+    monsters.filter(({ home }) => sameHex(home.at, at)).length >= cap
+  )
+    return game;
+  const isRevived = state.isWrecked;
+  if (
+    !isRevived &&
+    (turn < state.readyAt || !rng.chance(chance, at.q, at.r, turn))
+  )
+    return game;
+  const spawned = rng.weighted(pool, at.q, at.r, turn, 1);
+  const monster: Monster = {
+    id: `${hexKey(at)}@${turn}`,
+    kind: spawned,
+    home: spawner,
+    at,
+    facing: rng.pick(HEADINGS, at.q, at.r, turn, 2),
+    hp: MONSTERS[spawned].hp,
+    mind: IDLE,
+  };
+  return withSpawner({ ...game, monsters: [...monsters, monster] }, spawner, {
+    ...state,
+    readyAt: turn + interval,
+    isWrecked: false,
+  });
+};
+
 const populate = (game: Game): Game => {
-  const { land, player, slain } = game;
+  const { land, player } = game;
   const kept = game.monsters.filter(
     ({ at }) => hexDistance(at, player.at) <= FORGET_RADIUS,
   );
-  const isTaken = (lair: Lair) =>
-    slain.has(hexKey(lair.at)) ||
-    sameHex(lair.at, player.at) ||
-    kept.some(({ id, at }) => id === hexKey(lair.at) || sameHex(at, lair.at));
-  const woken = land
-    .lairsIn(boundsAround(player.at, ACTIVE_RADIUS))
-    .filter(
-      (lair) =>
-        hexDistance(lair.at, player.at) <= ACTIVE_RADIUS && !isTaken(lair),
-    )
-    .map(({ kind, at, facing }) => ({
-      id: hexKey(at),
-      kind,
-      at,
-      facing,
-      hp: MONSTERS[kind].hp,
-      isHostile: false,
-    }));
-  return { ...game, monsters: [...kept, ...woken] };
+  return land
+    .spawnersIn(boundsAround(player.at, ACTIVE_RADIUS))
+    .filter(({ at }) => hexDistance(at, player.at) <= ACTIVE_RADIUS)
+    .reduce(spawnFrom, { ...game, monsters: kept });
 };
 
 export const newGame = (land: Land): Game =>
@@ -113,14 +198,15 @@ export const newGame = (land: Land): Game =>
       land,
       player: { at: land.spawn, facing: "n", hp: MAX_HP },
       monsters: [],
-      slain: new Set(),
+      spawners: new Map(),
+      kills: 0,
       seen: new Set(),
       turn: 0,
       log: ["You set out into the wilds."],
     }),
   );
 
-const attack = (game: Game, target: Monster): Game => {
+const attackMonster = (game: Game, target: Monster): Game => {
   const hp = target.hp - PLAYER_DAMAGE;
   if (hp > 0)
     return logged(
@@ -134,32 +220,51 @@ const attack = (game: Game, target: Monster): Game => {
     {
       ...game,
       monsters: game.monsters.filter((m) => m !== target),
-      slain: new Set([...game.slain, target.id]),
+      kills: game.kills + 1,
     },
     `You kill the ${target.kind}.`,
   );
 };
 
-const playerTurn = (game: Game, to: Hex): Game => {
-  const target = monsterAt(game, to);
-  return target
-    ? attack(game, target)
-    : { ...game, player: { ...game.player, at: to } };
+const attackSpawner = (game: Game, spawner: Spawner): Game => {
+  const hp = Math.max(0, spawnerHp(game, spawner) - PLAYER_DAMAGE);
+  const wasWrecked = isWrecked(game, spawner);
+  const { name } = SPAWNERS[spawner.kind];
+  return logged(
+    withSpawner(game, spawner, {
+      ...stateOf(game, spawner),
+      hp,
+      hurtAt: game.turn,
+      isWrecked: wasWrecked || hp === 0,
+    }),
+    hp === 0 && !wasWrecked ? `You wreck the ${name}.` : `You hit the ${name}.`,
+  );
 };
 
-const stepToward = (game: Game, monster: Monster): Hex | undefined => {
-  const { land, player } = game;
+const playerTurn = (game: Game, to: Hex): Game => {
+  const target = monsterAt(game, to);
+  if (target) return attackMonster(game, target);
+  const spawner = spawnerAt(game, to);
+  if (spawner) return attackSpawner(game, spawner);
+  return { ...game, player: { ...game.player, at: to } };
+};
+
+const stepToward = (
+  game: Game,
+  monster: Monster,
+  goal: Hex,
+  reach: number,
+): Hex | undefined => {
   const route = findPath({
     start: monster.at,
-    isGoal: (hex) => sameHex(hex, player.at),
+    isGoal: (hex) => hexDistance(hex, goal) <= reach,
     neighbors: (hex) =>
       neighborsOf(hex).filter(
         (next) =>
-          canStep(land.tileAt, hex, next) &&
-          (sameHex(next, player.at) || !monsterAt(game, next)),
+          canStep(game.land.tileAt, hex, next) && !isOccupied(game, next),
       ),
     cost: () => 1,
-    heuristic: (hex) => hexDistance(hex, player.at),
+    heuristic: (hex) => Math.max(0, hexDistance(hex, goal) - reach),
     keyOf: hexKey,
     maxExpansions: PATH_BUDGET,
   });
@@ -173,31 +278,135 @@ const updated = (game: Game, monster: Monster, change: Partial<Monster>) => ({
   ),
 });
 
+const moved = (game: Game, monster: Monster, to: Hex | undefined): Game =>
+  to
+    ? updated(game, monster, {
+        at: to,
+        facing: directionBetween(monster.at, to)!,
+      })
+    : game;
+
+interface Leash {
+  readonly center: Hex;
+  readonly radius: number;
+}
+
+const leashOf = ({ home, mind }: Monster): Leash => ({
+  center: mind.state === "idle" ? home.at : mind.anchor,
+  radius: SPAWNERS[home.kind].leash,
+});
+
+const isWithin = (hex: Hex, { center, radius }: Leash) =>
+  hexDistance(hex, center) <= radius;
+
+const alignment = (from: Hex, to: Hex, heading: Direction | undefined) => {
+  if (!heading) return 1;
+  const step = centerOf({ q: to.q - from.q, r: to.r - from.r });
+  const ahead = centerOf(DIRECTIONS[heading]);
+  const dot =
+    (step.x * ahead.x + step.y * ahead.y) / (step.x * step.x + step.y * step.y);
+  return (1 + dot) * (1 + dot) + 0.1;
+};
+
+const wander = (
+  game: Game,
+  monster: Monster,
+  area: Leash,
+  chance: number,
+  heading?: Direction,
+): Game => {
+  const { home, at, id } = monster;
+  const rng = rngOf(game.land.seed, "wander").child(id);
+  if (!sameHex(at, home.at) && !rng.chance(chance, game.turn)) return game;
+  const options = neighborsOf(at)
+    .filter(
+      (next) =>
+        !sameHex(next, home.at) &&
+        isWithin(next, area) &&
+        isWithin(next, leashOf(monster)) &&
+        canStep(game.land.tileAt, at, next) &&
+        !isOccupied(game, next),
+    )
+    .map((next) => [next, alignment(at, next, heading)] as const);
+  if (options.length === 0) return game;
+  return moved(game, monster, rng.weighted(options, game.turn, 1));
+};
+
+const sighted = (game: Game, { at, mind }: Monster): Mind => ({
+  state: "hostile",
+  anchor: mind.state === "idle" ? at : mind.anchor,
+  lastSeen: game.player.at,
+  heading: game.player.facing,
+  unseenFor: 0,
+});
+
+const strike = (game: Game, monster: Monster, toward: Direction): Game => {
+  const { player } = game;
+  const hp = player.hp - MONSTERS[monster.kind].damage;
+  const hit = `The ${monster.kind} hits you.`;
+  return logged(
+    updated({ ...game, player: { ...player, hp } }, monster, {
+      facing: toward,
+      mind: sighted(game, monster),
+    }),
+    ...(hp > 0 ? [hit] : [hit, "You die."]),
+  );
+};
+
+const mindOf = (game: Game, monster: Monster): Mind => {
+  const { land, player } = game;
+  const { mind } = monster;
+  if (canNotice(land.tileAt, monster.at, monster.facing, player.at))
+    return sighted(game, monster);
+  if (mind.state === "idle") return mind;
+  const unseenFor = mind.unseenFor + 1;
+  if (mind.state === "hunting")
+    return unseenFor < HUNT_TURNS ? { ...mind, unseenFor } : IDLE;
+  return unseenFor < TRACK_TURNS && !sameHex(monster.at, mind.lastSeen)
+    ? { ...mind, unseenFor }
+    : { ...mind, state: "hunting", unseenFor: 0 };
+};
+
+const approach = (
+  game: Game,
+  monster: Monster,
+  goal: Hex,
+  reach: number,
+): Game => {
+  const step = stepToward(game, monster, goal, reach);
+  if (!step || !isWithin(step, leashOf(monster))) return game;
+  return moved(game, monster, step);
+};
+
+const behave = (game: Game, monster: Monster): Game => {
+  const { mind, at, home } = monster;
+  if (mind.state === "hostile")
+    return approach(
+      game,
+      monster,
+      mind.lastSeen,
+      isOccupied(game, mind.lastSeen) ? 1 : 0,
+    );
+  if (mind.state === "hunting") {
+    const area = { center: mind.lastSeen, radius: HUNT_RADIUS };
+    return isWithin(at, area)
+      ? wander(game, monster, area, 1, mind.heading)
+      : approach(game, monster, mind.lastSeen, HUNT_RADIUS);
+  }
+  const leash = leashOf(monster);
+  return isWithin(at, leash)
+    ? wander(game, monster, leash, WANDER_CHANCE)
+    : moved(game, monster, stepToward(game, monster, home.at, leash.radius));
+};
+
 const monsterTurn = (game: Game, monster: Monster): Game => {
   const { land, player } = game;
   if (isOver(game)) return game;
   const toward = directionBetween(monster.at, player.at);
-  if (toward && canStep(land.tileAt, monster.at, player.at)) {
-    const hp = player.hp - MONSTERS[monster.kind].damage;
-    const hit = `The ${monster.kind} hits you.`;
-    return logged(
-      updated({ ...game, player: { ...player, hp } }, monster, {
-        facing: toward,
-        isHostile: true,
-      }),
-      ...(hp > 0 ? [hit] : [hit, "You die."]),
-    );
-  }
-  if (!canNotice(land.tileAt, monster.at, monster.facing, player.at))
-    return updated(game, monster, { isHostile: false });
-  const step = stepToward(game, monster);
-  if (!step || sameHex(step, player.at))
-    return updated(game, monster, { isHostile: true });
-  return updated(game, monster, {
-    at: step,
-    facing: directionBetween(monster.at, step)!,
-    isHostile: true,
-  });
+  if (toward && canStep(land.tileAt, monster.at, player.at))
+    return strike(game, monster, toward);
+  const mind = mindOf(game, monster);
+  return behave(updated(game, monster, { mind }), { ...monster, mind });
 };
 
 const monstersTurn = (game: Game): Game =>

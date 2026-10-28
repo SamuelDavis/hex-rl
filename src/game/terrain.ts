@@ -24,16 +24,16 @@ import {
   type River,
 } from "procgen/recipes";
 import {
+  add,
   centerOf,
-  HEADINGS,
   hexAt,
   hexDistance,
   hexesCovering,
+  hexesWithin,
   hexKey,
-  type Direction,
   type Hex,
 } from "./hex";
-import { monsterWeightsAt, type MonsterKind } from "./monsters";
+import type { SpawnerKind } from "./monsters";
 
 export const Biome = {
   Ocean: 0,
@@ -45,13 +45,13 @@ export const Biome = {
   Tundra: 6,
   Mountain: 7,
   Peak: 8,
+  Marsh: 9,
 } as const;
 export type Biome = (typeof Biome)[keyof typeof Biome];
 
-export interface Lair {
-  readonly kind: MonsterKind;
+export interface Spawner {
+  readonly kind: SpawnerKind;
   readonly at: Hex;
-  readonly facing: Direction;
 }
 
 export interface Tile {
@@ -65,14 +65,78 @@ export const SEA_LEVEL = 8;
 const BLOCKS_PER_ELEVATION = 16;
 const BEACH_HEIGHT = 1;
 const BEACH_INLANDNESS = 0.4;
+const MARSH_HEIGHT = 3;
+const MARSH_HUMIDITY = 0.3;
+const MARSH_POOL_DENSITY = 0.2;
 const MOUNTAIN_HEIGHT = 11;
 const PEAK_HEIGHT = 17;
 const LAPSE_PER_BLOCK = 0.03;
 const TILES_PER_LANDFORM_UNIT = 0.15;
 const CHUNK = 16;
-export const LAIR_CLEARANCE = 8;
-const LAIR_DENSITY = 0.006;
+export const SPAWNER_CLEARANCE = 8;
+const SPAWNER_DENSITY = 0.003;
 const DANGER_RING = 40;
+export const WET_REACH = 2;
+
+const HABITAT: Record<
+  SpawnerKind,
+  {
+    readonly minDanger: number;
+    readonly biomes: Partial<Record<Biome, number>>;
+    readonly wet?: number;
+  }
+> = {
+  den: {
+    minDanger: 1,
+    biomes: {
+      [Biome.Forest]: 3,
+      [Biome.Taiga]: 4,
+      [Biome.Tundra]: 3,
+      [Biome.Plains]: 1,
+    },
+  },
+  camp: {
+    minDanger: 1,
+    biomes: {
+      [Biome.Desert]: 4,
+      [Biome.Plains]: 3,
+      [Biome.Beach]: 1,
+    },
+  },
+  mine: {
+    minDanger: 2,
+    biomes: { [Biome.Mountain]: 4, [Biome.Tundra]: 1 },
+  },
+  village: {
+    minDanger: 1,
+    biomes: {
+      [Biome.Beach]: 1,
+      [Biome.Desert]: 1,
+      [Biome.Plains]: 2,
+      [Biome.Forest]: 2,
+      [Biome.Taiga]: 1,
+      [Biome.Tundra]: 1,
+      [Biome.Mountain]: 1,
+      [Biome.Marsh]: 1,
+    },
+  },
+  cave: { minDanger: 3, biomes: { [Biome.Marsh]: 3 }, wet: 3 },
+};
+
+export const habitatWeightOf = (
+  kind: SpawnerKind,
+  biome: Biome,
+  isWet: boolean,
+): number => {
+  const { biomes, wet = 0 } = HABITAT[kind];
+  return (biomes[biome] ?? 0) + (isWet ? wet : 0);
+};
+
+const habitatWeightsAt = (biome: Biome, isWet: boolean, danger: number) =>
+  (Object.keys(HABITAT) as SpawnerKind[])
+    .filter((kind) => HABITAT[kind].minDanger <= danger)
+    .map((kind) => [kind, habitatWeightOf(kind, biome, isWet)] as const)
+    .filter(([, weight]) => weight > 0);
 
 const TREE_DENSITY: Record<Biome, number> = {
   [Biome.Ocean]: 0,
@@ -84,6 +148,7 @@ const TREE_DENSITY: Record<Biome, number> = {
   [Biome.Tundra]: 0.02,
   [Biome.Mountain]: 0.03,
   [Biome.Peak]: 0,
+  [Biome.Marsh]: 0.08,
 };
 
 export const surfaceOf = ({ ground, water }: Tile): number => water ?? ground;
@@ -150,11 +215,19 @@ export const createTerrain = (seed: number) => {
       if (height >= PEAK_HEIGHT) return Biome.Peak;
       if (height >= MOUNTAIN_HEIGHT) return Biome.Mountain;
       const zone = climateZoneOf(at);
-      return height <= BEACH_HEIGHT &&
+      if (
+        height <= BEACH_HEIGHT &&
         inlandness(at.landform) < BEACH_INLANDNESS &&
         zone !== Biome.Tundra
-        ? Biome.Beach
-        : zone;
+      )
+        return Biome.Beach;
+      if (
+        height <= MARSH_HEIGHT &&
+        at.humidity >= MARSH_HUMIDITY &&
+        (zone === Biome.Forest || zone === Biome.Plains)
+      )
+        return Biome.Marsh;
+      return zone;
     },
   });
 
@@ -177,6 +250,7 @@ export const createTerrain = (seed: number) => {
   const chunks = grid(CHUNK);
   const riversNear = waterways.near(chunks, 1);
   const trees = rngOf(seed, "trees");
+  const pools = rngOf(seed, "marsh pools");
 
   const hexesIn = (cell: Cell) =>
     hexesCovering(expand(chunks.boundsOf(cell), 1)).filter((hex) => {
@@ -192,6 +266,8 @@ export const createTerrain = (seed: number) => {
       return { ground: Math.min(ground, water - 1), water, biome, tree: false };
     if (biome === Biome.Ocean)
       return { ground, water: SEA_LEVEL, biome, tree: false };
+    if (biome === Biome.Marsh && pools.chance(MARSH_POOL_DENSITY, hex.q, hex.r))
+      return { ground: ground - 1, water: ground, biome, tree: false };
     const tree = trees.chance(TREE_DENSITY[biome], hex.q, hex.r);
     return { ground, water: undefined, biome, tree };
   };
@@ -224,34 +300,38 @@ export const createTerrain = (seed: number) => {
   });
   const spawn = hexAt(spawnPoint ?? { x: 0, y: 0 });
 
-  const lairs = rngOf(seed, "lairs");
-  const lairsAt = stage({
-    name: "lairs",
+  const sites = rngOf(seed, "spawners");
+  const spawnersAt = stage({
+    name: "spawners",
     grid: chunks,
-    reads: [{ stage: chunkAt, radius: 0 }],
-    compute: (cell, { read }): readonly Lair[] => {
-      const tiles = read(chunkAt, cell);
-      return hexesIn(cell)
-        .filter((hex) => {
-          const tile = tiles.get(hexKey(hex))!;
-          return (
-            tile.water === undefined &&
-            !tile.tree &&
-            hexDistance(hex, spawn) >= LAIR_CLEARANCE &&
-            lairs.chance(LAIR_DENSITY, hex.q, hex.r)
-          );
-        })
-        .map((at) => {
-          const danger = 1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
-          const kind = lairs.weighted(monsterWeightsAt(danger), at.q, at.r, 1);
-          const facing = lairs.pick(HEADINGS, at.q, at.r, 2);
-          return { kind, at, facing };
+    reads: [{ stage: chunkAt, radius: 1 }],
+    compute: (cell, { read }): readonly Spawner[] => {
+      const tileNear = (hex: Hex) =>
+        read(chunkAt, chunks.cellOf(centerOf(hex))).get(hexKey(hex))!;
+      const isWet = (at: Hex) =>
+        hexesWithin(WET_REACH).some((offset) => {
+          const tile = tileNear(add(at, offset));
+          return tile.water !== undefined && tile.biome !== Biome.Ocean;
         });
+      return hexesIn(cell).flatMap((at) => {
+        const tile = tileNear(at);
+        if (
+          tile.water !== undefined ||
+          tile.tree ||
+          hexDistance(at, spawn) < SPAWNER_CLEARANCE ||
+          !sites.chance(SPAWNER_DENSITY, at.q, at.r)
+        )
+          return [];
+        const danger = 1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
+        const weights = habitatWeightsAt(tile.biome, isWet(at), danger);
+        if (weights.length === 0) return [];
+        return [{ kind: sites.weighted(weights, at.q, at.r, 1), at }];
+      });
     },
   });
-  const lairsIn = (bounds: Bounds) => world.gather(lairsAt, bounds);
+  const spawnersIn = (bounds: Bounds) => world.gather(spawnersAt, bounds);
 
-  return { chunks, chunkAt, tileAt, spawn, lairsAt, lairsIn };
+  return { seed, chunks, chunkAt, tileAt, spawn, spawnersAt, spawnersIn };
 };
 
 export type Terrain = ReturnType<typeof createTerrain>;

@@ -1,6 +1,6 @@
-import type { Vec2 } from "procgen";
+import type { Bounds, Vec2 } from "procgen";
 import type { Monster, Player } from "./game";
-import { MONSTERS } from "./monsters";
+import { MONSTERS, SPAWNERS } from "./monsters";
 import {
   add,
   centerOf,
@@ -13,7 +13,13 @@ import {
   type Direction,
   type Hex,
 } from "./hex";
-import { Biome, SEA_LEVEL, surfaceOf, type Tile } from "./terrain";
+import {
+  Biome,
+  SEA_LEVEL,
+  surfaceOf,
+  type Spawner,
+  type Tile,
+} from "./terrain";
 
 const PIXELS_PER_UNIT = 20;
 const TILT = 0.7;
@@ -30,6 +36,11 @@ const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
 const WHITE: Hsl = [0, 0, 100];
 const HOSTILE: Hsl = [0, 90, 55];
 const TARGETED: Hsl = [110, 100, 55];
+const RINGS: Record<Monster["mind"]["state"], Hsl> = {
+  idle: WHITE,
+  hostile: HOSTILE,
+  hunting: [40, 95, 55],
+};
 const EDGES = CORNERS.map((from, i) => {
   const to = CORNERS[(i + 1) % CORNERS.length]!;
   const facing = directionToward({ x: from.x + to.x, y: from.y + to.y });
@@ -52,6 +63,7 @@ const GROUND: Record<Biome, Hsl> = {
   [Biome.Tundra]: [200, 20, 88],
   [Biome.Mountain]: [30, 5, 52],
   [Biome.Peak]: [210, 30, 96],
+  [Biome.Marsh]: [75, 30, 38],
 };
 
 const CANOPY: Record<Biome, Hsl> = {
@@ -62,6 +74,7 @@ const CANOPY: Record<Biome, Hsl> = {
   [Biome.Tundra]: [150, 25, 30],
   [Biome.Desert]: [90, 40, 35],
   [Biome.Mountain]: [140, 30, 25],
+  [Biome.Marsh]: [95, 30, 24],
 };
 
 const CONIFERS: ReadonlySet<Biome> = new Set([
@@ -110,6 +123,8 @@ export type TargetMark =
 
 export interface Scene {
   readonly tileAt: (hex: Hex) => Tile;
+  readonly spawnersIn: (bounds: Bounds) => readonly Spawner[];
+  readonly isWrecked: (spawner: Spawner) => boolean;
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly visible: ReadonlySet<string>;
@@ -121,7 +136,18 @@ export interface Scene {
 
 export const drawScene = (
   context: CanvasRenderingContext2D,
-  { tileAt, player, monsters, visible, target, seen, width, height }: Scene,
+  {
+    tileAt,
+    spawnersIn,
+    isWrecked,
+    player,
+    monsters,
+    visible,
+    target,
+    seen,
+    width,
+    height,
+  }: Scene,
 ) => {
   const camera = centerOf(player.at);
   const eye = surfaceOf(tileAt(player.at));
@@ -136,12 +162,13 @@ export const drawScene = (
     x: width / 2 / PIXELS_PER_UNIT + 1,
     y: (height / 2 + MAX_RELIEF * PIXELS_PER_BLOCK) / (PIXELS_PER_UNIT * TILT),
   };
-  const hexes = hexesCovering({
+  const view = {
     minX: camera.x - reach.x,
     maxX: camera.x + reach.x,
     minY: camera.y - reach.y,
     maxY: camera.y + reach.y,
-  })
+  };
+  const hexes = hexesCovering(view)
     .filter((hex) => seen.has(hexKey(hex)))
     .map((hex) => ({ hex, center: centerOf(hex) }))
     .sort((a, b) => a.center.y - b.center.y || a.center.x - b.center.x);
@@ -151,6 +178,9 @@ export const drawScene = (
     context.closePath();
   };
 
+  const spawnerAt = new Map(
+    spawnersIn(view).map((spawner) => [hexKey(spawner.at), spawner]),
+  );
   const monsterAt = new Map(
     monsters
       .filter(({ at }) => visible.has(hexKey(at)))
@@ -226,6 +256,13 @@ export const drawScene = (
         lit(CANOPY[tile.biome]),
         CONIFERS.has(tile.biome),
       );
+    const spawner = spawnerAt.get(hexKey(hex));
+    if (spawner)
+      drawSpawner(
+        context,
+        base,
+        lit([SPAWNERS[spawner.kind].hue, isWrecked(spawner) ? 0 : 35, 30]),
+      );
     if (target && sameHex(hex, target.at)) drawReticle(context, base);
     const monster = monsterAt.get(hexKey(hex));
     if (monster) {
@@ -233,7 +270,7 @@ export const drawScene = (
       drawToken(context, base, {
         fill: [hue, 60, 30],
         glyph,
-        ring: monster.isHostile ? HOSTILE : WHITE,
+        ring: RINGS[monster.mind.state],
       });
       drawChevron(context, base, headingOf(monster.facing));
     } else if (target?.kind === "remembered" && sameHex(hex, target.at))
@@ -270,6 +307,28 @@ const drawTree = (
   }
   context.fill();
   context.stroke();
+};
+
+const drawSpawner = (
+  context: CanvasRenderingContext2D,
+  { x, y }: Vec2,
+  color: Hsl,
+) => {
+  const size = PIXELS_PER_UNIT * 0.8;
+  polyline(context, [
+    { x: x - size, y },
+    { x, y: y - size * 1.2 },
+    { x: x + size, y },
+  ]);
+  context.closePath();
+  context.fillStyle = css(color);
+  context.strokeStyle = css(color, -15);
+  context.fill();
+  context.stroke();
+  context.beginPath();
+  context.arc(x, y, size * 0.35, Math.PI, 0);
+  context.fillStyle = css(color, -20);
+  context.fill();
 };
 
 const headingOf = (direction: Direction): Vec2 => {

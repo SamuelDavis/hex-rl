@@ -13,6 +13,7 @@ import {
 import { drawScene, groundOffsetOf, screenRadiusOf } from "../game/draw";
 import {
   act,
+  isWrecked,
   isOver,
   MAX_HP,
   newGame,
@@ -157,6 +158,8 @@ export default function Game() {
     context.scale(ratio, ratio);
     drawScene(context, {
       tileAt: land.tileAt,
+      spawnersIn: land.spawnersIn,
+      isWrecked: (spawner) => isWrecked(getGame(), spawner),
       player,
       monsters,
       visible: getVisible(),
@@ -227,7 +230,7 @@ export default function Game() {
               <dt>Monsters awake</dt>
               <dd>{getGame().monsters.length}</dd>
               <dt>Monsters slain</dt>
-              <dd>{getGame().slain.size}</dd>
+              <dd>{getGame().kills}</dd>
             </dl>
           </Match>
         </Switch>
@@ -324,8 +327,9 @@ function OtherPanel(props: { restart: () => void }) {
         Face a direction, then step that way: tap toward it, use the Play
         buttons, or press <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>A</kbd>{" "}
         <kbd>S</kbd> <kbd>D</kbd>; wait with <kbd>Space</kbd>. Bump monsters to
-        attack. Press <kbd>T</kbd> to cycle through monsters in view and see
-        what each can see. Climb one block at a time; swim freely.
+        attack, and their dens, camps, villages, mines and caves to wreck them
+        until they heal. Press <kbd>T</kbd> to cycle through monsters in view
+        and see what each can see. Climb one block at a time; swim freely.
       </p>
       <button type="button" onClick={() => props.restart()}>
         New world

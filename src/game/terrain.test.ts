@@ -1,12 +1,21 @@
 import { expectOrderIndependent } from "procgen/testing";
 import { describe, expect, test } from "vitest";
-import { centerOf, hexDistance, hexesCovering, hexKey } from "./hex";
+import {
+  add,
+  centerOf,
+  hexDistance,
+  hexesCovering,
+  hexesWithin,
+  hexKey,
+} from "./hex";
 import {
   Biome,
   createTerrain,
-  LAIR_CLEARANCE,
+  habitatWeightOf,
+  SPAWNER_CLEARANCE,
   SEA_LEVEL,
   surfaceOf,
+  WET_REACH,
 } from "./terrain";
 
 const SEED = 3;
@@ -43,6 +52,14 @@ describe("createTerrain", () => {
     expect(tiles.some(({ tree }) => tree)).toBe(true);
   });
 
+  test("marshes are dotted with small pools", () => {
+    const marsh = tiles.filter(({ biome }) => biome === Biome.Marsh);
+    const pools = marsh.filter(({ water }) => water !== undefined);
+    expect(marsh.length).toBeGreaterThan(0);
+    expect(pools.length / marsh.length).toBeGreaterThan(0.1);
+    expect(pools.length / marsh.length).toBeLessThan(0.5);
+  });
+
   test("heights are whole blocks", () => {
     for (const { ground, water } of tiles) {
       expect(Number.isInteger(ground)).toBe(true);
@@ -70,7 +87,7 @@ describe("createTerrain", () => {
     );
   });
 
-  describe("lairs", () => {
+  describe("spawners", () => {
     const center = centerOf(terrain.spawn);
     const bounds = {
       minX: center.x - 150,
@@ -78,34 +95,46 @@ describe("createTerrain", () => {
       minY: center.y - 150,
       maxY: center.y + 150,
     };
-    const lairs = terrain.lairsIn(bounds);
+    const spawners = terrain.spawnersIn(bounds);
 
     test("are scattered across the land", () => {
-      expect(lairs.length).toBeGreaterThan(20);
-      expect(new Set(lairs.map(({ at }) => hexKey(at))).size).toBe(
-        lairs.length,
+      expect(spawners.length).toBeGreaterThan(20);
+      expect(new Set(spawners.map(({ at }) => hexKey(at))).size).toBe(
+        spawners.length,
       );
     });
 
     test("stand on dry, treeless land away from the spawn", () => {
-      for (const { at } of lairs) {
+      for (const { at } of spawners) {
         const tile = terrain.tileAt(at);
         expect(tile.water).toBeUndefined();
         expect(tile.tree).toBe(false);
         expect(hexDistance(at, terrain.spawn)).toBeGreaterThanOrEqual(
-          LAIR_CLEARANCE,
+          SPAWNER_CLEARANCE,
         );
       }
     });
 
+    test("stand in their habitat", () => {
+      for (const { kind, at } of spawners) {
+        const isWet = hexesWithin(WET_REACH).some((offset) => {
+          const tile = terrain.tileAt(add(at, offset));
+          return tile.water !== undefined && tile.biome !== Biome.Ocean;
+        });
+        expect(
+          habitatWeightOf(kind, terrain.tileAt(at).biome, isWet),
+        ).toBeGreaterThan(0);
+      }
+    });
+
     test("are a pure function of seed and place", () => {
-      expect(createTerrain(SEED).lairsIn(bounds)).toEqual(lairs);
+      expect(createTerrain(SEED).spawnersIn(bounds)).toEqual(spawners);
     });
 
     test("are independent of generation order", () => {
       expectOrderIndependent({
         seed: SEED,
-        stage: terrain.lairsAt,
+        stage: terrain.spawnersAt,
         cells: terrain.chunks.cellsAround({ col: 0, row: 0 }, 2),
       });
     });

@@ -3,13 +3,24 @@ import {
   act,
   ACTIVE_RADIUS,
   FORGET_RADIUS,
+  IDLE,
   isOver,
+  isWrecked,
   MAX_HP,
   newGame,
   PLAYER_DAMAGE,
+  HUNT_RADIUS,
+  HUNT_TURNS,
+  SPAWNER_HEAL_INTERVAL,
+  TRACK_TURNS,
+  type Action,
+  type Game,
+  type Engaged,
+  type SpawnerState,
 } from "./game";
-import { hexKey } from "./hex";
-import { MONSTERS } from "./monsters";
+import { centerOf, DIRECTIONS, hexDistance, hexKey, type Hex } from "./hex";
+import { MONSTERS, SPAWNERS, spawnerHpOf, type SpawnerKind } from "./monsters";
+import type { Spawner } from "./terrain";
 import { SIGHT } from "./sight";
 import {
   east,
@@ -20,6 +31,52 @@ import {
   monster,
   origin,
 } from "./testing";
+
+const pit = landOf({ "0,0": land(0) });
+
+const historyOf = (game: Game, turns = 300, action: Action = "wait") =>
+  Array.from({ length: turns }).reduce<Game[]>(
+    (games) => [...games, act(games.at(-1)!, action)],
+    [game],
+  );
+
+const hostileAt = (anchor: Hex, lastSeen: Hex): Engaged => ({
+  state: "hostile",
+  anchor,
+  lastSeen,
+  heading: "n",
+  unseenFor: 0,
+});
+
+const withState = (
+  game: Game,
+  spawner: Spawner,
+  state: Partial<SpawnerState>,
+): Game => ({
+  ...game,
+  monsters: [],
+  spawners: new Map([
+    [
+      hexKey(spawner.at),
+      {
+        readyAt: 0,
+        hp: spawnerHpOf(spawner.kind),
+        hurtAt: 0,
+        isWrecked: false,
+        ...state,
+      },
+    ],
+  ]),
+});
+
+const spawnsOf = (games: readonly Game[]) =>
+  games
+    .slice(1)
+    .flatMap((game, i) =>
+      game.monsters
+        .filter(({ id }) => !games[i]!.monsters.some((m) => m.id === id))
+        .map((monster) => ({ monster, turn: game.turn })),
+    );
 
 describe("newGame", () => {
   test("starts at the spawn with full health", () => {
@@ -33,20 +90,86 @@ describe("newGame", () => {
     expect(game.seen.has(hexKey({ q: 0, r: -SIGHT }))).toBe(true);
     expect(game.seen.has(hexKey({ q: 0, r: SIGHT }))).toBe(false);
   });
+});
 
-  test("wakes the lairs within the active radius only", () => {
-    const near = {
-      kind: "wolf",
-      at: { q: ACTIVE_RADIUS, r: 0 },
-      facing: "n",
-    } as const;
-    const far = {
-      kind: "wolf",
-      at: { q: ACTIVE_RADIUS + 1, r: 0 },
-      facing: "n",
-    } as const;
-    const game = newGame(landOf({}, [near, far]));
-    expect(game.monsters.map(({ at }) => at)).toEqual([near.at]);
+describe("spawners", () => {
+  const den = { kind: "den", at: { q: 6, r: 0 } } as const;
+  const { pool, cap, interval } = SPAWNERS.den;
+  const out = { "0,0": land(30) };
+
+  const history = historyOf(newGame(landOf(out, [den])));
+  const spawns = spawnsOf(history);
+
+  test("spawn monsters from their pool on top of themselves", () => {
+    expect(spawns.length).toBeGreaterThan(0);
+    for (const { monster } of spawns) {
+      expect(monster.home).toEqual(den);
+      expect(pool.map(([kind]) => kind)).toContain(monster.kind);
+      expect(monster.at).toEqual(den.at);
+    }
+  });
+
+  test("spawned monsters step off their spawner", () => {
+    const { monster, turn } = spawns[0]!;
+    const next = history[turn + 1]!.monsters.find(
+      ({ id }) => id === monster.id,
+    );
+    expect(next?.at).not.toEqual(den.at);
+  });
+
+  test("fill up to their cap and no further", () => {
+    const counts = history.map(({ monsters }) => monsters.length);
+    expect(Math.max(...counts)).toBe(cap);
+  });
+
+  test("wait their interval between spawns", () => {
+    const turns = spawns.map(({ turn }) => turn);
+    turns.slice(1).forEach((turn, i) => {
+      expect(turn - turns[i]!).toBeGreaterThanOrEqual(interval);
+    });
+  });
+
+  test("replace slain monsters", () => {
+    const full = history.at(-1)!;
+    const cleared = { ...full, monsters: [] };
+    expect(spawnsOf(historyOf(cleared)).length).toBeGreaterThan(0);
+  });
+
+  test("have more hit points than the monsters they spawn", () => {
+    for (const kind of Object.keys(SPAWNERS) as SpawnerKind[])
+      for (const [spawned] of SPAWNERS[kind].pool)
+        expect(spawnerHpOf(kind)).toBeGreaterThan(MONSTERS[spawned].hp);
+  });
+
+  test("block the player, who wrecks them by striking off their hit points", () => {
+    const adjacent = { kind: "den", at: east } as const;
+    const idle = withState(gameWith([], landOf(out, [adjacent])), adjacent, {
+      readyAt: Infinity,
+    });
+    const hits = Math.ceil(spawnerHpOf("den") / PLAYER_DAMAGE);
+    const games = historyOf(idle, hits, "se");
+    expect(games.at(-1)!.player.at).toEqual(origin);
+    expect(isWrecked(games.at(-2)!, adjacent)).toBe(false);
+    expect(isWrecked(games.at(-1)!, adjacent)).toBe(true);
+  });
+
+  test("heal once wrecked, then spawn at once and restart their timer", () => {
+    const wrecked = withState(newGame(landOf(out, [den])), den, {
+      hp: 0,
+      isWrecked: true,
+    });
+    const healedAt = spawnerHpOf("den") * SPAWNER_HEAL_INTERVAL;
+    const games = historyOf(wrecked);
+    expect(isWrecked(games[healedAt - 1]!, den)).toBe(true);
+    expect(isWrecked(games[healedAt]!, den)).toBe(false);
+    const turns = spawnsOf(games).map(({ turn }) => turn);
+    expect(turns[0]).toBe(healedAt);
+    expect(turns[1]! - healedAt).toBeGreaterThanOrEqual(interval);
+  });
+
+  test("stay dormant beyond the active radius", () => {
+    const far = { kind: "den", at: { q: ACTIVE_RADIUS + 1, r: 0 } } as const;
+    expect(spawnsOf(historyOf(newGame(landOf(out, [far]))))).toEqual([]);
   });
 });
 
@@ -86,13 +209,10 @@ describe("act", () => {
     expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - PLAYER_DAMAGE);
   });
 
-  test("a slain monster stays slain", () => {
-    const lair = { kind: "wolf", at: east, facing: "n" } as const;
-    const world = landOf({}, [lair]);
-    const game = gameWith([{ ...monster(east), hp: 1 }], world);
-    const next = act(game, "se");
+  test("killing a monster removes and counts it", () => {
+    const next = act(gameWith([{ ...monster(east), hp: 1 }]), "se");
     expect(next.monsters).toEqual([]);
-    expect(act(next, "wait").monsters).toEqual([]);
+    expect(next.kills).toBe(1);
   });
 
   test("adjacent monsters attack after the player acts", () => {
@@ -128,7 +248,7 @@ describe("act", () => {
       gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]),
       "wait",
     );
-    expect(next.monsters[0]!.at).toEqual({ q: 4, r: 0 });
+    expect(next.monsters[0]!.mind).toBe(IDLE);
   });
 
   test("monsters notice the player within their awareness, whatever their facing", () => {
@@ -139,22 +259,137 @@ describe("act", () => {
     expect(next.monsters[0]).toMatchObject({ at: east, facing: "nw" });
   });
 
-  test("monsters that notice the player turn hostile", () => {
-    const next = act(gameWith([monster({ q: 4, r: 0 })]), "wait");
-    expect(next.monsters[0]!.isHostile).toBe(true);
+  test("monsters that notice the player turn hostile, anchored where they stood idle", () => {
+    const at = { q: 4, r: 0 };
+    const next = act(gameWith([monster(at)]), "wait");
+    expect(next.monsters[0]!.mind).toMatchObject({
+      state: "hostile",
+      anchor: at,
+      lastSeen: origin,
+    });
   });
 
   test("monsters that strike are hostile", () => {
     const next = act(gameWith([monster(east, "goblin", "se")]), "wait");
-    expect(next.monsters[0]!.isHostile).toBe(true);
+    expect(next.monsters[0]!.mind.state).toBe("hostile");
   });
 
-  test("monsters that lose sight of the player calm down", () => {
+  test("hostile monsters head for where they last saw the player", () => {
+    const at = { q: 6, r: 0 };
+    const lastSeen = { q: 6, r: -4 };
+    const hostile = { ...monster(at), mind: hostileAt(at, lastSeen) };
+    const next = act(gameWith([hostile], pit), "wait").monsters[0]!;
+    expect(hexDistance(next.at, lastSeen)).toBe(3);
+  });
+
+  test("monsters that lose track of the player hunt around where they last saw it, then go idle and head home", () => {
+    const home = { kind: "village", at: { q: 6, r: 0 } } as const;
+    const lastSeen = { q: 6, r: -4 };
     const hostile = {
-      ...monster({ q: 4, r: 0 }, "goblin", "se"),
-      isHostile: true,
+      ...monster(home.at, "goblin", "nw", home),
+      mind: hostileAt(home.at, lastSeen),
     };
-    expect(act(gameWith([hostile]), "wait").monsters[0]!.isHostile).toBe(false);
+    const states = historyOf(gameWith([hostile], pit), 60).map(
+      ({ monsters }) => monsters[0]!,
+    );
+    const start = states.findIndex(({ mind }) => mind.state === "hunting");
+    expect(start).toBeGreaterThan(0);
+    expect(start).toBeLessThanOrEqual(TRACK_TURNS);
+    const hunting = states.slice(start, start + HUNT_TURNS);
+    for (const { mind, at } of hunting) {
+      expect(mind.state).toBe("hunting");
+      expect(hexDistance(at, lastSeen)).toBeLessThanOrEqual(HUNT_RADIUS);
+    }
+    expect(new Set(hunting.map(({ at }) => hexKey(at))).size).toBeGreaterThan(
+      1,
+    );
+    expect(states[start + HUNT_TURNS]!.mind).toBe(IDLE);
+    expect(hexDistance(states.at(-1)!.at, home.at)).toBeLessThanOrEqual(
+      SPAWNERS.village.leash,
+    );
+  });
+
+  test("hunting monsters drift the way the player was heading", () => {
+    const spots = [
+      { q: 8, r: 0 },
+      { q: -8, r: 0 },
+      { q: 0, r: 8 },
+      { q: 0, r: -8 },
+      { q: 8, r: -8 },
+      { q: -8, r: 8 },
+    ];
+    const hunters = spots.map((at) => ({
+      ...monster(at, "goblin", "nw", { kind: "village", at }),
+      mind: { ...hostileAt(at, at), state: "hunting" as const },
+    }));
+    const games = historyOf(gameWith(hunters, pit), HUNT_TURNS - 1);
+    const north = centerOf(DIRECTIONS.n);
+    const drift = games.slice(1).flatMap(({ monsters }) =>
+      monsters.map(({ at }, i) => {
+        const from = centerOf(spots[i]!);
+        const to = centerOf(at);
+        return (to.x - from.x) * north.x + (to.y - from.y) * north.y;
+      }),
+    );
+    expect(drift.reduce((sum, d) => sum + d, 0) / drift.length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  test("engaged monsters are leashed to their anchor, not their home", () => {
+    const home = { kind: "village", at: { q: 10, r: 0 } } as const;
+    const games = historyOf(
+      gameWith([monster({ q: 4, r: 0 }, "goblin", "nw", home)]),
+      10,
+    );
+    expect(games.at(-1)!.player.hp).toBeLessThan(MAX_HP);
+  });
+
+  test("engaged monsters can't be drawn past their anchor's leash", () => {
+    const anchor = { q: 12, r: 0 };
+    const home = { kind: "village", at: anchor } as const;
+    const chaser = {
+      ...monster({ q: 7, r: 0 }, "goblin", "nw", home),
+      mind: hostileAt(anchor, origin),
+    };
+    const games = historyOf(gameWith([chaser]), 10);
+    for (const { monsters } of games.slice(1)) {
+      expect(monsters[0]!.mind.state).toBe("hostile");
+      expect(hexDistance(monsters[0]!.at, anchor)).toBeLessThanOrEqual(
+        SPAWNERS.village.leash,
+      );
+    }
+    expect(games.at(-1)!.player.hp).toBe(MAX_HP);
+  });
+
+  test("engaged monsters keep their anchor when they find the player again", () => {
+    const anchor = { q: 12, r: 0 };
+    const hunter = {
+      ...monster({ q: 4, r: 0 }),
+      mind: {
+        ...hostileAt(anchor, { q: 4, r: -2 }),
+        state: "hunting" as const,
+      },
+    };
+    const next = act(gameWith([hunter]), "wait").monsters[0]!;
+    expect(next.mind).toMatchObject({ state: "hostile", anchor });
+  });
+
+  test("idle monsters roam within their spawner's leash, and return to it when drawn away", () => {
+    const home = { kind: "village", at: { q: 8, r: 0 } } as const;
+    const { leash } = SPAWNERS.village;
+    const strays = [
+      monster(home.at, "goblin", "nw", home),
+      monster({ q: 8, r: -12 }, "goblin", "nw", home),
+    ];
+    const games = historyOf(gameWith(strays, pit), 60);
+    const [homebody, stray] = [0, 1].map((i) =>
+      games.map(({ monsters }) => monsters[i]!),
+    );
+    expect(homebody![1]!.at).not.toEqual(home.at);
+    for (const { at } of homebody!)
+      expect(hexDistance(at, home.at)).toBeLessThanOrEqual(leash);
+    expect(hexDistance(stray!.at(-1)!.at, home.at)).toBeLessThanOrEqual(leash);
   });
 
   test("monsters turn to face the player they strike", () => {
@@ -162,14 +397,14 @@ describe("act", () => {
     expect(next.monsters[0]!.facing).toBe("nw");
   });
 
-  test("monsters out of sight stay put", () => {
+  test("monsters out of sight don't notice the player", () => {
     const world = landOf({ "2,0": land(10, true) });
     const next = act(gameWith([monster({ q: 4, r: 0 })], world), "wait");
-    expect(next.monsters[0]!.at).toEqual({ q: 4, r: 0 });
+    expect(next.monsters[0]!.mind).toBe(IDLE);
   });
 
   test("monsters beyond the forget radius are forgotten", () => {
-    const far = monster({ q: FORGET_RADIUS + 1, r: 0 });
+    const far = monster({ q: FORGET_RADIUS + 2, r: 0 });
     expect(act(gameWith([far]), "wait").monsters).toEqual([]);
   });
 

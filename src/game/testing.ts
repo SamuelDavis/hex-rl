@@ -1,7 +1,7 @@
-import { newGame, type Game, type Land, type Monster } from "./game";
+import { IDLE, newGame, type Game, type Land, type Monster } from "./game";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
-import { Biome, type Lair, type Tile } from "./terrain";
+import { Biome, type Spawner, type Tile } from "./terrain";
 
 export const land = (ground: number, tree = false): Tile => ({
   ground,
@@ -15,24 +15,27 @@ export const east = { q: 1, r: 0 };
 
 export const landOf = (
   tiles: Record<string, Tile> = {},
-  lairs: readonly Lair[] = [],
+  spawners: readonly Spawner[] = [],
 ): Land => ({
+  seed: 0,
   spawn: origin,
   tileAt: (hex: Hex) => tiles[hexKey(hex)] ?? land(10),
-  lairsIn: () => lairs,
+  spawnersIn: () => spawners,
 });
 
 export const monster = (
   at: Hex,
   kind: Monster["kind"] = "goblin",
   facing: Direction = "nw",
+  home: Spawner = { kind: "village", at },
 ): Monster => ({
   id: hexKey(at),
   kind,
+  home,
   at,
   facing,
   hp: MONSTERS[kind].hp,
-  isHostile: false,
+  mind: IDLE,
 });
 
 export const facingEast = (world = landOf()): Game => {
