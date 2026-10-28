@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   act,
   ACTIVE_RADIUS,
+  GOLD,
   cooldownOf,
   FORGET_RADIUS,
   isOver,
@@ -17,6 +18,7 @@ import {
   type GameEvent,
   type Rejection,
   type SpawnerState,
+  type Where,
 } from "./game";
 import {
   HUNT_TURNS,
@@ -43,7 +45,7 @@ import {
   SPELLS,
 } from "./spells";
 import type { Spawner } from "./terrain";
-import { lootOf, type Item } from "./items";
+import { lootOf, type Chest, type GearKind, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
 import {
   east,
@@ -59,6 +61,13 @@ const rejection = (action: Action, reason: Rejection): GameEvent => ({
   kind: "rejected",
   action,
   reason,
+});
+
+const gearOf = (id: string, gear: GearKind): Item => ({
+  id,
+  kind: "gear",
+  gear,
+  name: { base: id },
 });
 
 const pit = landOf({ "0,0": land(0) });
@@ -655,6 +664,123 @@ describe("cast", () => {
     expect(distant.turn).toBe(0);
     expect(distant.events).toEqual([
       rejection({ spell: "strike", at: far }, "out-of-reach"),
+    ]);
+  });
+});
+
+describe("transfer", () => {
+  const helm = gearOf("helm", "helm");
+  const coif = gearOf("coif", "helm");
+  const shirt = gearOf("shirt", "chest");
+  const pants = gearOf("pants", "pants");
+  const boots = gearOf("boots", "boots");
+  const large = gearOf("large", "large bag");
+  const potion: Item = { id: "potion", kind: "potion", potion: "health" };
+  const here = hexKey(origin);
+  const withLoot = (
+    chest: Partial<Chest> | undefined,
+    player: Partial<Game["player"]> = {},
+  ): Game => {
+    const game = facingEast();
+    return {
+      ...game,
+      player: { ...game.player, ...player },
+      chests: chest
+        ? new Map([[here, { gold: 0, items: [], ...chest }]])
+        : new Map(),
+    };
+  };
+  const move = (cargo: string, to: Where): Action => ({
+    kind: "transfer",
+    cargo,
+    to,
+  });
+
+  test("takes an item from the chest underfoot, spending a turn", () => {
+    const next = act(withLoot({ items: [helm, potion] }), move("helm", "pack"));
+    expect(next.turn).toBe(1);
+    expect(next.player.pack).toEqual([helm]);
+    expect(next.chests.get(here)?.items).toEqual([potion]);
+  });
+
+  test("takes gold, and an emptied chest is gone", () => {
+    const next = act(withLoot({ gold: 7 }), move(GOLD, "pack"));
+    expect(next.player.gold).toBe(7);
+    expect(next.chests.has(here)).toBe(false);
+  });
+
+  test("puts items and gold down into a chest underfoot", () => {
+    const game = withLoot(undefined, { pack: [helm], gold: 3 });
+    const next = act(act(game, move("helm", "ground")), move(GOLD, "ground"));
+    expect(next.player.pack).toEqual([]);
+    expect(next.player.gold).toBe(0);
+    expect(next.chests.get(here)).toEqual({ gold: 3, items: [helm] });
+  });
+
+  test("equips gear from the pack or the chest, and takes it off", () => {
+    const game = withLoot({ items: [boots] }, { pack: [helm] });
+    const worn = act(act(game, move("helm", "helm")), move("boots", "boots"));
+    expect(worn.player.equipment).toEqual({ helm, boots });
+    expect(worn.player.pack).toEqual([]);
+    expect(worn.chests.has(here)).toBe(false);
+    const off = act(worn, move("helm", "pack"));
+    expect(off.player.equipment).toEqual({ boots });
+    expect(off.player.pack).toEqual([helm]);
+  });
+
+  test("equipping over worn gear swaps it to where the new gear came from", () => {
+    const game = withLoot({ items: [coif] }, { equipment: { helm } });
+    const next = act(game, move("coif", "helm"));
+    expect(next.player.equipment).toEqual({ helm: coif });
+    expect(next.chests.get(here)?.items).toEqual([helm]);
+  });
+
+  test("rejects what doesn't fit, what isn't there, and a full pack, spending no turn", () => {
+    const full = withLoot(
+      { items: [helm, potion] },
+      {
+        pack: [shirt, pants, gearOf("gloves", "gloves")],
+        equipment: { boots },
+      },
+    );
+    const attempts: readonly (readonly [Action, Rejection])[] = [
+      [move("helm", "boots"), "misfit"],
+      [move("potion", "helm"), "misfit"],
+      [move(GOLD, "helm"), "misfit"],
+      [move("nothing", "pack"), "no-item"],
+      [move(GOLD, "pack"), "no-item"],
+      [move("helm", "pack"), "full"],
+      [move("boots", "pack"), "full"],
+    ];
+    for (const [action, reason] of attempts) {
+      const next = act(full, action);
+      expect(next.events).toEqual([rejection(action, reason)]);
+      expect(next.turn).toBe(0);
+    }
+    expect(act(full, move("potion", "pack")).player.pack).toContain(potion);
+  });
+
+  test("bags add capacity; taking one off spills the largest items underfoot", () => {
+    const game = withLoot(
+      { items: [helm] },
+      { pack: [shirt, pants, boots], equipment: { "bag 1": large } },
+    );
+    const packed = act(game, move("helm", "pack"));
+    expect(packed.player.pack).toHaveLength(4);
+    const next = act(packed, move("large", "pack"));
+    expect(next.player.pack.map(({ id }) => id).sort()).toEqual(
+      ["boots", "helm", "large", "pants"].sort(),
+    );
+    expect(next.chests.get(here)?.items).toEqual([shirt]);
+    expect(next.events).toContainEqual({ kind: "spilled", items: [shirt] });
+  });
+
+  test("destroying a chest clears it and all it holds, spending a turn", () => {
+    const next = act(withLoot({ gold: 9, items: [helm] }), { kind: "destroy" });
+    expect(next.chests.has(here)).toBe(false);
+    expect(next.turn).toBe(1);
+    expect(act(facingEast(), { kind: "destroy" }).events).toEqual([
+      rejection({ kind: "destroy" }, "no-chest"),
     ]);
   });
 });

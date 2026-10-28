@@ -33,7 +33,19 @@ import {
   type SpellId,
 } from "./spells";
 import type { Spawner, Tile } from "./terrain";
-import { lootOf, type Chest } from "./items";
+import {
+  capacityOf,
+  fits,
+  loadOf,
+  lootOf,
+  overflowOf,
+  PLACE_NAMES,
+  PLACES,
+  type Chest,
+  type Equipment,
+  type Item,
+  type Place,
+} from "./items";
 
 export const MAX_HP = 20;
 export const MAX_MP = 10;
@@ -62,6 +74,8 @@ export interface Player {
   /** The turn each spell cast is ready again. */
   readonly spellsReadyAt: ReadonlyMap<SpellId, number>;
   readonly gold: number;
+  readonly pack: readonly Item[];
+  readonly equipment: Equipment;
 }
 
 export interface Monster {
@@ -103,7 +117,22 @@ export interface Cast {
   readonly at?: Hex | undefined;
 }
 
-export type Action = Direction | "wait" | Cast;
+/** `Transfer.cargo` naming all gold held at its origin, rather than an item id. */
+export const GOLD = "gold";
+
+/** Where cargo can be: the pack, the chest on the ground underfoot, or a paper-doll place. */
+export type Where = "pack" | "ground" | Place;
+
+export interface Transfer {
+  readonly kind: "transfer";
+  readonly cargo: string;
+  readonly to: Where;
+}
+
+export type Cargo = Item | { readonly kind: "gold"; readonly amount: number };
+
+export type Action =
+  Direction | "wait" | Cast | Transfer | { readonly kind: "destroy" };
 
 export type Rejection =
   | "blocked"
@@ -113,7 +142,11 @@ export type Rejection =
   | "no-target"
   | "out-of-reach"
   | "out-of-range"
-  | "out-of-sight";
+  | "out-of-sight"
+  | "misfit"
+  | "no-item"
+  | "full"
+  | "no-chest";
 
 export type GameEvent =
   | { readonly kind: "began" }
@@ -126,6 +159,14 @@ export type GameEvent =
   | { readonly kind: "hitMonster"; readonly monster: MonsterKind }
   | { readonly kind: "killed"; readonly monster: MonsterKind }
   | { readonly kind: "dropped"; readonly monster: MonsterKind }
+  | {
+      readonly kind: "moved";
+      readonly cargo: Cargo;
+      readonly from: Where;
+      readonly to: Where;
+    }
+  | { readonly kind: "spilled"; readonly items: readonly Item[] }
+  | { readonly kind: "destroyed" }
   | { readonly kind: "hitSpawner"; readonly spawner: SpawnerKind }
   | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
   | { readonly kind: "emerged"; readonly monster: MonsterKind }
@@ -300,6 +341,8 @@ export const newGame = (land: Land): Game =>
         mp: MAX_MP,
         spellsReadyAt: new Map(),
         gold: 0,
+        pack: [],
+        equipment: {},
       },
       monsters: [],
       spawners: new Map(),
@@ -336,6 +379,118 @@ const dropLoot = (game: Game, monster: Monster): Game => {
     kind: "dropped",
     monster: monster.kind,
   });
+};
+
+const EMPTY: Chest = { gold: 0, items: [] };
+
+const underfoot = (game: Game): Chest => chestAt(game, game.player.at) ?? EMPTY;
+
+const isPlace = (where: Where): where is Place => where in PLACES;
+
+const withPlayer = (game: Game, change: Partial<Player>): Game => ({
+  ...game,
+  player: { ...game.player, ...change },
+});
+
+const locate = (game: Game, id: string): readonly [Item, Where] | undefined => {
+  const { pack, equipment } = game.player;
+  const isIt = (item: Item | undefined) => item?.id === id;
+  const packed = pack.find(isIt);
+  if (packed) return [packed, "pack"];
+  const lying = underfoot(game).items.find(isIt);
+  if (lying) return [lying, "ground"];
+  const place = PLACE_NAMES.find((place) => isIt(equipment[place]));
+  return place && [equipment[place]!, place];
+};
+
+const removed = (game: Game, item: Item, from: Where): Game => {
+  const { pack, equipment, at } = game.player;
+  if (from === "pack")
+    return withPlayer(game, { pack: pack.filter((held) => held !== item) });
+  if (from === "ground") {
+    const chest = underfoot(game);
+    const items = chest.items.filter((held) => held !== item);
+    return withChest(game, at, { ...chest, items });
+  }
+  return withPlayer(game, {
+    equipment: Object.fromEntries(
+      Object.entries(equipment).filter(([place]) => place !== from),
+    ),
+  });
+};
+
+const added = (game: Game, item: Item, to: Where): Game => {
+  const { pack, equipment, at } = game.player;
+  if (to === "pack") return withPlayer(game, { pack: [...pack, item] });
+  if (to === "ground") return piledOn(game, at, { gold: 0, items: [item] });
+  return withPlayer(game, { equipment: { ...equipment, [to]: item } });
+};
+
+const relocated = (game: Game, item: Item, from: Where, to: Where): Game =>
+  added(removed(game, item, from), item, to);
+
+const spilled = (game: Game): Game => {
+  const { pack, equipment, at } = game.player;
+  const rng = rngOf(game.land.seed, "spill", game.turn);
+  const { kept, spilled } = overflowOf(pack, capacityOf(equipment), rng);
+  if (spilled.length === 0) return game;
+  return recorded(
+    piledOn(withPlayer(game, { pack: kept }), at, { gold: 0, items: spilled }),
+    { kind: "spilled", items: spilled },
+  );
+};
+
+const transferGold = (game: Game, action: Transfer): Game => {
+  const { to } = action;
+  const { player } = game;
+  if (isPlace(to)) return rejected(game, action, "misfit");
+  const chest = underfoot(game);
+  const from = to === "pack" ? "ground" : "pack";
+  const amount = to === "pack" ? chest.gold : player.gold;
+  if (amount === 0) return rejected(game, action, "no-item");
+  const gold = to === "pack" ? player.gold + amount : 0;
+  const lying = to === "pack" ? 0 : chest.gold + amount;
+  return endTurn(
+    recorded(
+      withChest(withPlayer(game, { gold }), player.at, {
+        ...chest,
+        gold: lying,
+      }),
+      { kind: "moved", cargo: { kind: "gold", amount }, from, to },
+    ),
+  );
+};
+
+const transferItem = (game: Game, action: Transfer): Game => {
+  const found = locate(game, action.cargo);
+  if (!found) return rejected(game, action, "no-item");
+  const [item, from] = found;
+  const { to } = action;
+  if (from === to || (isPlace(to) && !fits(item, to)))
+    return rejected(game, action, "misfit");
+  const worn = isPlace(to) ? game.player.equipment[to] : undefined;
+  const swapped = worn ? relocated(game, worn, to, from) : game;
+  const next = relocated(swapped, item, from, to);
+  const capacity = capacityOf(next.player.equipment);
+  const isOver = loadOf(next.player.pack) > capacity;
+  if (isOver && capacity >= capacityOf(game.player.equipment))
+    return rejected(game, action, "full");
+  return endTurn(
+    spilled(recorded(next, { kind: "moved", cargo: item, from, to })),
+  );
+};
+
+const transfer = (game: Game, action: Transfer): Game =>
+  action.cargo === GOLD
+    ? transferGold(game, action)
+    : transferItem(game, action);
+
+const destroy = (game: Game): Game => {
+  if (!chestAt(game, game.player.at))
+    return rejected(game, { kind: "destroy" }, "no-chest");
+  return endTurn(
+    recorded(withChest(game, game.player.at, EMPTY), { kind: "destroyed" }),
+  );
 };
 
 const attackMonster = (game: Game, target: Monster, damage: number): Game => {
@@ -683,7 +838,11 @@ const endTurn = (acted: Game): Game =>
 const actOn = (game: Game, action: Action): Game => {
   const { player, land } = game;
   if (action === "wait") return endTurn(game);
-  if (typeof action === "object") return castSpell(game, action);
+  if (typeof action === "object") {
+    if ("spell" in action) return castSpell(game, action);
+    if (action.kind === "transfer") return transfer(game, action);
+    return destroy(game);
+  }
   if (action !== player.facing)
     return endTurn({ ...game, player: { ...player, facing: action } });
   const to = add(player.at, DIRECTIONS[action]);
