@@ -4,13 +4,14 @@ import {
   LOG_LENGTH,
   newSession,
   sessionOf,
-  STARTING_LOADOUT,
   targetedAt,
   update,
   type Intent,
   type Session,
 } from "./session";
 import { east, gameWith, monster } from "./testing";
+import { hexKey } from "./hex";
+import { STARTING_LOADOUT, type Game } from "./game";
 
 const RANGE = 5;
 const near = { q: 3, r: 0 };
@@ -99,17 +100,63 @@ describe("update", () => {
     expect(session.target).toBeUndefined();
   });
 
-  test("an empty slot does nothing", () => {
+  test("binding a slot spends a turn; an empty slot then does nothing", () => {
     const session = run(
       targeting(east),
-      { kind: "equip", slot: 0, spell: undefined },
+      { kind: "bind", slot: 0, ability: undefined },
       { kind: "slot", slot: 0 },
     );
-    expect(session.loadout[0]).toBeUndefined();
-    expect(session.game.turn).toBe(0);
+    expect(session.game.player.loadout[0]).toBeUndefined();
+    expect(session.game.turn).toBe(1);
+  });
+
+  test("a potion slot quaffs at once, even while aiming, spending no turn", () => {
+    const base = targeting(near);
+    const game: Game = {
+      ...base.game,
+      player: {
+        ...base.game.player,
+        mp: 7,
+        pack: [{ id: "m", kind: "potion", potion: "mana" }],
+      },
+    };
+    const session = run(
+      { ...base, game },
+      { kind: "bind", slot: 5, ability: "mana" },
+      { kind: "slot", slot: slotOf("fireball") },
+      { kind: "slot", slot: 5 },
+    );
+    expect(session.mode.kind).toBe("aim");
+    expect(session.game.turn).toBe(1);
+    expect(session.log).toContainEqual({ kind: "quaffed", potion: "mana" });
   });
 
   test("resizing the view changes the target range", () => {
     expect(run(targeting(), { kind: "view", range: 2 }).range).toBe(2);
+  });
+
+  test("stepping onto a chest opens the inventory, which stays dismissed until stepping back on", () => {
+    const base = sessionOf(gameWith([]), RANGE);
+    const chest = { gold: 1, items: [] };
+    const session = {
+      ...base,
+      game: { ...base.game, chests: new Map([[hexKey(east), chest]]) },
+    };
+    const step = (direction: "se" | "nw"): Intent => ({
+      kind: "move",
+      direction,
+    });
+    const onChest = run(session, step("se"));
+    expect(onChest.isInventoryOpen).toBe(true);
+    const dismissed = run(onChest, { kind: "dismiss" }, { kind: "wait" });
+    expect(dismissed.isInventoryOpen).toBe(false);
+    const back = run(dismissed, step("nw"), step("nw"), step("se"), step("se"));
+    expect(back.game.player.at).toEqual(east);
+    expect(back.isInventoryOpen).toBe(true);
+  });
+
+  test("the inventory opens anywhere on request", () => {
+    const session = run(sessionOf(gameWith([]), RANGE), { kind: "inventory" });
+    expect(session.isInventoryOpen).toBe(true);
   });
 });

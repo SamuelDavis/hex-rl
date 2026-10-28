@@ -86,7 +86,11 @@ Not used (fetch failed or not read): RePoE `mods.json` (exceeds 10 MB fetch limi
 
 ## Decisions
 
-Override conflicting recommendations above.
+Override conflicting recommendations above. Implemented: `src/game/items.ts` (model, loot, names, capacity, overflow), `src/game/game.ts` (`Transfer`, `Bind`, `Quaff`, `Destroy` actions), `src/game/session.ts` (`isInventoryOpen`).
+
+- Underfoot chest is `Where` `"ground"`, not `"chest"`: `"chest"` is a paper-doll place.
+- Destroy spends a turn, like every other change to the world but quaffing.
+- Transfer into the pack beyond capacity is rejected (`"full"`), unless capacity itself fell (bag removed); then the pack spills.
 
 - Turn cost: every transfer is an `Action` that ends the turn: equip, unequip, loadout slot swap, chest→pack, pack→chest, drop. Replaces `session.ts:87-92` free `equip` intent.
 - Quaff: free (skips `endTurn`); allowed at full HP/MP; no aim interaction, since aim is UI state (`mode.ts`) and the game only sees the quaff `Action`.

@@ -29,11 +29,14 @@ import {
   FIREBALL_SPLASH,
   fireballSplashOf,
   HEAL_HP,
+  SPELL_IDS,
   SPELLS,
   type SpellId,
 } from "./spells";
 import type { Spawner, Tile } from "./terrain";
 import {
+  POTIONS,
+  type PotionKind,
   capacityOf,
   fits,
   loadOf,
@@ -48,6 +51,7 @@ import {
 } from "./items";
 
 export const MAX_HP = 20;
+export const SLOT_COUNT = 6;
 export const MAX_MP = 10;
 export const PLAYER_DAMAGE = 2;
 export const ACTIVE_RADIUS = SIGHT + 4;
@@ -76,7 +80,18 @@ export interface Player {
   readonly gold: number;
   readonly pack: readonly Item[];
   readonly equipment: Equipment;
+  readonly loadout: Loadout;
 }
+
+/** What a loadout slot triggers. */
+export type Ability = SpellId | PotionKind;
+
+export type Loadout = readonly (Ability | undefined)[];
+
+export const STARTING_LOADOUT: Loadout = Array.from(
+  { length: SLOT_COUNT },
+  (_, slot) => SPELL_IDS[slot],
+);
 
 export interface Monster {
   readonly id: string;
@@ -131,8 +146,23 @@ export interface Transfer {
 
 export type Cargo = Item | { readonly kind: "gold"; readonly amount: number };
 
+export interface Bind {
+  readonly kind: "bind";
+  readonly slot: number;
+  readonly ability: Ability | undefined;
+}
+
+export interface Quaff {
+  readonly kind: "quaff";
+  readonly potion: PotionKind;
+}
+
+export interface Destroy {
+  readonly kind: "destroy";
+}
+
 export type Action =
-  Direction | "wait" | Cast | Transfer | { readonly kind: "destroy" };
+  Direction | "wait" | Cast | Transfer | Bind | Quaff | Destroy;
 
 export type Rejection =
   | "blocked"
@@ -167,6 +197,7 @@ export type GameEvent =
     }
   | { readonly kind: "spilled"; readonly items: readonly Item[] }
   | { readonly kind: "destroyed" }
+  | { readonly kind: "quaffed"; readonly potion: PotionKind }
   | { readonly kind: "hitSpawner"; readonly spawner: SpawnerKind }
   | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
   | { readonly kind: "emerged"; readonly monster: MonsterKind }
@@ -343,6 +374,7 @@ export const newGame = (land: Land): Game =>
         gold: 0,
         pack: [],
         equipment: {},
+        loadout: STARTING_LOADOUT,
       },
       monsters: [],
       spawners: new Map(),
@@ -490,6 +522,30 @@ const destroy = (game: Game): Game => {
     return rejected(game, { kind: "destroy" }, "no-chest");
   return endTurn(
     recorded(withChest(game, game.player.at, EMPTY), { kind: "destroyed" }),
+  );
+};
+
+const bind = (game: Game, { slot, ability }: Bind): Game =>
+  withPlayer(game, {
+    loadout: game.player.loadout.map((bound, at) =>
+      at === slot ? ability : bound,
+    ),
+  });
+
+const quaff = (game: Game, action: Quaff): Game => {
+  const { player } = game;
+  const potion = player.pack.find(
+    (item) => item.kind === "potion" && item.potion === action.potion,
+  );
+  if (!potion) return rejected(game, action, "no-item");
+  const { hp, mp } = POTIONS[action.potion];
+  return recorded(
+    withPlayer(game, {
+      pack: player.pack.filter((item) => item !== potion),
+      hp: Math.min(MAX_HP, player.hp + hp),
+      mp: Math.min(MAX_MP, player.mp + mp),
+    }),
+    { kind: "quaffed", potion: action.potion },
   );
 };
 
@@ -840,8 +896,16 @@ const actOn = (game: Game, action: Action): Game => {
   if (action === "wait") return endTurn(game);
   if (typeof action === "object") {
     if ("spell" in action) return castSpell(game, action);
-    if (action.kind === "transfer") return transfer(game, action);
-    return destroy(game);
+    switch (action.kind) {
+      case "transfer":
+        return transfer(game, action);
+      case "bind":
+        return endTurn(bind(game, action));
+      case "quaff":
+        return quaff(game, action);
+      case "destroy":
+        return destroy(game);
+    }
   }
   if (action !== player.facing)
     return endTurn({ ...game, player: { ...player, facing: action } });

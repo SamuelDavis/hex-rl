@@ -1,5 +1,6 @@
 import type { Direction } from "./hex";
-import { SLOT_COUNT, type Intent } from "./session";
+import { SLOT_COUNT } from "./game";
+import type { Intent } from "./session";
 
 export type ControlId =
   | `move-${Direction}`
@@ -7,6 +8,7 @@ export type ControlId =
   | "target"
   | "confirm"
   | "cancel"
+  | "inventory"
   | `slot-${number}`;
 
 export interface Control {
@@ -51,12 +53,13 @@ const BINDINGS: readonly (readonly [Control, string])[] = [
     "enter",
   ],
   [{ id: "cancel", label: "Cancel aim", intent: { kind: "cancel" } }, "escape"],
+  [{ id: "inventory", label: "Inventory", intent: { kind: "inventory" } }, "i"],
   ...SLOTS.map(
     (slot) =>
       [
         {
           id: `slot-${slot + 1}`,
-          label: `Cast slot ${slot + 1}`,
+          label: `Use slot ${slot + 1}`,
           intent: { kind: "slot", slot },
         },
         String(slot + 1),

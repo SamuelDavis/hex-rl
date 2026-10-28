@@ -45,7 +45,7 @@ import {
   SPELLS,
 } from "./spells";
 import type { Spawner } from "./terrain";
-import { lootOf, type Chest, type GearKind, type Item } from "./items";
+import { lootOf, POTIONS, type Chest, type GearKind, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
 import {
   east,
@@ -782,5 +782,49 @@ describe("transfer", () => {
     expect(act(facingEast(), { kind: "destroy" }).events).toEqual([
       rejection({ kind: "destroy" }, "no-chest"),
     ]);
+  });
+});
+
+describe("quaff", () => {
+  const health: Item = { id: "h", kind: "potion", potion: "health" };
+  const mana: Item = { id: "m", kind: "potion", potion: "mana" };
+  const holding = (game: Game, player: Partial<Game["player"]>): Game => ({
+    ...game,
+    player: { ...game.player, ...player },
+  });
+
+  test("restores up to the maximum and uses up one potion, spending no turn", () => {
+    const game = holding(gameWith([monster(east, "troll")]), {
+      hp: 5,
+      mp: 9,
+      pack: [health, mana, { ...health, id: "h2" }],
+    });
+    const healed = act(game, { kind: "quaff", potion: "health" });
+    expect(healed.player.hp).toBe(5 + POTIONS.health.hp);
+    expect(healed.player.pack).toEqual([mana, { ...health, id: "h2" }]);
+    expect(healed.turn).toBe(0);
+    expect(healed.monsters).toEqual(game.monsters);
+    expect(healed.events).toEqual([{ kind: "quaffed", potion: "health" }]);
+    expect(act(healed, { kind: "quaff", potion: "mana" }).player.mp).toBe(
+      MAX_MP,
+    );
+  });
+
+  test("can't quaff a potion not in the pack", () => {
+    const action: Action = { kind: "quaff", potion: "mana" };
+    expect(act(facingEast(), action).events).toEqual([
+      rejection(action, "no-item"),
+    ]);
+  });
+});
+
+describe("bind", () => {
+  test("puts a spell or potion in a loadout slot, spending a turn", () => {
+    const bound = act(
+      act(facingEast(), { kind: "bind", slot: 0, ability: "health" }),
+      { kind: "bind", slot: 1, ability: undefined },
+    );
+    expect(bound.player.loadout.slice(0, 2)).toEqual(["health", undefined]);
+    expect(bound.turn).toBe(2);
   });
 });

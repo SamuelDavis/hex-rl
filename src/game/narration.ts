@@ -17,10 +17,17 @@ const REASONS: Record<Rejection, string> = {
   "no-chest": "there is no chest here",
 };
 
+const VERBS = {
+  transfer: "move that",
+  bind: "bind that",
+  quaff: "quaff",
+  destroy: "destroy",
+} as const;
+
 const verbOf = (action: Action) => {
   if (typeof action === "object") {
     if ("spell" in action) return `cast ${action.spell}`;
-    return action.kind === "transfer" ? "move that" : "destroy";
+    return VERBS[action.kind];
   }
   return action === "wait" ? "wait" : "move";
 };
@@ -61,6 +68,8 @@ export const narrationOf = (event: GameEvent): string => {
       return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from your pack.`;
     case "destroyed":
       return "You destroy the chest.";
+    case "quaffed":
+      return `You quaff a ${event.potion} potion.`;
     case "hitSpawner":
       return `You hit the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":
