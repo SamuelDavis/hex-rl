@@ -4,7 +4,6 @@ import {
   ACTIVE_RADIUS,
   cooldownOf,
   FORGET_RADIUS,
-  IDLE,
   isOver,
   isWrecked,
   MAX_HP,
@@ -12,14 +11,18 @@ import {
   newGame,
   PLAYER_DAMAGE,
   HUNT_RADIUS,
-  HUNT_TURNS,
   SPAWNER_HEAL_INTERVAL,
-  TRACK_TURNS,
   type Action,
   type Game,
-  type Engaged,
   type SpawnerState,
 } from "./game";
+import {
+  HUNT_TURNS,
+  IDLE,
+  TRACK_TURNS,
+  type Hostile,
+  type Hunting,
+} from "./mind";
 import {
   add,
   centerOf,
@@ -57,12 +60,20 @@ const historyOf = (game: Game, turns = 300, action: Action = "wait") =>
     [game],
   );
 
-const hostileAt = (anchor: Hex, lastSeen: Hex): Engaged => ({
+const hostileAt = (anchor: Hex, lastSeen: Hex): Hostile => ({
   state: "hostile",
   anchor,
   lastSeen,
   heading: "n",
   unseenFor: 0,
+});
+
+const huntingAt = (anchor: Hex, lastSeen: Hex): Hunting => ({
+  state: "hunting",
+  anchor,
+  lastSeen,
+  heading: "n",
+  huntedFor: 0,
 });
 
 const withState = (
@@ -430,7 +441,7 @@ describe("act", () => {
     ];
     const hunters = spots.map((at) => ({
       ...monster(at, "goblin", "nw", { kind: "village", at }),
-      mind: { ...hostileAt(at, at), state: "hunting" as const },
+      mind: huntingAt(at, at),
     }));
     const games = historyOf(gameWith(hunters, pit), HUNT_TURNS - 1);
     const north = centerOf(DIRECTIONS.n);
@@ -476,10 +487,7 @@ describe("act", () => {
     const anchor = { q: 12, r: 0 };
     const hunter = {
       ...monster({ q: 4, r: 0 }),
-      mind: {
-        ...hostileAt(anchor, { q: 4, r: -2 }),
-        state: "hunting" as const,
-      },
+      mind: huntingAt(anchor, { q: 4, r: -2 }),
     };
     const next = act(gameWith([hunter]), "wait").monsters[0]!;
     expect(next.mind).toMatchObject({ state: "hostile", anchor });

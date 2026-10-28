@@ -1,4 +1,5 @@
-import { IDLE, newGame, type Game, type Land, type Monster } from "./game";
+import { newGame, type Game, type Land, type Monster } from "./game";
+import { IDLE } from "./mind";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
 import { Biome, type Spawner, type Tile } from "./terrain";
