@@ -18,3 +18,4 @@ Personal starting point for SolidJS SPAs: classless semantic HTML styled by Pico
 - Styling contracts and rationale: [docs/styling.md](docs/styling.md).
 - Monster AI state machines, prior art, and refactor recommendations: [docs/monster-ai.md](docs/monster-ai.md).
 - UI/game separation contract (session, modes, events) and prior art: [docs/ui-architecture.md](docs/ui-architecture.md).
+- Inventory, loot, and paper-doll equipment prior art and recommendations: [docs/inventory.md](docs/inventory.md).
