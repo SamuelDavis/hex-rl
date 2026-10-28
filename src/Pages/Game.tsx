@@ -310,8 +310,8 @@ function PlayPanel(props: {
         keymap={props.keymap}
         editSlot={props.editSlot}
       />
-      <div class="mb-(--pico-spacing) flex items-center justify-between">
-        <div class="grid grid-cols-[repeat(3,4rem)] gap-(--pico-spacing)">
+      <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
+        <div class="col-span-3 grid grid-cols-3 gap-(--pico-spacing)">
           <For each={PAD_DIRECTIONS}>
             {(direction) => (
               <PadButton
@@ -325,17 +325,20 @@ function PlayPanel(props: {
             )}
           </For>
         </div>
-        <div class="grid grid-cols-[4rem] gap-(--pico-spacing)">
+        <div class="col-span-2 col-start-5 grid grid-cols-2 gap-(--pico-spacing)">
           <Show
             when={props.isAiming}
             fallback={
-              <PadButton
-                control="wait"
-                keymap={props.keymap}
-                dispatch={props.dispatch}
-              >
-                Wait
-              </PadButton>
+              <>
+                <PadButton
+                  control="wait"
+                  keymap={props.keymap}
+                  dispatch={props.dispatch}
+                >
+                  Wait
+                </PadButton>
+                <div />
+              </>
             }
           >
             <PadButton
@@ -641,7 +644,7 @@ function PadButton(props: {
     <button
       type="button"
       tabIndex={-1}
-      class={`relative m-0 aspect-square p-0 ${props.class ?? ""}`}
+      class={`relative m-0 aspect-square p-0 ${props.class ?? "text-xs"}`}
       aria-label={`${getControl().label} (${getHotkey()})`}
       onClick={() => props.dispatch(getControl().intent)}
     >
