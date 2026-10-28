@@ -5,6 +5,7 @@ import {
   centerOf,
   DIRECTIONS,
   directionBetween,
+  flanksOf,
   HEADINGS,
   hexDistance,
   hexKey,
@@ -15,9 +16,19 @@ import {
 } from "./hex";
 import { MONSTERS, SPAWNERS, spawnerHpOf, type MonsterKind } from "./monsters";
 import { canNotice, SIGHT, visibleFrom } from "./sight";
+import {
+  CLEAVE_SPLASH,
+  FIREBALL_DAMAGE,
+  FIREBALL_SPLASH,
+  fireballSplashOf,
+  HEAL_HP,
+  SPELLS,
+  type SpellId,
+} from "./spells";
 import type { Spawner, Tile } from "./terrain";
 
 export const MAX_HP = 20;
+export const MAX_MP = 10;
 export const PLAYER_DAMAGE = 2;
 export const ACTIVE_RADIUS = SIGHT + 4;
 export const FORGET_RADIUS = ACTIVE_RADIUS + 8;
@@ -26,7 +37,8 @@ export const HUNT_TURNS = 10;
 export const HUNT_RADIUS = 4;
 export const SPAWNER_HEAL_INTERVAL = 5;
 const WANDER_CHANCE = 0.3;
-const REGEN_INTERVAL = 10;
+const HP_REGEN_INTERVAL = 10;
+const MP_REGEN_INTERVAL = 2;
 const LOG_LENGTH = 50;
 const PATH_BUDGET = 200;
 
@@ -41,6 +53,9 @@ export interface Player {
   readonly at: Hex;
   readonly facing: Direction;
   readonly hp: number;
+  readonly mp: number;
+  /** The turn each spell cast is ready again. */
+  readonly spellsReadyAt: ReadonlyMap<SpellId, number>;
   readonly gold: number;
 }
 
@@ -92,9 +107,17 @@ export interface Game {
   readonly log: readonly string[];
 }
 
-export type Action = Direction | "wait";
+export interface Cast {
+  readonly spell: SpellId;
+  readonly at?: Hex | undefined;
+}
+
+export type Action = Direction | "wait" | Cast;
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
+
+export const cooldownOf = ({ player, turn }: Game, spell: SpellId): number =>
+  Math.max(0, (player.spellsReadyAt.get(spell) ?? 0) - turn);
 
 const stateOf = (game: Game, { kind, at }: Spawner): SpawnerState =>
   game.spawners.get(hexKey(at)) ?? {
@@ -247,7 +270,14 @@ export const newGame = (land: Land): Game =>
   withSight(
     populate({
       land,
-      player: { at: land.spawn, facing: "n", hp: MAX_HP, gold: 0 },
+      player: {
+        at: land.spawn,
+        facing: "n",
+        hp: MAX_HP,
+        mp: MAX_MP,
+        spellsReadyAt: new Map(),
+        gold: 0,
+      },
       monsters: [],
       spawners: new Map(),
       gold: new Map(),
@@ -289,8 +319,8 @@ const pickUpGold = (game: Game): Game => {
   );
 };
 
-const attackMonster = (game: Game, target: Monster): Game => {
-  const hp = target.hp - PLAYER_DAMAGE;
+const attackMonster = (game: Game, target: Monster, damage: number): Game => {
+  const hp = target.hp - damage;
   if (hp > 0)
     return logged(
       {
@@ -312,8 +342,8 @@ const attackMonster = (game: Game, target: Monster): Game => {
   );
 };
 
-const attackSpawner = (game: Game, spawner: Spawner): Game => {
-  const hp = Math.max(0, spawnerHp(game, spawner) - PLAYER_DAMAGE);
+const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
+  const hp = Math.max(0, spawnerHp(game, spawner) - damage);
   const { name } = SPAWNERS[spawner.kind];
   const wasWrecked = isWrecked(game, spawner);
   const hurt = (change: Partial<SpawnerState>) =>
@@ -331,12 +361,112 @@ const attackSpawner = (game: Game, spawner: Spawner): Game => {
   );
 };
 
-const playerTurn = (game: Game, to: Hex): Game => {
-  const target = monsterAt(game, to);
-  if (target) return attackMonster(game, target);
-  const spawner = spawnerAt(game, to);
-  if (spawner) return attackSpawner(game, spawner);
-  return pickUpGold({ ...game, player: { ...game.player, at: to } });
+const hit = (game: Game, at: Hex, damage: number): Game => {
+  const target = monsterAt(game, at);
+  if (target) return attackMonster(game, target, damage);
+  const spawner = spawnerAt(game, at);
+  if (spawner) return attackSpawner(game, spawner, damage);
+  return game;
+};
+
+const hitAll = (game: Game, hits: readonly (readonly [Hex, number])[]) =>
+  hits.reduce((state, [at, damage]) => hit(state, at, damage), game);
+
+const playerTurn = (game: Game, to: Hex): Game =>
+  isBlocked(game, to)
+    ? hit(game, to, PLAYER_DAMAGE)
+    : pickUpGold({ ...game, player: { ...game.player, at: to } });
+
+const melee = (game: Game, toward: Direction, damage: number): Game => {
+  const { land, player } = game;
+  const to = add(player.at, DIRECTIONS[toward]);
+  return canStep(land.tileAt, player.at, to) ? hit(game, to, damage) : game;
+};
+
+const splashed = (damage: number, fraction: number) =>
+  Math.ceil(damage * fraction);
+
+const EFFECTS: Record<SpellId, (game: Game, at: Hex | undefined) => Game> = {
+  cleave: (game) => {
+    const { facing } = game.player;
+    const splash = splashed(PLAYER_DAMAGE, CLEAVE_SPLASH);
+    return flanksOf(facing).reduce(
+      (state, side) => melee(state, side, splash),
+      melee(game, facing, PLAYER_DAMAGE),
+    );
+  },
+  fireball: (game, at) => {
+    const splash = splashed(FIREBALL_DAMAGE, FIREBALL_SPLASH);
+    return hitAll(game, [
+      [at!, FIREBALL_DAMAGE],
+      ...fireballSplashOf(at!).map((hex) => [hex, splash] as const),
+    ]);
+  },
+  heal: ({ player, ...game }) => ({
+    ...game,
+    player: { ...player, hp: Math.min(MAX_HP, player.hp + HEAL_HP) },
+  }),
+  strike: (game, at) => {
+    const facing = directionBetween(game.player.at, at!)!;
+    return melee(
+      { ...game, player: { ...game.player, facing } },
+      facing,
+      PLAYER_DAMAGE,
+    );
+  },
+};
+
+const aimProblemOf = (game: Game, { spell, at }: Cast): string | undefined => {
+  const { aim } = SPELLS[spell];
+  const { land, player } = game;
+  if (aim.kind === "monster") {
+    const target = at && monsterAt(game, at);
+    if (!target) return `Cannot cast ${spell} without a target.`;
+    const isAdjacent = directionBetween(player.at, target.at) !== undefined;
+    if (!isAdjacent || !canStep(land.tileAt, player.at, target.at))
+      return `Cannot cast ${spell}: the ${target.kind} is out of reach.`;
+  }
+  if (aim.kind === "hex") {
+    if (!at || hexDistance(player.at, at) > aim.range)
+      return `Cannot cast ${spell}: out of range.`;
+    if (!visibleOf(game).has(hexKey(at)))
+      return `Cannot cast ${spell}: out of sight.`;
+  }
+  return undefined;
+};
+
+export const unreadyReasonOf = (
+  game: Game,
+  spell: SpellId,
+): string | undefined => {
+  if (cooldownOf(game, spell) > 0) return `Cannot cast ${spell}: not ready.`;
+  if (game.player.mp < SPELLS[spell].mp)
+    return `Cannot cast ${spell}: not enough mana.`;
+  return undefined;
+};
+
+const castProblemOf = (game: Game, cast: Cast): string | undefined =>
+  unreadyReasonOf(game, cast.spell) ?? aimProblemOf(game, cast);
+
+const castSpell = (game: Game, cast: Cast): Game => {
+  const problem = castProblemOf(game, cast);
+  if (problem) return logged(game, problem);
+  const { player, turn } = game;
+  const { mp, cooldown } = SPELLS[cast.spell];
+  const spent = {
+    ...player,
+    mp: player.mp - mp,
+    spellsReadyAt: new Map([
+      ...player.spellsReadyAt,
+      [cast.spell, turn + 1 + cooldown],
+    ]),
+  };
+  return endTurn(
+    EFFECTS[cast.spell](
+      logged({ ...game, player: spent }, `You cast ${cast.spell}.`),
+      cast.at,
+    ),
+  );
 };
 
 const stepToward = (
@@ -508,13 +638,25 @@ const monstersTurn = (game: Game): Game =>
     game,
   );
 
-const regenerate = (game: Game): Game =>
-  game.turn % REGEN_INTERVAL === 0 && !isOver(game)
-    ? {
-        ...game,
-        player: { ...game.player, hp: Math.min(MAX_HP, game.player.hp + 1) },
-      }
-    : game;
+const restored = (
+  value: number,
+  max: number,
+  interval: number,
+  turn: number,
+) => (turn % interval === 0 ? Math.min(max, value + 1) : value);
+
+const regenerate = (game: Game): Game => {
+  if (isOver(game)) return game;
+  const { player, turn } = game;
+  return {
+    ...game,
+    player: {
+      ...player,
+      hp: restored(player.hp, MAX_HP, HP_REGEN_INTERVAL, turn),
+      mp: restored(player.mp, MAX_MP, MP_REGEN_INTERVAL, turn),
+    },
+  };
+};
 
 const endTurn = (acted: Game): Game =>
   withSight(
@@ -525,6 +667,7 @@ export const act = (game: Game, action: Action): Game => {
   if (isOver(game)) return game;
   const { player, land } = game;
   if (action === "wait") return endTurn(game);
+  if (typeof action === "object") return castSpell(game, action);
   if (action !== player.facing)
     return endTurn({ ...game, player: { ...player, facing: action } });
   const to = add(player.at, DIRECTIONS[action]);

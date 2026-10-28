@@ -36,6 +36,8 @@ const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
 const WHITE: Hsl = [0, 0, 100];
 const HOSTILE: Hsl = [0, 90, 55];
 const TARGETED: Hsl = [110, 100, 55];
+const AIMED: Hsl = [25, 100, 55];
+const AIM_AREA = "hsl(25 100% 55% / 0.3)";
 const GOLD: Hsl = [48, 95, 55];
 const RINGS: Record<Monster["mind"]["state"], Hsl> = {
   idle: WHITE,
@@ -122,6 +124,11 @@ export type TargetMark =
     }
   | { readonly kind: "remembered"; readonly at: Hex };
 
+export interface AimMark {
+  readonly at: Hex;
+  readonly area: ReadonlySet<string>;
+}
+
 export interface Scene {
   readonly tileAt: (hex: Hex) => Tile;
   readonly spawnersIn: (bounds: Bounds) => readonly Spawner[];
@@ -131,6 +138,7 @@ export interface Scene {
   readonly gold: ReadonlyMap<string, number>;
   readonly visible: ReadonlySet<string>;
   readonly target: TargetMark | undefined;
+  readonly aim: AimMark | undefined;
   readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
@@ -147,6 +155,7 @@ export const drawScene = (
     gold,
     visible,
     target,
+    aim,
     seen,
     width,
     height,
@@ -250,6 +259,11 @@ export const drawScene = (
       context.stroke();
       context.lineWidth = 0.6;
     }
+    if (aim?.area.has(hexKey(hex))) {
+      polygon(face);
+      context.fillStyle = AIM_AREA;
+      context.fill();
+    }
 
     const base = project(center, top);
     if (tile.tree)
@@ -267,7 +281,8 @@ export const drawScene = (
         lit([SPAWNERS[spawner.kind].hue, isWrecked(spawner) ? 0 : 35, 30]),
       );
     if (isVisible && gold.has(hexKey(hex))) drawGold(context, base);
-    if (target && sameHex(hex, target.at)) drawReticle(context, base);
+    if (target && sameHex(hex, target.at)) drawReticle(context, base, TARGETED);
+    if (aim && sameHex(hex, aim.at)) drawReticle(context, base, AIMED);
     const monster = monsterAt.get(hexKey(hex));
     if (monster) {
       const { hue, glyph } = MONSTERS[monster.kind];
@@ -373,11 +388,15 @@ const tokenCenterOf = ({ x, y }: Vec2): Vec2 => ({
   y: y - TOKEN_SIZE * TOKEN_LIFT,
 });
 
-const drawReticle = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
+const drawReticle = (
+  context: CanvasRenderingContext2D,
+  { x, y }: Vec2,
+  color: Hsl,
+) => {
   const radius = TOKEN_SIZE * 1.5;
   context.beginPath();
   context.ellipse(x, y, radius, radius * TILT, 0, 0, 2 * Math.PI);
-  context.strokeStyle = css(TARGETED);
+  context.strokeStyle = css(color);
   context.lineWidth = WATCHED_EDGE_WIDTH;
   context.stroke();
   context.lineWidth = 0.6;

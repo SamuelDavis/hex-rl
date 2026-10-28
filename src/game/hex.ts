@@ -29,6 +29,13 @@ export const add = (a: Hex, b: Hex): Hex => ({ q: a.q + b.q, r: a.r + b.r });
 export const neighborsOf = (hex: Hex): Hex[] =>
   Object.values(DIRECTIONS).map((direction) => add(hex, direction));
 
+export const flanksOf = (direction: Direction): readonly Direction[] => {
+  const index = HEADINGS.indexOf(direction);
+  return [-1, 1].map(
+    (turn) => HEADINGS[(index + turn + HEADINGS.length) % HEADINGS.length]!,
+  );
+};
+
 export const directionBetween = (from: Hex, to: Hex): Direction | undefined =>
   HEADINGS.find((direction) => sameHex(add(from, DIRECTIONS[direction]), to));
 

@@ -2,11 +2,13 @@ import { describe, expect, test } from "vitest";
 import {
   act,
   ACTIVE_RADIUS,
+  cooldownOf,
   FORGET_RADIUS,
   IDLE,
   isOver,
   isWrecked,
   MAX_HP,
+  MAX_MP,
   newGame,
   PLAYER_DAMAGE,
   HUNT_RADIUS,
@@ -28,8 +30,15 @@ import {
   type Hex,
 } from "./hex";
 import { MONSTERS, SPAWNERS, spawnerHpOf, type SpawnerKind } from "./monsters";
+import {
+  CLEAVE_SPLASH,
+  FIREBALL_DAMAGE,
+  FIREBALL_SPLASH,
+  HEAL_HP,
+  SPELLS,
+} from "./spells";
 import type { Spawner } from "./terrain";
-import { SIGHT } from "./sight";
+import { AWARENESS, SIGHT } from "./sight";
 import {
   east,
   facingEast,
@@ -519,5 +528,102 @@ describe("act", () => {
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
     expect(act(dead, "se")).toBe(dead);
+  });
+});
+
+describe("cast", () => {
+  const ne = add(origin, DIRECTIONS.ne);
+  const south = add(origin, DIRECTIONS.s);
+  const trolls = (...at: Hex[]) => at.map((hex) => monster(hex, "troll", "nw"));
+  const hpAt = (game: Game, hex: Hex) =>
+    game.monsters.find(({ id }) => id === hexKey(hex))?.hp;
+  const TROLL = MONSTERS.troll.hp;
+
+  test("spends mana, a turn, and starts the cooldown", () => {
+    const next = act(facingEast(), { spell: "heal" });
+    expect(next.turn).toBe(1);
+    expect(next.player.mp).toBe(MAX_MP - SPELLS.heal.mp);
+    expect(cooldownOf(next, "heal")).toBe(SPELLS.heal.cooldown);
+  });
+
+  test("cooldowns count down each turn until ready", () => {
+    const cast = act(facingEast(), { spell: "fireball", at: east });
+    const waits = historyOf(cast, SPELLS.fireball.cooldown);
+    expect(waits.map((game) => cooldownOf(game, "fireball"))).toEqual([
+      5, 4, 3, 2, 1, 0,
+    ]);
+  });
+
+  test("can't be cast while cooling down, spending no turn", () => {
+    const cast = act(facingEast(), { spell: "heal" });
+    const again = act(cast, { spell: "heal" });
+    expect(again.turn).toBe(cast.turn);
+    expect(again.player).toEqual(cast.player);
+    expect(again.log.at(-1)).toMatch(/not ready/);
+  });
+
+  test("can't be cast without enough mana, spending no turn", () => {
+    const game = facingEast();
+    const drained = { ...game, player: { ...game.player, mp: 1 } };
+    const next = act(drained, { spell: "heal" });
+    expect(next.turn).toBe(0);
+    expect(next.log.at(-1)).toMatch(/mana/);
+  });
+
+  test("mana regenerates over time, up to the maximum", () => {
+    const game = facingEast();
+    const drained = { ...game, player: { ...game.player, mp: 0 } };
+    const history = historyOf(drained, 100);
+    expect(history.at(-1)!.player.mp).toBe(MAX_MP);
+    expect(history[1]!.player.mp).toBeLessThan(MAX_MP);
+  });
+
+  test("cleave hits ahead fully and either side by half", () => {
+    const next = act(gameWith(trolls(east, ne, south)), { spell: "cleave" });
+    expect(hpAt(next, east)).toBe(TROLL - PLAYER_DAMAGE);
+    expect(hpAt(next, ne)).toBe(TROLL - PLAYER_DAMAGE * CLEAVE_SPLASH);
+    expect(hpAt(next, south)).toBe(TROLL - PLAYER_DAMAGE * CLEAVE_SPLASH);
+  });
+
+  test("fireball burns the aimed hex fully and its neighbors by a quarter", () => {
+    const at = { q: 3, r: 0 };
+    const beside = { q: 4, r: 0 };
+    const next = act(gameWith(trolls(at, beside)), { spell: "fireball", at });
+    expect(hpAt(next, at)).toBe(TROLL - FIREBALL_DAMAGE);
+    expect(hpAt(next, beside)).toBe(TROLL - FIREBALL_DAMAGE * FIREBALL_SPLASH);
+    expect(next.player.hp).toBe(MAX_HP);
+  });
+
+  test("fireball can't reach beyond its range or out of sight", () => {
+    const far = { q: SPELLS.fireball.aim.range + 1, r: 0 };
+    const behind = { q: -AWARENESS - 1, r: 0 };
+    for (const at of [far, behind, undefined]) {
+      const next = act(facingEast(), { spell: "fireball", at });
+      expect(next.turn).toBe(0);
+    }
+  });
+
+  test("heal restores hit points, up to the maximum", () => {
+    const game = facingEast();
+    const hurt = { ...game, player: { ...game.player, hp: 1 } };
+    expect(act(hurt, { spell: "heal" }).player.hp).toBe(1 + HEAL_HP);
+    expect(act(game, { spell: "heal" }).player.hp).toBe(MAX_HP);
+  });
+
+  test("strike faces the adjacent target and attacks it in one turn", () => {
+    const next = act(gameWith(trolls(south)), { spell: "strike", at: south });
+    expect(next.turn).toBe(1);
+    expect(next.player).toMatchObject({ at: origin, facing: "s" });
+    expect(hpAt(next, south)).toBe(TROLL - PLAYER_DAMAGE);
+  });
+
+  test("strike can't be cast without a target in reach", () => {
+    const far = { q: 3, r: 0 };
+    const none = act(gameWith([]), { spell: "strike" });
+    expect(none.turn).toBe(0);
+    expect(none.log.at(-1)).toBe("Cannot cast strike without a target.");
+    const distant = act(gameWith(trolls(far)), { spell: "strike", at: far });
+    expect(distant.turn).toBe(0);
+    expect(distant.log.at(-1)).toMatch(/reach/);
   });
 });
