@@ -18,7 +18,15 @@ import {
   type Engaged,
   type SpawnerState,
 } from "./game";
-import { centerOf, DIRECTIONS, hexDistance, hexKey, type Hex } from "./hex";
+import {
+  add,
+  centerOf,
+  DIRECTIONS,
+  hexDistance,
+  hexKey,
+  sameHex,
+  type Hex,
+} from "./hex";
 import { MONSTERS, SPAWNERS, spawnerHpOf, type SpawnerKind } from "./monsters";
 import type { Spawner } from "./terrain";
 import { SIGHT } from "./sight";
@@ -63,6 +71,7 @@ const withState = (
         hp: spawnerHpOf(spawner.kind),
         hurtAt: 0,
         isWrecked: false,
+        isBossDue: false,
         ...state,
       },
     ],
@@ -129,6 +138,31 @@ describe("spawners", () => {
     );
     const hemmed = newGame(landOf({ ...out, ...walled }, [den]));
     expect(spawnsOf(historyOf(hemmed))).toEqual([]);
+  });
+
+  test("hold back their boss until there is room for it", () => {
+    const site = add(den.at, DIRECTIONS.n);
+    const walled = Object.fromEntries(
+      [den.at, site]
+        .flatMap((hex) => Object.values(DIRECTIONS).map((d) => add(hex, d)))
+        .filter((hex) => !sameHex(hex, site) && !sameHex(hex, den.at))
+        .map((hex) => [hexKey(hex), land(30)]),
+    );
+    const wrecked = withState(
+      gameWith([], landOf({ ...out, ...walled }, [den])),
+      den,
+      { hp: 0, isWrecked: true, isBossDue: true },
+    );
+    const trapped = {
+      ...wrecked,
+      monsters: [monster(site, "goblin", "nw", den)],
+    };
+    const bossOf = ({ monsters }: Game) =>
+      monsters.find(({ kind }) => kind === SPAWNERS.den.boss);
+    const held = historyOf(trapped, 10);
+    expect(held.filter(bossOf)).toEqual([]);
+    const freed = act({ ...held.at(-1)!, monsters: [] }, "wait");
+    expect(bossOf(freed)?.at).toEqual(site);
   });
 
   test("fill up to their cap and no further", () => {

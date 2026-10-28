@@ -75,6 +75,8 @@ export interface SpawnerState {
   readonly hurtAt: number;
   /** Wrecked spawners stop spawning until fully healed. */
   readonly isWrecked: boolean;
+  /** Set when wrecked; the boss emerges once a hex beside the spawner is free. */
+  readonly isBossDue: boolean;
 }
 
 export interface Game {
@@ -100,6 +102,7 @@ const stateOf = (game: Game, { kind, at }: Spawner): SpawnerState =>
     hp: spawnerHpOf(kind),
     hurtAt: 0,
     isWrecked: false,
+    isBossDue: false,
   };
 
 export const spawnerHp = (game: Game, spawner: Spawner): number => {
@@ -175,11 +178,33 @@ const spawnedFrom = (
   mind: IDLE,
 });
 
+const unleashBoss = (game: Game, spawner: Spawner): Game => {
+  const { boss } = SPAWNERS[spawner.kind];
+  const site = spawnSiteOf(game, spawner);
+  if (!site) return game;
+  const monster = spawnedFrom(game, spawner, boss, site);
+  return logged(
+    withSpawner(
+      {
+        ...game,
+        monsters: [
+          ...game.monsters,
+          { ...monster, mind: sighted(game, monster) },
+        ],
+      },
+      spawner,
+      { ...stateOf(game, spawner), isBossDue: false },
+    ),
+    `The ${boss} emerges!`,
+  );
+};
+
 const spawnFrom = (game: Game, spawner: Spawner): Game => {
   const { land, monsters, turn } = game;
   const { kind, at } = spawner;
   const { pool, cap, interval, chance } = SPAWNERS[kind];
   const state = stateOf(game, spawner);
+  if (state.isBossDue) return unleashBoss(game, spawner);
   const rng = rngOf(land.seed, "spawns");
   const site = spawnSiteOf(game, spawner);
   if (
@@ -287,37 +312,23 @@ const attackMonster = (game: Game, target: Monster): Game => {
   );
 };
 
-const unleashBoss = (game: Game, spawner: Spawner): Game => {
-  const { boss } = SPAWNERS[spawner.kind];
-  const site = spawnSiteOf(game, spawner);
-  if (!site) return game;
-  const monster = spawnedFrom(game, spawner, boss, site);
-  return logged(
-    {
-      ...game,
-      monsters: [
-        ...game.monsters,
-        { ...monster, mind: sighted(game, monster) },
-      ],
-    },
-    `The ${boss} emerges!`,
-  );
-};
-
 const attackSpawner = (game: Game, spawner: Spawner): Game => {
   const hp = Math.max(0, spawnerHp(game, spawner) - PLAYER_DAMAGE);
   const { name } = SPAWNERS[spawner.kind];
   const wasWrecked = isWrecked(game, spawner);
-  const hurt = (wrecked: boolean) =>
+  const hurt = (change: Partial<SpawnerState>) =>
     withSpawner(game, spawner, {
       ...stateOf(game, spawner),
       hp,
       hurtAt: game.turn,
-      isWrecked: wrecked,
+      ...change,
     });
   if (hp > 0 || wasWrecked)
-    return logged(hurt(wasWrecked), `You hit the ${name}.`);
-  return unleashBoss(logged(hurt(true), `You wreck the ${name}.`), spawner);
+    return logged(hurt({ isWrecked: wasWrecked }), `You hit the ${name}.`);
+  return logged(
+    hurt({ isWrecked: true, isBossDue: true }),
+    `You wreck the ${name}.`,
+  );
 };
 
 const playerTurn = (game: Game, to: Hex): Game => {
