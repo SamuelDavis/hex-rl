@@ -100,21 +100,35 @@ describe("spawners", () => {
   const history = historyOf(newGame(landOf(out, [den])));
   const spawns = spawnsOf(history);
 
-  test("spawn monsters from their pool on top of themselves", () => {
+  test("spawn monsters from their pool beside themselves", () => {
     expect(spawns.length).toBeGreaterThan(0);
     for (const { monster } of spawns) {
       expect(monster.home).toEqual(den);
       expect(pool.map(([kind]) => kind)).toContain(monster.kind);
-      expect(monster.at).toEqual(den.at);
+      expect(hexDistance(monster.at, den.at)).toBe(1);
     }
   });
 
-  test("spawned monsters step off their spawner", () => {
-    const { monster, turn } = spawns[0]!;
-    const next = history[turn + 1]!.monsters.find(
-      ({ id }) => id === monster.id,
+  test("block monsters", () => {
+    const blocker = { kind: "camp", at: { q: 6, r: -1 } } as const;
+    const at = { q: 6, r: 0 };
+    const hostile = { ...monster(at), mind: hostileAt(at, blocker.at) };
+    const world = landOf(out, [blocker]);
+    for (const { monsters } of history)
+      for (const { at } of monsters) expect(at).not.toEqual(den.at);
+    for (const { monsters } of historyOf(gameWith([hostile], world), 20))
+      for (const { at } of monsters) expect(at).not.toEqual(blocker.at);
+  });
+
+  test("spawn nothing while hemmed in", () => {
+    const walled = Object.fromEntries(
+      Object.values(DIRECTIONS).map((d) => [
+        hexKey({ q: den.at.q + d.q, r: den.at.r + d.r }),
+        land(30),
+      ]),
     );
-    expect(next?.at).not.toEqual(den.at);
+    const hemmed = newGame(landOf({ ...out, ...walled }, [den]));
+    expect(spawnsOf(historyOf(hemmed))).toEqual([]);
   });
 
   test("fill up to their cap and no further", () => {
@@ -164,6 +178,7 @@ describe("spawners", () => {
     expect(games.at(-1)!.monsters).toMatchObject([
       { kind: SPAWNERS.den.boss, home: adjacent, mind: { state: "hostile" } },
     ]);
+    expect(hexDistance(games.at(-1)!.monsters[0]!.at, adjacent.at)).toBe(1);
   });
 
   test("have bosses stronger and richer than the monsters they spawn", () => {
@@ -431,14 +446,16 @@ describe("act", () => {
     const home = { kind: "village", at: { q: 8, r: 0 } } as const;
     const { leash } = SPAWNERS.village;
     const strays = [
-      monster(home.at, "goblin", "nw", home),
+      monster({ q: 9, r: 0 }, "goblin", "nw", home),
       monster({ q: 8, r: -12 }, "goblin", "nw", home),
     ];
     const games = historyOf(gameWith(strays, pit), 60);
     const [homebody, stray] = [0, 1].map((i) =>
       games.map(({ monsters }) => monsters[i]!),
     );
-    expect(homebody![1]!.at).not.toEqual(home.at);
+    expect(new Set(homebody!.map(({ at }) => hexKey(at))).size).toBeGreaterThan(
+      1,
+    );
     for (const { at } of homebody!)
       expect(hexDistance(at, home.at)).toBeLessThanOrEqual(leash);
     expect(hexDistance(stray!.at(-1)!.at, home.at)).toBeLessThanOrEqual(leash);

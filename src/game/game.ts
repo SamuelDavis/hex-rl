@@ -131,14 +131,17 @@ const monsterAt = (game: Game, hex: Hex) =>
 const isOccupied = (game: Game, hex: Hex) =>
   sameHex(hex, game.player.at) || monsterAt(game, hex) !== undefined;
 
+const spawnerAt = (game: Game, hex: Hex) =>
+  game.land.spawnersIn(boundsAround(hex, 1)).find(({ at }) => sameHex(at, hex));
+
+const isBlocked = (game: Game, hex: Hex) =>
+  isOccupied(game, hex) || spawnerAt(game, hex) !== undefined;
+
 const boundsAround = (hex: Hex, radius: number): Bounds => {
   const { x, y } = centerOf(hex);
   const reach = 2 * radius;
   return { minX: x - reach, minY: y - reach, maxX: x + reach, maxY: y + reach };
 };
-
-const spawnerAt = (game: Game, hex: Hex) =>
-  game.land.spawnersIn(boundsAround(hex, 1)).find(({ at }) => sameHex(at, hex));
 
 const withSpawner = (
   game: Game,
@@ -149,22 +152,28 @@ const withSpawner = (
   spawners: new Map([...game.spawners, [hexKey(at), state]]),
 });
 
+const spawnSiteOf = (game: Game, { at }: Spawner): Hex | undefined => {
+  const sites = neighborsOf(at).filter(
+    (next) => canStep(game.land.tileAt, at, next) && !isBlocked(game, next),
+  );
+  if (sites.length === 0) return undefined;
+  return rngOf(game.land.seed, "spawns").pick(sites, at.q, at.r, game.turn, 3);
+};
+
 const spawnedFrom = (
   { land, turn }: Game,
   spawner: Spawner,
   kind: MonsterKind,
-): Monster => {
-  const { at } = spawner;
-  return {
-    id: `${hexKey(at)}@${turn}`,
-    kind,
-    home: spawner,
-    at,
-    facing: rngOf(land.seed, "spawns").pick(HEADINGS, at.q, at.r, turn, 2),
-    hp: MONSTERS[kind].hp,
-    mind: IDLE,
-  };
-};
+  at: Hex,
+): Monster => ({
+  id: `${hexKey(spawner.at)}@${turn}`,
+  kind,
+  home: spawner,
+  at,
+  facing: rngOf(land.seed, "spawns").pick(HEADINGS, at.q, at.r, turn, 2),
+  hp: MONSTERS[kind].hp,
+  mind: IDLE,
+});
 
 const spawnFrom = (game: Game, spawner: Spawner): Game => {
   const { land, monsters, turn } = game;
@@ -172,9 +181,10 @@ const spawnFrom = (game: Game, spawner: Spawner): Game => {
   const { pool, cap, interval, chance } = SPAWNERS[kind];
   const state = stateOf(game, spawner);
   const rng = rngOf(land.seed, "spawns");
+  const site = spawnSiteOf(game, spawner);
   if (
     isWrecked(game, spawner) ||
-    isOccupied(game, at) ||
+    !site ||
     monsters.filter(({ home }) => sameHex(home.at, at)).length >= cap
   )
     return game;
@@ -188,6 +198,7 @@ const spawnFrom = (game: Game, spawner: Spawner): Game => {
     game,
     spawner,
     rng.weighted(pool, at.q, at.r, turn, 1),
+    site,
   );
   return withSpawner({ ...game, monsters: [...monsters, monster] }, spawner, {
     ...state,
@@ -278,7 +289,9 @@ const attackMonster = (game: Game, target: Monster): Game => {
 
 const unleashBoss = (game: Game, spawner: Spawner): Game => {
   const { boss } = SPAWNERS[spawner.kind];
-  const monster = spawnedFrom(game, spawner, boss);
+  const site = spawnSiteOf(game, spawner);
+  if (!site) return game;
+  const monster = spawnedFrom(game, spawner, boss, site);
   return logged(
     {
       ...game,
@@ -327,7 +340,7 @@ const stepToward = (
     neighbors: (hex) =>
       neighborsOf(hex).filter(
         (next) =>
-          canStep(game.land.tileAt, hex, next) && !isOccupied(game, next),
+          canStep(game.land.tileAt, hex, next) && !isBlocked(game, next),
       ),
     cost: () => 1,
     heuristic: (hex) => Math.max(0, hexDistance(hex, goal) - reach),
@@ -381,17 +394,16 @@ const wander = (
   chance: number,
   heading?: Direction,
 ): Game => {
-  const { home, at, id } = monster;
+  const { at, id } = monster;
   const rng = rngOf(game.land.seed, "wander").child(id);
-  if (!sameHex(at, home.at) && !rng.chance(chance, game.turn)) return game;
+  if (!rng.chance(chance, game.turn)) return game;
   const options = neighborsOf(at)
     .filter(
       (next) =>
-        !sameHex(next, home.at) &&
         isWithin(next, area) &&
         isWithin(next, leashOf(monster)) &&
         canStep(game.land.tileAt, at, next) &&
-        !isOccupied(game, next),
+        !isBlocked(game, next),
     )
     .map((next) => [next, alignment(at, next, heading)] as const);
   if (options.length === 0) return game;
@@ -451,7 +463,7 @@ const behave = (game: Game, monster: Monster): Game => {
       game,
       monster,
       mind.lastSeen,
-      isOccupied(game, mind.lastSeen) ? 1 : 0,
+      isBlocked(game, mind.lastSeen) ? 1 : 0,
     );
   if (mind.state === "hunting") {
     const area = { center: mind.lastSeen, radius: HUNT_RADIUS };
