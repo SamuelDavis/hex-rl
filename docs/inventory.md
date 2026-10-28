@@ -84,12 +84,26 @@ Recommendations (not implemented):
 
 Not used (fetch failed or not read): RePoE `mods.json` (exceeds 10 MB fetch limit); Brogue monster catalog carried-item fields (not in fetched range); DCSS quiver handling (not fetched); Diablo II data files (not fetched).
 
+## Decisions
+
+Override conflicting recommendations above.
+
+- Turn cost: equip, unequip, and loadout slot swaps are `Action`s that end the turn. Replaces `session.ts:87-92` free `equip` intent.
+- Quaff: free (skips `endTurn`); allowed at full HP/MP; no aim interaction, since aim is UI state (`mode.ts`) and the game only sees the quaff `Action`.
+- Chest: a marker for "one or more items on this hex", not an item. Exists iff contents non-empty; no loot, no chest. Gold-only chest valid. Monster drop is one chest holding all rolled loot.
+- Chest interaction: stepping onto a chest opens a modal with paper doll, pack, and chest contents; drag-and-drop between any two. Player picks which items to take. Chest offers "destroy": deletes chest and contents.
+- Drop: player can drop from pack via inventory screen, creating (or adding to) a chest on the ground.
+- Capacity: size-based. Each item has a `size`; pack total ≤ capacity. Bags are equipment that raise capacity; bags drop as loot. On capacity decrease (e.g. unequip bag), remove last N pack items until within limit; overflow goes into a chest on an adjacent hex.
+- Names: `[prefix] base [suffix]`, prefix and suffix optional. Base = item kind ("boots"); prefix = material ("leather"); suffix = quality (future, e.g. "of speed"); until stats exist, suffix = source monster ("of the goblin"). Example: "chain boots of the goblin".
+
 ## Unresolved
 
-- Whether equip costs a turn (DCSS-style `Action`) or is free (current spell-loadout style, `session.ts:87-92`).
-- Whether chests are opened by an action or picked up on step.
-- Inventory capacity: unlimited, slot-count, or weight.
-- Quaff in aim mode: rejected, or cancels aim, or allowed.
-- Whether potion quaff is capped (HP/MP full) and how that is rejected.
-- Which mod/affix generation model to adopt; RePoE `mods.json` not read.
-- Brogue potion frequency and monster carried-item chance values not verified.
+- Turn cost of non-equip transfers in the modal: chest→pack, pack→chest, destroy. Monsters act during each turn-costing drag.
+- "Last N items" order: acquisition order? Does the unequipped bag itself count toward the overflow?
+- Overflow placement: which adjacent hex; merge into an existing adjacent chest; fallback when no adjacent floor (own hex?).
+- Size of gold (0?) and potions (per unit or per stack); do equipped items count against capacity (assume no)?
+- Bag slot: new `Slot` member; one bag or several?
+- Step onto chest: always open modal, or auto-take gold?
+- Potion in loadout slot: binds to potion kind; slot behaviour at zero stock (empty vs show 0).
+- Destroy: confirmation prompt?
+- Brogue potion frequency and monster carried-item chance values not verified; RePoE `mods.json` not read.
