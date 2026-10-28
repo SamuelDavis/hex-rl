@@ -39,6 +39,7 @@ const TARGETED: Hsl = [110, 100, 55];
 const AIMED: Hsl = [25, 100, 55];
 const AIM_AREA = "hsl(25 100% 55% / 0.3)";
 const GOLD: Hsl = [48, 95, 55];
+const WOOD: Hsl = [28, 55, 32];
 const RINGS: Record<Monster["mind"]["state"], Hsl> = {
   idle: WHITE,
   hostile: HOSTILE,
@@ -135,7 +136,7 @@ export interface Scene {
   readonly isWrecked: (spawner: Spawner) => boolean;
   readonly player: Player;
   readonly monsters: readonly Monster[];
-  readonly gold: ReadonlyMap<string, number>;
+  readonly chests: ReadonlyMap<string, unknown>;
   readonly visible: ReadonlySet<string>;
   readonly target: TargetMark | undefined;
   readonly aim: AimMark | undefined;
@@ -152,7 +153,7 @@ export const drawScene = (
     isWrecked,
     player,
     monsters,
-    gold,
+    chests,
     visible,
     target,
     aim,
@@ -280,7 +281,7 @@ export const drawScene = (
         base,
         lit([SPAWNERS[spawner.kind].hue, isWrecked(spawner) ? 0 : 35, 30]),
       );
-    if (isVisible && gold.has(hexKey(hex))) drawGold(context, base);
+    if (isVisible && chests.has(hexKey(hex))) drawChest(context, base);
     if (target && sameHex(hex, target.at)) drawReticle(context, base, TARGETED);
     if (aim && sameHex(hex, aim.at)) drawReticle(context, base, AIMED);
     const monster = monsterAt.get(hexKey(hex));
@@ -350,28 +351,23 @@ const drawSpawner = (
   context.fill();
 };
 
-const drawGold = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
-  const radius = PIXELS_PER_UNIT * 0.18;
-  for (const [dx, dy] of [
-    [-0.6, 0.3],
-    [0.6, 0.3],
-    [0, -0.3],
-  ] as const) {
-    context.beginPath();
-    context.ellipse(
-      x + dx * radius * 2,
-      y + dy * radius * 2,
-      radius,
-      radius * TILT,
-      0,
-      0,
-      2 * Math.PI,
-    );
-    context.fillStyle = css(GOLD);
-    context.strokeStyle = css(GOLD, -25);
-    context.fill();
-    context.stroke();
-  }
+const drawChest = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
+  const width = PIXELS_PER_UNIT * 0.7;
+  const height = width * TILT;
+  const left = x - width / 2;
+  const top = y - height / 2;
+  context.fillStyle = css(WOOD);
+  context.strokeStyle = css(WOOD, -20);
+  context.fillRect(left, top, width, height);
+  context.strokeRect(left, top, width, height);
+  context.fillStyle = css(GOLD);
+  context.fillRect(left, top + height * 0.35, width, height * 0.15);
+  context.fillRect(
+    x - width * 0.08,
+    top + height * 0.3,
+    width * 0.16,
+    height * 0.3,
+  );
 };
 
 const headingOf = (direction: Direction): Vec2 => {

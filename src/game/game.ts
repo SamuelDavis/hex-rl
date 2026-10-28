@@ -33,6 +33,7 @@ import {
   type SpellId,
 } from "./spells";
 import type { Spawner, Tile } from "./terrain";
+import { lootOf, type Chest } from "./items";
 
 export const MAX_HP = 20;
 export const MAX_MP = 10;
@@ -88,8 +89,8 @@ export interface Game {
   readonly player: Player;
   readonly monsters: readonly Monster[];
   readonly spawners: ReadonlyMap<string, SpawnerState>;
-  /** Gold lying on the ground, by hex key. */
-  readonly gold: ReadonlyMap<string, number>;
+  /** What lies on the ground, by hex key; a chest is never empty. */
+  readonly chests: ReadonlyMap<string, Chest>;
   readonly kills: number;
   readonly seen: ReadonlySet<string>;
   readonly turn: number;
@@ -124,12 +125,7 @@ export type GameEvent =
   | { readonly kind: "cast"; readonly spell: SpellId }
   | { readonly kind: "hitMonster"; readonly monster: MonsterKind }
   | { readonly kind: "killed"; readonly monster: MonsterKind }
-  | {
-      readonly kind: "dropped";
-      readonly monster: MonsterKind;
-      readonly amount: number;
-    }
-  | { readonly kind: "pickedUp"; readonly amount: number }
+  | { readonly kind: "dropped"; readonly monster: MonsterKind }
   | { readonly kind: "hitSpawner"; readonly spawner: SpawnerKind }
   | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
   | { readonly kind: "emerged"; readonly monster: MonsterKind }
@@ -307,7 +303,7 @@ export const newGame = (land: Land): Game =>
       },
       monsters: [],
       spawners: new Map(),
-      gold: new Map(),
+      chests: new Map(),
       kills: 0,
       seen: new Set(),
       turn: 0,
@@ -315,35 +311,31 @@ export const newGame = (land: Land): Game =>
     }),
   );
 
-const dropGold = (game: Game, { id, kind, at }: Monster): Game => {
-  const { chance, min, max } = MONSTERS[kind].gold;
-  const rng = rngOf(game.land.seed, "gold").child(id);
-  if (!rng.chance(chance, game.turn)) return game;
-  const amount = rng.int(min, max, game.turn, 1);
-  const key = hexKey(at);
-  return recorded(
-    {
-      ...game,
-      gold: new Map([...game.gold, [key, (game.gold.get(key) ?? 0) + amount]]),
-    },
-    { kind: "dropped", monster: kind, amount },
-  );
+const chestAt = (game: Game, at: Hex): Chest | undefined =>
+  game.chests.get(hexKey(at));
+
+const withChest = (game: Game, at: Hex, { gold, items }: Chest): Game => {
+  const chests = new Map(game.chests);
+  if (gold > 0 || items.length > 0) chests.set(hexKey(at), { gold, items });
+  else chests.delete(hexKey(at));
+  return { ...game, chests };
 };
 
-const pickUpGold = (game: Game): Game => {
-  const key = hexKey(game.player.at);
-  const amount = game.gold.get(key);
-  if (!amount) return game;
-  const gold = new Map(game.gold);
-  gold.delete(key);
-  return recorded(
-    {
-      ...game,
-      gold,
-      player: { ...game.player, gold: game.player.gold + amount },
-    },
-    { kind: "pickedUp", amount },
-  );
+const piledOn = (game: Game, at: Hex, { gold, items }: Chest): Game => {
+  const pile = chestAt(game, at) ?? { gold: 0, items: [] };
+  return withChest(game, at, {
+    gold: pile.gold + gold,
+    items: [...pile.items, ...items],
+  });
+};
+
+const dropLoot = (game: Game, monster: Monster): Game => {
+  const loot = lootOf(game.land.seed, monster);
+  if (!loot) return game;
+  return recorded(piledOn(game, monster.at, loot), {
+    kind: "dropped",
+    monster: monster.kind,
+  });
 };
 
 const attackMonster = (game: Game, target: Monster, damage: number): Game => {
@@ -356,7 +348,7 @@ const attackMonster = (game: Game, target: Monster, damage: number): Game => {
       },
       { kind: "hitMonster", monster: target.kind },
     );
-  return dropGold(
+  return dropLoot(
     recorded(
       {
         ...game,
@@ -404,7 +396,7 @@ const hitAll = (game: Game, hits: readonly (readonly [Hex, number])[]) =>
 const playerTurn = (game: Game, to: Hex): Game =>
   isBlocked(game, to)
     ? hit(game, to, PLAYER_DAMAGE)
-    : pickUpGold({ ...game, player: { ...game.player, at: to } });
+    : { ...game, player: { ...game.player, at: to } };
 
 const melee = (game: Game, toward: Direction, damage: number): Game => {
   const { land, player } = game;

@@ -30,9 +30,7 @@ export const narrationOf = (event: GameEvent): string => {
     case "killed":
       return `You kill the ${event.monster}.`;
     case "dropped":
-      return `The ${event.monster} drops ${event.amount} gold.`;
-    case "pickedUp":
-      return `You pick up ${event.amount} gold.`;
+      return `The ${event.monster} drops a chest.`;
     case "hitSpawner":
       return `You hit the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":

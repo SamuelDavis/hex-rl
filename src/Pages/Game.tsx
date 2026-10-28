@@ -146,7 +146,7 @@ export default function Game() {
     if (!canvas) return;
     const { width, height } = getSize();
     const game = getGame();
-    const { land, player, monsters, gold, seen } = game;
+    const { land, player, monsters, chests, seen } = game;
     const ratio = window.devicePixelRatio;
     canvas.width = width * ratio;
     canvas.height = height * ratio;
@@ -158,7 +158,7 @@ export default function Game() {
       isWrecked: (spawner) => isWrecked(game, spawner),
       player,
       monsters,
-      gold,
+      chests,
       visible: getVisible(),
       target: getTargetMark(),
       aim: getAimMark(),

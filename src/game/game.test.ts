@@ -43,6 +43,7 @@ import {
   SPELLS,
 } from "./spells";
 import type { Spawner } from "./terrain";
+import { lootOf, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
 import {
   east,
@@ -318,31 +319,39 @@ describe("act", () => {
     expect(next.kills).toBe(1);
   });
 
-  test("slain monsters may drop a variable amount of gold where they fell", () => {
-    const { min, max } = MONSTERS.kobold.gold;
-    const drops = Array.from(
-      { length: 50 },
-      (_, i) =>
-        act(
-          gameWith([{ ...monster(east, "kobold"), id: `${i}`, hp: 1 }]),
-          "se",
-        ).gold.get(hexKey(east)) ?? 0,
+  test("slain monsters drop their loot, if any, in a chest where they fell", () => {
+    const kobolds = Array.from({ length: 50 }, (_, i) => ({
+      ...monster(east, "kobold"),
+      id: `${i}`,
+      hp: 1,
+    }));
+    const chests = kobolds.map((kobold) =>
+      act(gameWith([kobold]), "se").chests.get(hexKey(east)),
     );
-    const amounts = drops.filter((amount) => amount > 0);
-    expect(amounts.length).toBeGreaterThan(0);
-    expect(amounts.length).toBeLessThan(drops.length);
-    expect(new Set(amounts).size).toBeGreaterThan(1);
-    for (const amount of amounts) {
-      expect(amount).toBeGreaterThanOrEqual(min);
-      expect(amount).toBeLessThanOrEqual(max);
-    }
+    expect(chests).toEqual(kobolds.map((kobold) => lootOf(0, kobold)));
+    expect(chests).toContain(undefined);
   });
 
-  test("stepping onto gold picks it up", () => {
-    const game = { ...facingEast(), gold: new Map([[hexKey(east), 5]]) };
+  test("loot falling where a chest lies joins it", () => {
+    const troll = { ...monster(east, "troll"), hp: 1 };
+    const loot = lootOf(0, troll)!;
+    const potion: Item = { id: "p", kind: "potion", potion: "mana" };
+    const game = {
+      ...gameWith([troll]),
+      chests: new Map([[hexKey(east), { gold: 1, items: [potion] }]]),
+    };
+    expect(act(game, "se").chests.get(hexKey(east))).toEqual({
+      gold: 1 + loot.gold,
+      items: [potion, ...loot.items],
+    });
+  });
+
+  test("stepping onto a chest leaves it be", () => {
+    const chest = { gold: 5, items: [] };
+    const game = { ...facingEast(), chests: new Map([[hexKey(east), chest]]) };
     const next = act(game, "se");
-    expect(next.player.gold).toBe(5);
-    expect(next.gold.has(hexKey(east))).toBe(false);
+    expect(next.player.gold).toBe(0);
+    expect(next.chests.get(hexKey(east))).toEqual(chest);
   });
 
   test("adjacent monsters attack after the player acts", () => {
