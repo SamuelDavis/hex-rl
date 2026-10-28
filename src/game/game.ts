@@ -596,11 +596,16 @@ const behave = (game: Game, monster: Monster): Game => {
 const monsterTurn = (game: Game, monster: Monster): Game => {
   const { land, player } = game;
   if (isOver(game)) return game;
-  const toward = directionBetween(monster.at, player.at);
-  if (toward && canStep(land.tileAt, monster.at, player.at))
-    return strike(game, monster, toward);
   const mind = mindOf(game, monster);
-  return behave(updated(game, monster, { mind }), { ...monster, mind });
+  const aware = { ...monster, mind };
+  const toward = directionBetween(monster.at, player.at);
+  if (
+    mind.state === "hostile" &&
+    toward &&
+    canStep(land.tileAt, monster.at, player.at)
+  )
+    return strike(game, aware, toward);
+  return behave(updated(game, monster, { mind }), aware);
 };
 
 const monstersTurn = (game: Game): Game =>
