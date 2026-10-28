@@ -1,6 +1,6 @@
 # UI Architecture
 
-Research snapshot at `706f1d4` (refactor: monsters perceive before acting). Sources: [Sources](#sources).
+Prior art researched at `706f1d4`; [Architecture](#architecture) is the implemented contract. Sources: [Sources](#sources).
 
 Goal: game advances identically under tests, GUI (`src/Pages/Game.tsx`), or TUI. UI owns input mode; game owns outcomes.
 
@@ -16,42 +16,17 @@ Goal: game advances identically under tests, GUI (`src/Pages/Game.tsx`), or TUI.
 - Redux guidance: state used by one component stays local (`isDropdownOpen` example); state shared or derived belongs in the store. Maps to: aim/target are UI-only, but target validity depends on game state. [Redux-FAQ §"Do I have to put all my state into Redux?"]
 - Elm: Model, Update, View; program receives messages and renders state. Only Update changing state was not confirmed. [Elm-Architecture]
 
-## Current tangles (hexrl)
+## Architecture
 
-- UI signal holds domain + UI mode together: `explore()` bundles `game`, `target`, `aiming` (`src/Pages/Game.tsx:93-98`).
-- `perform` sequences domain and UI in one setter: `act`, then `tracked` for the target invariant, then clears `aiming` (`Game.tsx:138-144`). Any caller that forgets `tracked` breaks the target invariant.
-- Slot logic decides mode in the view: whether to enter aim mode checks `unreadyReasonOf` (exported domain fn, `src/game/game.ts:422`) and `aim.kind` (`Game.tsx:162-175`). Re-deriving domain rules in UI.
-- Slot re-press confirm lives in the view: `if (aiming?.spell === spell) return castAimed()` (`Game.tsx:166`).
-- Key routing branches on mode in the view: `handleKey` (`Game.tsx:193-205`); `KEYS` is gated by `!isAiming`, but `TARGET_KEY` is not, so `t` cycles targets during aim (`Game.tsx:198`). Mode rules are implicit.
-- Domain emits prose: `aimProblemOf` returns English (`game.ts:403-420`); `castSpell` appends it to the log (`game.ts:437`).
-- No outcome from `act`: a blocked move returns the same `game` object (`game.ts:654`); a rejected cast returns a log-appended `game` (`game.ts:437`). Caller infers accepted-or-not from `turn`.
-- Log is the only event channel: `logged` appends strings (`game.ts:125-128`); `act` consumers can't branch on what happened (kill, wreck, cast, reject).
-- Renderer reads a global, not its input: `isWrecked: (spawner) => isWrecked(getGame(), spawner)` (`Game.tsx:243`).
-- Seed chosen in UI: `randomSeed()` (`Game.tsx:91`). Fine for the GUI; a headless driver must inject the seed.
-- Already clean: `act(game, action)` is the single domain entry (`game.ts:646`); `Action` is a closed union (`game.ts:99`); `target.ts` selection is pure over `Game` (`target.ts:37-59`); `aim.ts` is pure (`aim.ts:7-25`); `spells.ts` is data with an `aim` discriminant (`spells.ts:3-46`); cooldown is state (`game.ts:57`, `103-104`, `440-446`); tests drive `act` directly (39 call sites, `src/game/game.test.ts`).
+One-way flow, Elm-style [Elm-Architecture]: frontend → `Intent` → `update` (`src/game/session.ts`) → `transition` (`src/game/mode.ts`) → `Action` → `act` (`src/game/game.ts`) → `Game.events` → frontend.
 
-## Recommended model
-
-Two layers, one-way dependency: UI → (intent) → pure mode reducer → (Action) → `act` → (outcome) → renderer.
-
-- Mode is a discriminated union, UI-owned, pure: `Explore { target? } | Aim { spell, range, at, target? }`. Transitions are `(mode, intent, game) → { mode, action? }`. Exhaustive `switch` on `mode.kind`, as in `mind.ts`.
-- Intents are UI-neutral: `move(direction)`, `slot(n)`, `cycleTarget`, `confirm`, `cancel`, `wait`. Keyboard, pointer (`onTap`, `Game.tsx:207`), and TUI keys map to these in the adapter only.
-- Cancel never emits an `Action` (no turn spent). Confirm emits one `Cast`. Explicit `Aim → Explore` edges replace the implicit clear in `perform`.
-- `act` returns `{ game, events }` where events are typed: `{ kind: "cast", spell }`, `{ kind: "rejected", reason }` with `reason` a union (`"cooldown" | "mana" | "no-target" | "out-of-reach" | "out-of-range" | "out-of-sight"`), `{ kind: "killed", kind }`, etc. Prose moves to the UI from `reason`.
-- A headless `Session` (`newSession(seed)`, `dispatch(intent)`, `snapshot()`) owns `game + mode`, runs `tracked` after every accepted action, and is what tests, the Solid page, and a TUI all call. Single place for the target invariant. `testing.ts` fixtures stay for domain tests.
-- Renderer takes a snapshot: `(game, mode)`. No `getGame()` closures.
-- Seed injected into `newSession`; `randomSeed` stays in the page.
-
-## Mapping to this codebase
-
-- `src/game/game.ts`: return outcome from `act` (`:646-656`); replace `aimProblemOf` / `unreadyReasonOf` strings with `RejectReason` (`:403-437`); keep `cooldownOf`/`unreadyReasonOf` as the single rule source and make the UI consume the reason, not re-check it. Keep `logged`/`log` only if a log view remains; derive it from events in the adapter.
-- `src/game/target.ts`: unchanged; already pure. Its `tracked` call moves from `Game.tsx:141` into `Session`.
-- `src/game/aim.ts`: unchanged, or folded into the new `Aim` transitions (`startAim` on slot press, `aimed` on move). Keep it pure.
-- New `src/game/mode.ts` (or `src/game/input.ts`): `Mode` union and `(mode, intent, game)` transition. Lift `Aiming` (`Game.tsx:69-73`) and the slot/key rules (`Game.tsx:162-205`) here.
-- `src/Pages/Game.tsx`: keep signals, canvas, DOM. Delete `explore`'s mixed state (`:93-98`), `perform`/`steer`/`castSlot` logic (`:138-175`), and `handleKey` branching (`:193-205`). Reads go through a snapshot.
-- `src/game/draw.ts`: takes snapshot data only (already takes most of it).
-- Tests: table tests on `mode.ts` transitions (Red/Green, pure); `Session` tests for "target cleared when out of range after accepted action"; keep `game.test.ts` on `act` for domain rules.
-- Monster-side issue in `game.ts:611-619` (O(n²) `find`) is already in [monster-ai.md](monster-ai.md); not a UI concern.
+- **Session is the only driver contract.** `newSession(seed, range)` / `update(session, intent)` are pure; tests, the Solid page, and any TUI reduce intents over it. Frontends own only key/pointer → `Intent` maps, the seed source, and rendering. Invariants run once, in `update`: target re-tracked after every action, log bounded to `LOG_LENGTH`.
+- **Mode is UI state, not game state** [Redux-FAQ]: `Mode = explore | aim`, exhaustive switches, `(mode, command, game, target) → { mode, action? }`. Cancel never yields an `Action`; confirm or re-pressing the aimed slot yields one `Cast`. Legality comes from the domain (`unreadinessOf`), as NetHack's `getpos` takes validity from its caller [NH-do_name.c].
+- **Target is orthogonal to mode**: lives on `Session`, so `cycleTarget` works while aiming.
+- **`Action` is the sole game input** (Command pattern [GPP-Command]); `act` is the sole entry.
+- **The game reports what happened as data**: `Game.events` holds the typed `GameEvent`s of the action that produced the state (cleared each `act`); rejected actions spend no turn and record `{ kind: "rejected", action, reason: Rejection }`. No prose in the domain; `narrationOf` (`src/game/narration.ts`) renders events for any text frontend.
+- **No event queue**: turn-based input-driven loop; events are returned synchronously, not dispatched [GPP-EventQueue, GPP-GameLoop].
+- **Renderers read a snapshot**, never live getters.
 
 ## Sources
 
@@ -71,5 +46,3 @@ Not used (fetch failed or content absent): Harel-1987 PDF (fetch error; prior ci
 
 - Brogue's targeting cursor location and whether it calls display directly. Need a targeted fetch of the full `Items.c` or a grep of `chooseTarget` in BrogueCE.
 - Cogmind's "domains" for command contexts (REX engine). Primary text not retrieved.
-- Whether a TUI is planned. If not, `Session` may be YAGNI; the mode union and outcome type still pay off for tests.
-- Whether `log` stays in `Game` (domain-visible) or moves to events. Depends on whether a log view needs to replay past messages.

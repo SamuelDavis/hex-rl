@@ -14,6 +14,8 @@ import {
   SPAWNER_HEAL_INTERVAL,
   type Action,
   type Game,
+  type GameEvent,
+  type Rejection,
   type SpawnerState,
 } from "./game";
 import {
@@ -51,6 +53,12 @@ import {
   monster,
   origin,
 } from "./testing";
+
+const rejection = (action: Action, reason: Rejection): GameEvent => ({
+  kind: "rejected",
+  action,
+  reason,
+});
 
 const pit = landOf({ "0,0": land(0) });
 
@@ -270,7 +278,8 @@ describe("spawners", () => {
 describe("act", () => {
   test("a step too high to climb spends no turn", () => {
     const game = facingEast(landOf({ "1,0": land(12) }));
-    expect(act(game, "se")).toBe(game);
+    const next = act(game, "se");
+    expect(next).toEqual({ ...game, events: [rejection("se", "blocked")] });
   });
 
   test("a step onto level ground moves and spends a turn", () => {
@@ -535,7 +544,10 @@ describe("act", () => {
     };
     const dead = act(game, "wait");
     expect(isOver(dead)).toBe(true);
-    expect(act(dead, "se")).toBe(dead);
+    expect(act(dead, "se")).toEqual({
+      ...dead,
+      events: [rejection("se", "over")],
+    });
   });
 });
 
@@ -567,7 +579,7 @@ describe("cast", () => {
     const again = act(cast, { spell: "heal" });
     expect(again.turn).toBe(cast.turn);
     expect(again.player).toEqual(cast.player);
-    expect(again.log.at(-1)).toMatch(/not ready/);
+    expect(again.events).toEqual([rejection({ spell: "heal" }, "not-ready")]);
   });
 
   test("can't be cast without enough mana, spending no turn", () => {
@@ -575,7 +587,7 @@ describe("cast", () => {
     const drained = { ...game, player: { ...game.player, mp: 1 } };
     const next = act(drained, { spell: "heal" });
     expect(next.turn).toBe(0);
-    expect(next.log.at(-1)).toMatch(/mana/);
+    expect(next.events).toEqual([rejection({ spell: "heal" }, "no-mana")]);
   });
 
   test("mana regenerates over time, up to the maximum", () => {
@@ -629,9 +641,11 @@ describe("cast", () => {
     const far = { q: 3, r: 0 };
     const none = act(gameWith([]), { spell: "strike" });
     expect(none.turn).toBe(0);
-    expect(none.log.at(-1)).toBe("Cannot cast strike without a target.");
+    expect(none.events).toEqual([rejection({ spell: "strike" }, "no-target")]);
     const distant = act(gameWith(trolls(far)), { spell: "strike", at: far });
     expect(distant.turn).toBe(0);
-    expect(distant.log.at(-1)).toMatch(/reach/);
+    expect(distant.events).toEqual([
+      rejection({ spell: "strike", at: far }, "out-of-reach"),
+    ]);
   });
 });

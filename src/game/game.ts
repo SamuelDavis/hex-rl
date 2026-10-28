@@ -15,7 +15,13 @@ import {
   type Hex,
 } from "./hex";
 import { IDLE, sighted, tetherOf, unsighted, type Mind } from "./mind";
-import { MONSTERS, SPAWNERS, spawnerHpOf, type MonsterKind } from "./monsters";
+import {
+  MONSTERS,
+  SPAWNERS,
+  spawnerHpOf,
+  type MonsterKind,
+  type SpawnerKind,
+} from "./monsters";
 import { canNotice, SIGHT, visibleFrom } from "./sight";
 import {
   CLEAVE_SPLASH,
@@ -38,7 +44,6 @@ export const SPAWNER_HEAL_INTERVAL = 5;
 const WANDER_CHANCE = 0.3;
 const HP_REGEN_INTERVAL = 10;
 const MP_REGEN_INTERVAL = 2;
-const LOG_LENGTH = 50;
 const PATH_BUDGET = 200;
 
 export interface Land {
@@ -88,7 +93,8 @@ export interface Game {
   readonly kills: number;
   readonly seen: ReadonlySet<string>;
   readonly turn: number;
-  readonly log: readonly string[];
+  /** What the action that produced this state did, in order. */
+  readonly events: readonly GameEvent[];
 }
 
 export interface Cast {
@@ -97,6 +103,38 @@ export interface Cast {
 }
 
 export type Action = Direction | "wait" | Cast;
+
+export type Rejection =
+  | "blocked"
+  | "over"
+  | "not-ready"
+  | "no-mana"
+  | "no-target"
+  | "out-of-reach"
+  | "out-of-range"
+  | "out-of-sight";
+
+export type GameEvent =
+  | { readonly kind: "began" }
+  | {
+      readonly kind: "rejected";
+      readonly action: Action;
+      readonly reason: Rejection;
+    }
+  | { readonly kind: "cast"; readonly spell: SpellId }
+  | { readonly kind: "hitMonster"; readonly monster: MonsterKind }
+  | { readonly kind: "killed"; readonly monster: MonsterKind }
+  | {
+      readonly kind: "dropped";
+      readonly monster: MonsterKind;
+      readonly amount: number;
+    }
+  | { readonly kind: "pickedUp"; readonly amount: number }
+  | { readonly kind: "hitSpawner"; readonly spawner: SpawnerKind }
+  | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
+  | { readonly kind: "emerged"; readonly monster: MonsterKind }
+  | { readonly kind: "struck"; readonly monster: MonsterKind }
+  | { readonly kind: "died" };
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
 
@@ -122,9 +160,14 @@ export const isWrecked = (game: Game, spawner: Spawner): boolean =>
   stateOf(game, spawner).isWrecked &&
   spawnerHp(game, spawner) < spawnerHpOf(spawner.kind);
 
-const logged = (game: Game, ...messages: string[]): Game => ({
+const recorded = (game: Game, ...events: GameEvent[]): Game => ({
   ...game,
-  log: [...game.log, ...messages].slice(-LOG_LENGTH),
+  events: [...game.events, ...events],
+});
+
+const rejected = (game: Game, action: Action, reason: Rejection): Game => ({
+  ...game,
+  events: [{ kind: "rejected", action, reason }],
 });
 
 export const visibleOf = ({ land, player }: Game): Set<string> =>
@@ -190,7 +233,7 @@ const unleashBoss = (game: Game, spawner: Spawner): Game => {
   const site = spawnSiteOf(game, spawner);
   if (!site) return game;
   const monster = spawnedFrom(game, spawner, boss, site);
-  return logged(
+  return recorded(
     withSpawner(
       {
         ...game,
@@ -202,7 +245,7 @@ const unleashBoss = (game: Game, spawner: Spawner): Game => {
       spawner,
       { ...stateOf(game, spawner), isBossDue: false },
     ),
-    `The ${boss} emerges!`,
+    { kind: "emerged", monster: boss },
   );
 };
 
@@ -268,7 +311,7 @@ export const newGame = (land: Land): Game =>
       kills: 0,
       seen: new Set(),
       turn: 0,
-      log: ["You set out into the wilds."],
+      events: [{ kind: "began" }],
     }),
   );
 
@@ -278,12 +321,12 @@ const dropGold = (game: Game, { id, kind, at }: Monster): Game => {
   if (!rng.chance(chance, game.turn)) return game;
   const amount = rng.int(min, max, game.turn, 1);
   const key = hexKey(at);
-  return logged(
+  return recorded(
     {
       ...game,
       gold: new Map([...game.gold, [key, (game.gold.get(key) ?? 0) + amount]]),
     },
-    `The ${kind} drops ${amount} gold.`,
+    { kind: "dropped", monster: kind, amount },
   );
 };
 
@@ -293,34 +336,34 @@ const pickUpGold = (game: Game): Game => {
   if (!amount) return game;
   const gold = new Map(game.gold);
   gold.delete(key);
-  return logged(
+  return recorded(
     {
       ...game,
       gold,
       player: { ...game.player, gold: game.player.gold + amount },
     },
-    `You pick up ${amount} gold.`,
+    { kind: "pickedUp", amount },
   );
 };
 
 const attackMonster = (game: Game, target: Monster, damage: number): Game => {
   const hp = target.hp - damage;
   if (hp > 0)
-    return logged(
+    return recorded(
       {
         ...game,
         monsters: game.monsters.map((m) => (m === target ? { ...m, hp } : m)),
       },
-      `You hit the ${target.kind}.`,
+      { kind: "hitMonster", monster: target.kind },
     );
   return dropGold(
-    logged(
+    recorded(
       {
         ...game,
         monsters: game.monsters.filter((m) => m !== target),
         kills: game.kills + 1,
       },
-      `You kill the ${target.kind}.`,
+      { kind: "killed", monster: target.kind },
     ),
     target,
   );
@@ -328,7 +371,6 @@ const attackMonster = (game: Game, target: Monster, damage: number): Game => {
 
 const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
   const hp = Math.max(0, spawnerHp(game, spawner) - damage);
-  const { name } = SPAWNERS[spawner.kind];
   const wasWrecked = isWrecked(game, spawner);
   const hurt = (change: Partial<SpawnerState>) =>
     withSpawner(game, spawner, {
@@ -338,11 +380,14 @@ const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
       ...change,
     });
   if (hp > 0 || wasWrecked)
-    return logged(hurt({ isWrecked: wasWrecked }), `You hit the ${name}.`);
-  return logged(
-    hurt({ isWrecked: true, isBossDue: true }),
-    `You wreck the ${name}.`,
-  );
+    return recorded(hurt({ isWrecked: wasWrecked }), {
+      kind: "hitSpawner",
+      spawner: spawner.kind,
+    });
+  return recorded(hurt({ isWrecked: true, isBossDue: true }), {
+    kind: "wrecked",
+    spawner: spawner.kind,
+  });
 };
 
 const hit = (game: Game, at: Hex, damage: number): Game => {
@@ -400,41 +445,41 @@ const EFFECTS: Record<SpellId, (game: Game, at: Hex | undefined) => Game> = {
   },
 };
 
-const aimProblemOf = (game: Game, { spell, at }: Cast): string | undefined => {
+const aimProblemOf = (
+  game: Game,
+  { spell, at }: Cast,
+): Rejection | undefined => {
   const { aim } = SPELLS[spell];
   const { land, player } = game;
   if (aim.kind === "monster") {
     const target = at && monsterAt(game, at);
-    if (!target) return `Cannot cast ${spell} without a target.`;
+    if (!target) return "no-target";
     const isAdjacent = directionBetween(player.at, target.at) !== undefined;
     if (!isAdjacent || !canStep(land.tileAt, player.at, target.at))
-      return `Cannot cast ${spell}: the ${target.kind} is out of reach.`;
+      return "out-of-reach";
   }
   if (aim.kind === "hex") {
-    if (!at || hexDistance(player.at, at) > aim.range)
-      return `Cannot cast ${spell}: out of range.`;
-    if (!visibleOf(game).has(hexKey(at)))
-      return `Cannot cast ${spell}: out of sight.`;
+    if (!at || hexDistance(player.at, at) > aim.range) return "out-of-range";
+    if (!visibleOf(game).has(hexKey(at))) return "out-of-sight";
   }
   return undefined;
 };
 
-export const unreadyReasonOf = (
+export const unreadinessOf = (
   game: Game,
   spell: SpellId,
-): string | undefined => {
-  if (cooldownOf(game, spell) > 0) return `Cannot cast ${spell}: not ready.`;
-  if (game.player.mp < SPELLS[spell].mp)
-    return `Cannot cast ${spell}: not enough mana.`;
+): Rejection | undefined => {
+  if (cooldownOf(game, spell) > 0) return "not-ready";
+  if (game.player.mp < SPELLS[spell].mp) return "no-mana";
   return undefined;
 };
 
-const castProblemOf = (game: Game, cast: Cast): string | undefined =>
-  unreadyReasonOf(game, cast.spell) ?? aimProblemOf(game, cast);
+const castProblemOf = (game: Game, cast: Cast): Rejection | undefined =>
+  unreadinessOf(game, cast.spell) ?? aimProblemOf(game, cast);
 
 const castSpell = (game: Game, cast: Cast): Game => {
   const problem = castProblemOf(game, cast);
-  if (problem) return logged(game, problem);
+  if (problem) return rejected(game, cast, problem);
   const { player, turn } = game;
   const { mp, cooldown } = SPELLS[cast.spell];
   const spent = {
@@ -447,7 +492,7 @@ const castSpell = (game: Game, cast: Cast): Game => {
   };
   return endTurn(
     EFFECTS[cast.spell](
-      logged({ ...game, player: spent }, `You cast ${cast.spell}.`),
+      recorded({ ...game, player: spent }, { kind: "cast", spell: cast.spell }),
       cast.at,
     ),
   );
@@ -538,13 +583,13 @@ const wander = (
 const strike = (game: Game, monster: Monster, toward: Direction): Game => {
   const { player } = game;
   const hp = player.hp - MONSTERS[monster.kind].damage;
-  const hit = `The ${monster.kind} hits you.`;
-  return logged(
+  return recorded(
     updated({ ...game, player: { ...player, hp } }, monster, {
       facing: toward,
       mind: sighted(monster.mind, monster.at, game.player),
     }),
-    ...(hp > 0 ? [hit] : [hit, "You die."]),
+    { kind: "struck", monster: monster.kind },
+    ...(hp > 0 ? [] : [{ kind: "died" } as const]),
   );
 };
 
@@ -643,14 +688,19 @@ const endTurn = (acted: Game): Game =>
     populate(regenerate(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
   );
 
-export const act = (game: Game, action: Action): Game => {
-  if (isOver(game)) return game;
+const actOn = (game: Game, action: Action): Game => {
   const { player, land } = game;
   if (action === "wait") return endTurn(game);
   if (typeof action === "object") return castSpell(game, action);
   if (action !== player.facing)
     return endTurn({ ...game, player: { ...player, facing: action } });
   const to = add(player.at, DIRECTIONS[action]);
-  if (!canStep(land.tileAt, player.at, to)) return game;
+  if (!canStep(land.tileAt, player.at, to))
+    return rejected(game, action, "blocked");
   return endTurn(playerTurn(game, to));
 };
+
+export const act = (game: Game, action: Action): Game =>
+  isOver(game)
+    ? rejected(game, action, "over")
+    : actOn({ ...game, events: [] }, action);
