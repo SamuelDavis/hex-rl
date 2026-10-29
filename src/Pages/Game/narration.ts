@@ -1,6 +1,6 @@
-import type { Action, Cargo, GameEvent, Rejection, Where } from "./game";
-import { nameOf, type Item } from "./items";
-import { SPAWNERS } from "./monsters";
+import type { Action, Cargo, GameEvent, Rejection, Where } from "../../game/game";
+import { nameOf, type Item } from "../../game/items";
+import { SPAWNERS } from "../../game/monsters";
 
 const REASONS: Record<Rejection, string> = {
   blocked: "the way is blocked",

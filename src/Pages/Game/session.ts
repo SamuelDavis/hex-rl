@@ -7,12 +7,12 @@ import {
   type Game,
   type GameEvent,
   type Transfer,
-} from "./game";
-import { isPotion } from "./items";
-import { hexKey, sameHex, type Hex } from "./hex";
+} from "../../game/game";
+import { isPotion } from "../../game/items";
+import { hexKey, sameHex, type Hex } from "../../game/hex";
 import { EXPLORE, transition, type Command, type Mode } from "./mode";
 import { nextTarget, targetInView, tracked, type Target } from "./target";
-import { createTerrain } from "./terrain";
+import { createTerrain } from "../../game/terrain";
 
 export const LOG_LENGTH = 50;
 

@@ -4,7 +4,7 @@ import Layout from "./Pages/Layout";
 import { AppStateProvider } from "./AppState";
 
 const Home = lazy(() => import("./Pages/Home"));
-const Game = lazy(() => import("./Pages/Game"));
+const Game = lazy(() => import("./Pages/Game/Game"));
 const Styleguide = lazy(() => import("./Pages/Styleguide"));
 const NotFound = lazy(() => import("./Pages/NotFound"));
 

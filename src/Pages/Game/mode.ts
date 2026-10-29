@@ -1,7 +1,7 @@
 import { aimed, startAim } from "./aim";
-import { unreadinessOf, type Action, type Game } from "./game";
-import type { Direction, Hex } from "./hex";
-import { SPELLS, type SpellId } from "./spells";
+import { unreadinessOf, type Action, type Game } from "../../game/game";
+import type { Direction, Hex } from "../../game/hex";
+import { SPELLS, type SpellId } from "../../game/spells";
 
 export interface Aiming {
   readonly kind: "aim";

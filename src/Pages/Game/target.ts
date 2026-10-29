@@ -1,6 +1,6 @@
-import { visibleOf, type Game, type Monster } from "./game";
-import { hexDistance, hexKey, type Hex } from "./hex";
-import { visibleFrom } from "./sight";
+import { visibleOf, type Game, type Monster } from "../../game/game";
+import { hexDistance, hexKey, type Hex } from "../../game/hex";
+import { visibleFrom } from "../../game/sight";
 
 export const TARGET_MEMORY = 3;
 

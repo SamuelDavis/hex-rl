@@ -20,8 +20,8 @@ import {
   rebound,
   type ControlId,
   type Keymap,
-} from "../game/controls";
-import { drawScene, groundOffsetOf, screenRadiusOf } from "../game/draw";
+} from "./controls";
+import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
 import {
   cooldownOf,
   GOLD,
@@ -34,9 +34,9 @@ import {
   type Game as GameState,
   type GameEvent,
   type Where,
-} from "../game/game";
-import { directionToward, hexKey, type Direction } from "../game/hex";
-import { narrationOf } from "../game/narration";
+} from "../../game/game";
+import { directionToward, hexKey, type Direction } from "../../game/hex";
+import { narrationOf } from "./narration";
 import {
   capacityOf,
   isPotion,
@@ -48,11 +48,11 @@ import {
   sizeOf,
   type Item,
   type PotionKind,
-} from "../game/items";
-import { newSession, update, type Intent } from "../game/session";
-import { fireballSplashOf, SPELL_IDS, SPELLS } from "../game/spells";
-import { sightOf, targetInView } from "../game/target";
-import { Biome, SEA_LEVEL, surfaceOf } from "../game/terrain";
+} from "../../game/items";
+import { newSession, update, type Intent } from "./session";
+import { fireballSplashOf, SPELL_IDS, SPELLS } from "../../game/spells";
+import { sightOf, targetInView } from "./target";
+import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 
 const PAD_DIRECTIONS: readonly Direction[] = ["nw", "n", "ne", "sw", "s", "se"];
 

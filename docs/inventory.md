@@ -53,7 +53,7 @@ Current seams (`src/game/`):
 - `Command` (`mode.ts:17-22`) and `chosen()` (`mode.ts:34-44`) dispatch `slot` to a spell; potion slot needs a branch that returns `{ mode: EXPLORE, action: quaff }` without entering aim.
 - `ControlId` `slot-${number}` (`controls.ts:4-10`) already bound to six keys; potions reuse slot controls; no new controls.
 - `GameEvent` union (`game.ts:117-137`) is consumed by an exhaustive switch in `narration.ts:21-46`; new events force narration at compile time.
-- UI: `SpellSlots` (`Pages/Game.tsx:361-385`) renders `spell ?? "—"` and cooldown; `SpellPicker` (`Pages/Game.tsx:388-425`) is the equip UI; header shows `Gold` (`Pages/Game.tsx:178`).
+- UI: `SpellSlots` (`src/Pages/Game/Game.tsx:361-385`) renders `spell ?? "—"` and cooldown; `SpellPicker` (`src/Pages/Game/Game.tsx:388-425`) is the equip UI; header shows `Gold` (`src/Pages/Game/Game.tsx:178`).
 - Monster loot is data: `MONSTERS[kind].gold = { chance, min, max }` (`monsters.ts:7`); death path `attackMonster` → `dropGold` (`game.ts:349-370`, dropGold at `:359`).
 
 Recommendations (not implemented):
@@ -86,7 +86,7 @@ Not used (fetch failed or not read): RePoE `mods.json` (exceeds 10 MB fetch limi
 
 ## Decisions
 
-Override conflicting recommendations above. Implemented: `src/game/items.ts` (model, loot, names, capacity, overflow), `src/game/game.ts` (`Transfer`, `Bind`, `Quaff`, `Destroy` actions), `src/game/session.ts` (`isInventoryOpen`).
+Override conflicting recommendations above. Implemented: `src/game/items.ts` (model, loot, names, capacity, overflow), `src/game/game.ts` (`Transfer`, `Bind`, `Quaff`, `Destroy` actions), `src/Pages/Game/session.ts` (`isInventoryOpen`).
 
 - Underfoot chest is `Where` `"ground"`, not `"chest"`: `"chest"` is a paper-doll place.
 - Destroy spends a turn, like every other change to the world but quaffing.

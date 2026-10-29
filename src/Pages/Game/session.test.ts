@@ -9,9 +9,9 @@ import {
   type Intent,
   type Session,
 } from "./session";
-import { east, gameWith, monster } from "./testing";
-import { hexKey } from "./hex";
-import { STARTING_LOADOUT, type Game } from "./game";
+import { east, gameWith, monster } from "../../game/testing";
+import { hexKey } from "../../game/hex";
+import { STARTING_LOADOUT, type Game } from "../../game/game";
 
 const RANGE = 5;
 const near = { q: 3, r: 0 };

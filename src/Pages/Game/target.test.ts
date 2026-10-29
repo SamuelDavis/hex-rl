@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import type { Game } from "./game";
-import { hexKey } from "./hex";
+import type { Game } from "../../game/game";
+import { hexKey } from "../../game/hex";
 import {
   nextTarget,
   sightOf,
@@ -8,7 +8,7 @@ import {
   tracked,
   type Target,
 } from "./target";
-import { gameWith, land, landOf, monster, origin } from "./testing";
+import { gameWith, land, landOf, monster, origin } from "../../game/testing";
 
 const RANGE = 5;
 const near = monster({ q: 2, r: 0 }, "goblin", "se");

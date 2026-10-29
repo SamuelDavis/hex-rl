@@ -1,5 +1,5 @@
-import type { Direction } from "./hex";
-import { SLOT_COUNT } from "./game";
+import type { Direction } from "../../game/hex";
+import { SLOT_COUNT } from "../../game/game";
 import type { Intent } from "./session";
 
 export type ControlId =

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { EXPLORE, transition, type Mode } from "./mode";
-import { SPELLS } from "./spells";
-import { east, facingEast } from "./testing";
+import { SPELLS } from "../../game/spells";
+import { east, facingEast } from "../../game/testing";
 
 const game = facingEast();
 const range = SPELLS.fireball.aim.range;

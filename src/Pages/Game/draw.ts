@@ -1,6 +1,6 @@
 import type { Bounds, Vec2 } from "procgen";
-import type { Monster, Player } from "./game";
-import { MONSTERS, SPAWNERS } from "./monsters";
+import type { Monster, Player } from "../../game/game";
+import { MONSTERS, SPAWNERS } from "../../game/monsters";
 import {
   add,
   centerOf,
@@ -12,14 +12,14 @@ import {
   sameHex,
   type Direction,
   type Hex,
-} from "./hex";
+} from "../../game/hex";
 import {
   Biome,
   SEA_LEVEL,
   surfaceOf,
   type Spawner,
   type Tile,
-} from "./terrain";
+} from "../../game/terrain";
 
 const PIXELS_PER_UNIT = 20;
 const TILT = 0.7;

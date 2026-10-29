@@ -1,5 +1,5 @@
-import type { Game } from "./game";
-import { add, DIRECTIONS, hexDistance, type Direction, type Hex } from "./hex";
+import type { Game } from "../../game/game";
+import { add, DIRECTIONS, hexDistance, type Direction, type Hex } from "../../game/hex";
 
 const isInRange = ({ player }: Game, range: number, at: Hex) =>
   hexDistance(player.at, at) <= range;

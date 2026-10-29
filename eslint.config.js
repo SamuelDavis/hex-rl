@@ -10,4 +10,20 @@ export default defineConfig([
   tseslint.configs.recommended,
   solid,
   { files: ["src/game/**"], rules: determinismRules },
+  {
+    files: ["src/game/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["solid-js", "solid-js/*", "**/Pages/**"],
+              message: "The game is independent of the UI.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);

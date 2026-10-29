@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { aimed, startAim } from "./aim";
-import { facingEast, origin } from "./testing";
+import { facingEast, origin } from "../../game/testing";
 
 const RANGE = 2;
 const game = facingEast();
