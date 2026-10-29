@@ -2,13 +2,14 @@ import {
   act,
   newGame,
   type Action,
-  type Bind,
   type Destroy,
   type Game,
   type GameEvent,
+  type Prepare,
   type Transfer,
 } from "../../game/game";
 import { isPotion } from "../../game/items";
+import type { Ability } from "./loadout";
 import { hexKey, sameHex, type Hex } from "../../game/hex";
 import { EXPLORE, transition, type Command, type Mode } from "./mode";
 import { nextTarget, targetInView, tracked, type Target } from "./target";
@@ -16,7 +17,6 @@ import { createTerrain } from "../../game/terrain";
 
 export const LOG_LENGTH = 50;
 
-/** Everything one player's run holds, whatever drives it: tests, GUI or TUI. */
 export interface Session {
   readonly game: Game;
   readonly mode: Mode;
@@ -29,13 +29,13 @@ export interface Session {
 }
 
 export type Intent =
-  | Exclude<Command, { readonly kind: "slot" }>
-  | { readonly kind: "slot"; readonly slot: number }
+  | Exclude<Command, { readonly kind: "use" }>
+  | { readonly kind: "use"; readonly ability: Ability }
   | { readonly kind: "cycleTarget" }
   | { readonly kind: "inventory" }
   | { readonly kind: "dismiss" }
   | Transfer
-  | Bind
+  | Prepare
   | Destroy
   | { readonly kind: "view"; readonly range: number };
 
@@ -82,19 +82,16 @@ const commanded = (session: Session, command: Command): Session => {
 
 export const update = (session: Session, intent: Intent): Session => {
   switch (intent.kind) {
-    case "slot": {
-      const ability = session.game.player.loadout[intent.slot];
-      if (!ability) return session;
-      return isPotion(ability)
-        ? performed(session, { kind: "quaff", potion: ability })
-        : commanded(session, { kind: "slot", spell: ability });
-    }
+    case "use":
+      return isPotion(intent.ability)
+        ? performed(session, { kind: "quaff", potion: intent.ability })
+        : commanded(session, { kind: "use", spell: intent.ability });
     case "cycleTarget": {
       const { game, range, target } = session;
       return { ...session, target: nextTarget(game, range, target) };
     }
     case "transfer":
-    case "bind":
+    case "prepare":
     case "destroy":
       return performed(session, intent);
     case "inventory":

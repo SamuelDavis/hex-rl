@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   CONTROLS,
   DEFAULT_KEYMAP,
-  intentOf,
+  inputOf,
   keyLabelOf,
   rebound,
 } from "./controls";
@@ -15,26 +15,26 @@ describe("DEFAULT_KEYMAP", () => {
   });
 });
 
-describe("intentOf", () => {
+describe("inputOf", () => {
   test("finds the bound control's intent, case-insensitively", () => {
-    expect(intentOf(DEFAULT_KEYMAP, "W")).toEqual({
+    expect(inputOf(DEFAULT_KEYMAP, "W")).toEqual({
       kind: "move",
       direction: "n",
     });
-    expect(intentOf(DEFAULT_KEYMAP, " ")).toEqual({ kind: "wait" });
-    expect(intentOf(DEFAULT_KEYMAP, "1")).toEqual({ kind: "slot", slot: 0 });
+    expect(inputOf(DEFAULT_KEYMAP, " ")).toEqual({ kind: "wait" });
+    expect(inputOf(DEFAULT_KEYMAP, "1")).toEqual({ kind: "slot", slot: 0 });
   });
 
   test("ignores unbound keys", () => {
-    expect(intentOf(DEFAULT_KEYMAP, "z")).toBeUndefined();
+    expect(inputOf(DEFAULT_KEYMAP, "z")).toBeUndefined();
   });
 });
 
 describe("rebound", () => {
   test("binds a free key to the control", () => {
     const keymap = rebound(DEFAULT_KEYMAP, "wait", "z");
-    expect(intentOf(keymap, "z")).toEqual({ kind: "wait" });
-    expect(intentOf(keymap, " ")).toBeUndefined();
+    expect(inputOf(keymap, "z")).toEqual({ kind: "wait" });
+    expect(inputOf(keymap, " ")).toBeUndefined();
   });
 
   test("swaps with the control already bound to the key", () => {

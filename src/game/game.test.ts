@@ -818,13 +818,12 @@ describe("quaff", () => {
   });
 });
 
-describe("bind", () => {
-  test("puts a spell or potion in a loadout slot, spending a turn", () => {
-    const bound = act(
-      act(facingEast(), { kind: "bind", slot: 0, ability: "health" }),
-      { kind: "bind", slot: 1, ability: undefined },
-    );
-    expect(bound.player.loadout.slice(0, 2)).toEqual(["health", undefined]);
-    expect(bound.turn).toBe(2);
+describe("prepare", () => {
+  test("spends a turn and does nothing else", () => {
+    const game = facingEast();
+    const prepared = act(game, { kind: "prepare" });
+    expect(prepared.turn).toBe(game.turn + 1);
+    expect(prepared.player).toEqual(game.player);
+    expect(prepared.events).toEqual([{ kind: "prepared" }]);
   });
 });

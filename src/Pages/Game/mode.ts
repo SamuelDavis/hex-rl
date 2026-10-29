@@ -17,7 +17,7 @@ export const EXPLORE: Mode = { kind: "explore" };
 export type Command =
   | { readonly kind: "move"; readonly direction: Direction }
   | { readonly kind: "wait" }
-  | { readonly kind: "slot"; readonly spell: SpellId }
+  | { readonly kind: "use"; readonly spell: SpellId }
   | { readonly kind: "confirm" }
   | { readonly kind: "cancel" };
 
@@ -53,7 +53,7 @@ const explore = (
       return { mode: EXPLORE, action: command.direction };
     case "wait":
       return { mode: EXPLORE, action: "wait" };
-    case "slot":
+    case "use":
       return chosen(game, command.spell, target);
     case "confirm":
     case "cancel":
@@ -77,7 +77,7 @@ const aim = (
       };
     case "wait":
       return { mode };
-    case "slot":
+    case "use":
       return command.spell === mode.spell
         ? released(mode)
         : chosen(game, command.spell, target);

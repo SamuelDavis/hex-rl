@@ -1,5 +1,5 @@
 import type { Direction } from "../../game/hex";
-import { SLOT_COUNT } from "../../game/game";
+import { SLOT_COUNT } from "./loadout";
 import type { Intent } from "./session";
 
 export type ControlId =
@@ -11,10 +11,12 @@ export type ControlId =
   | "inventory"
   | `slot-${number}`;
 
+export type Input = Intent | { readonly kind: "slot"; readonly slot: number };
+
 export interface Control {
   readonly id: ControlId;
   readonly label: string;
-  readonly intent: Intent;
+  readonly input: Input;
 }
 
 /** Control → lowercase `KeyboardEvent.key`; one key per control. */
@@ -38,29 +40,29 @@ const BINDINGS: readonly (readonly [Control, string])[] = [
         {
           id: `move-${direction}`,
           label: `Move ${name}`,
-          intent: { kind: "move", direction },
+          input: { kind: "move", direction },
         },
         key,
       ] as const,
   ),
-  [{ id: "wait", label: "Wait", intent: { kind: "wait" } }, " "],
+  [{ id: "wait", label: "Wait", input: { kind: "wait" } }, " "],
   [
-    { id: "target", label: "Next target", intent: { kind: "cycleTarget" } },
+    { id: "target", label: "Next target", input: { kind: "cycleTarget" } },
     "t",
   ],
   [
-    { id: "confirm", label: "Cast aimed", intent: { kind: "confirm" } },
+    { id: "confirm", label: "Cast aimed", input: { kind: "confirm" } },
     "enter",
   ],
-  [{ id: "cancel", label: "Cancel aim", intent: { kind: "cancel" } }, "escape"],
-  [{ id: "inventory", label: "Inventory", intent: { kind: "inventory" } }, "i"],
+  [{ id: "cancel", label: "Cancel aim", input: { kind: "cancel" } }, "escape"],
+  [{ id: "inventory", label: "Inventory", input: { kind: "inventory" } }, "i"],
   ...SLOTS.map(
     (slot) =>
       [
         {
           id: `slot-${slot + 1}`,
           label: `Use slot ${slot + 1}`,
-          intent: { kind: "slot", slot },
+          input: { kind: "slot", slot },
         },
         String(slot + 1),
       ] as const,
@@ -82,8 +84,8 @@ export const CONTROL_BY_ID = Object.fromEntries(
 const controlOf = (keymap: Keymap, key: string) =>
   CONTROLS.find(({ id }) => keymap[id] === key.toLowerCase());
 
-export const intentOf = (keymap: Keymap, key: string): Intent | undefined =>
-  controlOf(keymap, key)?.intent;
+export const inputOf = (keymap: Keymap, key: string): Input | undefined =>
+  controlOf(keymap, key)?.input;
 
 export const rebound = (keymap: Keymap, id: ControlId, key: string): Keymap => {
   const displaced = controlOf(keymap, key);

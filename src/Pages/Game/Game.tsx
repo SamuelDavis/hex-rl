@@ -10,17 +10,26 @@ import {
   Switch,
   type JSX,
 } from "solid-js";
-import { HTMLDialog, HTMLIcon } from "@samueldavis/solidlib";
+import { HTMLDialog, HTMLIcon, persist } from "@samueldavis/solidlib";
 import {
   CONTROL_BY_ID,
   CONTROLS,
   DEFAULT_KEYMAP,
-  intentOf,
+  inputOf,
   keyLabelOf,
   rebound,
   type ControlId,
+  type Input,
   type Keymap,
 } from "./controls";
+import {
+  decodeLoadout,
+  intentOf,
+  slotted,
+  STARTING_LOADOUT,
+  type Ability,
+  type Loadout,
+} from "./loadout";
 import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
 import {
   cooldownOf,
@@ -30,7 +39,6 @@ import {
   MAX_HP,
   MAX_MP,
   visibleOf,
-  type Ability,
   type Game as GameState,
   type GameEvent,
   type Where,
@@ -80,10 +88,21 @@ export default function Game() {
   const [getSize, setSize] = createSignal({ width: 0, height: 0 });
   const [getCanvas, setCanvas] = createSignal<HTMLCanvasElement>();
   const [getEditing, setEditing] = createSignal<{ slot: number }>();
-  const [getKeymap, setKeymap] = createSignal(DEFAULT_KEYMAP);
+  const [getKeymap, setKeymap] = persist(createSignal(DEFAULT_KEYMAP), {
+    key: "keymap",
+    decode: (json): Keymap => ({ ...DEFAULT_KEYMAP, ...JSON.parse(json) }),
+  });
+  const [getLoadout, setLoadout] = persist(createSignal(STARTING_LOADOUT), {
+    key: "loadout",
+    decode: decodeLoadout,
+  });
   const [isRemapping, setRemapping] = createSignal(false);
   const dispatch = (intent: Intent) =>
     setSession((session) => update(session, intent));
+  const press = (input: Input) => {
+    const intent = intentOf(getLoadout(), input);
+    if (intent) dispatch(intent);
+  };
   const getGame = () => getSession().game;
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() => visibleOf(getGame()));
@@ -108,7 +127,8 @@ export default function Game() {
   createEffect(on(getRange, (range) => dispatch({ kind: "view", range })));
 
   function bind(slot: number, ability: Ability | undefined) {
-    dispatch({ kind: "bind", slot, ability });
+    setLoadout((loadout) => slotted(loadout, slot, ability));
+    dispatch({ kind: "prepare" });
     setEditing(undefined);
   }
 
@@ -119,10 +139,10 @@ export default function Game() {
   function onKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (getEditing() || isRemapping() || getSession().isInventoryOpen) return;
-    const intent = intentOf(getKeymap(), event.key);
-    if (!intent) return;
+    const input = inputOf(getKeymap(), event.key);
+    if (!input) return;
     event.preventDefault();
-    dispatch(intent);
+    press(input);
   }
 
   function onTap(event: MouseEvent & { currentTarget: HTMLCanvasElement }) {
@@ -221,14 +241,15 @@ export default function Game() {
             <PlayPanel
               game={getGame()}
               isAiming={isAiming()}
+              loadout={getLoadout()}
               keymap={getKeymap()}
-              dispatch={dispatch}
+              press={press}
               restart={restart}
             />
           </Match>
           <Match when={getTab() === "Slots"}>
             <SlotsPanel
-              game={getGame()}
+              loadout={getLoadout()}
               keymap={getKeymap()}
               editSlot={(slot) => setEditing({ slot })}
             />
@@ -253,7 +274,7 @@ export default function Game() {
         {(editing) => (
           <AbilityPicker
             slot={editing().slot}
-            bound={getGame().player.loadout[editing().slot]}
+            bound={getLoadout()[editing().slot]}
             bind={(ability) => bind(editing().slot, ability)}
           />
         )}
@@ -290,7 +311,8 @@ function PlayPanel(props: {
   game: GameState;
   isAiming: boolean;
   keymap: Keymap;
-  dispatch: (intent: Intent) => void;
+  loadout: Loadout;
+  press: (input: Input) => void;
   restart: () => void;
 }) {
   return (
@@ -307,8 +329,9 @@ function PlayPanel(props: {
     >
       <SpellSlots
         game={props.game}
+        loadout={props.loadout}
         keymap={props.keymap}
-        dispatch={props.dispatch}
+        press={props.press}
       />
       <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
         <div class="col-span-3 grid grid-cols-3 gap-(--pico-spacing)">
@@ -318,7 +341,7 @@ function PlayPanel(props: {
                 class="text-2xl"
                 control={`move-${direction}`}
                 keymap={props.keymap}
-                dispatch={props.dispatch}
+                press={props.press}
               >
                 {ARROWS[direction]}
               </PadButton>
@@ -333,7 +356,7 @@ function PlayPanel(props: {
                 <PadButton
                   control="wait"
                   keymap={props.keymap}
-                  dispatch={props.dispatch}
+                  press={props.press}
                 >
                   Wait
                 </PadButton>
@@ -344,14 +367,14 @@ function PlayPanel(props: {
             <PadButton
               control="confirm"
               keymap={props.keymap}
-              dispatch={props.dispatch}
+              press={props.press}
             >
               Cast
             </PadButton>
             <PadButton
               control="cancel"
               keymap={props.keymap}
-              dispatch={props.dispatch}
+              press={props.press}
             >
               Cancel
             </PadButton>
@@ -359,7 +382,7 @@ function PlayPanel(props: {
           <PadButton
             control="target"
             keymap={props.keymap}
-            dispatch={props.dispatch}
+            press={props.press}
           >
             Target
           </PadButton>
@@ -376,12 +399,13 @@ const stockOf = (game: GameState, potion: PotionKind) =>
 
 function SpellSlots(props: {
   game: GameState;
+  loadout: Loadout;
   keymap: Keymap;
-  dispatch: (intent: Intent) => void;
+  press: (input: Input) => void;
 }) {
   return (
     <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
-      <For each={props.game.player.loadout}>
+      <For each={props.loadout}>
         {(ability, slot) => {
           const getCooldown = () =>
             ability && !isPotion(ability) ? cooldownOf(props.game, ability) : 0;
@@ -397,7 +421,7 @@ function SpellSlots(props: {
                 "opacity-40 grayscale": getCooldown() > 0 || getStock() === 0,
               }}
               aria-label={`Slot ${slot() + 1} (${getHotkey()}): ${ability ?? "empty"}`}
-              onClick={() => props.dispatch({ kind: "slot", slot: slot() })}
+              onClick={() => props.press({ kind: "slot", slot: slot() })}
             >
               <Hotkey>{getHotkey()}</Hotkey>
               <Show when={getCooldown() > 0} fallback={ability ?? "—"}>
@@ -415,7 +439,7 @@ function SpellSlots(props: {
 }
 
 function SlotsPanel(props: {
-  game: GameState;
+  loadout: Loadout;
   keymap: Keymap;
   editSlot: (slot: number) => void;
 }) {
@@ -426,7 +450,7 @@ function SlotsPanel(props: {
           Choose what each slot does. Changing a slot spends a turn.
         </small>
       </p>
-      <For each={props.game.player.loadout}>
+      <For each={props.loadout}>
         {(ability, slot) => (
           <button
             type="button"
@@ -670,7 +694,7 @@ function Hotkey(props: { children: string }) {
 function PadButton(props: {
   control: ControlId;
   keymap: Keymap;
-  dispatch: (intent: Intent) => void;
+  press: (input: Input) => void;
   class?: string;
   children: JSX.Element;
 }) {
@@ -682,7 +706,7 @@ function PadButton(props: {
       tabIndex={-1}
       class={`relative m-0 aspect-square p-0 ${props.class ?? "text-xs"}`}
       aria-label={`${getControl().label} (${getHotkey()})`}
-      onClick={() => props.dispatch(getControl().intent)}
+      onClick={() => props.press(getControl().input)}
     >
       <Hotkey>{getHotkey()}</Hotkey>
       {props.children}

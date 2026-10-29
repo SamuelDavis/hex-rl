@@ -86,7 +86,7 @@ Not used (fetch failed or not read): RePoE `mods.json` (exceeds 10 MB fetch limi
 
 ## Decisions
 
-Override conflicting recommendations above. Implemented: `src/game/items.ts` (model, loot, names, capacity, overflow), `src/game/game.ts` (`Transfer`, `Bind`, `Quaff`, `Destroy` actions), `src/Pages/Game/session.ts` (`isInventoryOpen`).
+Override conflicting recommendations above. Implemented: `src/game/items.ts` (model, loot, names, capacity, overflow), `src/game/game.ts` (`Transfer`, `Prepare`, `Quaff`, `Destroy` actions; the slot loadout is UI state, see [ui-architecture.md](ui-architecture.md)), `src/Pages/Game/session.ts` (`isInventoryOpen`).
 
 - Underfoot chest is `Where` `"ground"`, not `"chest"`: `"chest"` is a paper-doll place.
 - Destroy spends a turn, like every other change to the world but quaffing.

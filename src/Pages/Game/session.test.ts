@@ -11,14 +11,12 @@ import {
 } from "./session";
 import { east, gameWith, monster } from "../../game/testing";
 import { hexKey } from "../../game/hex";
-import { STARTING_LOADOUT, type Game } from "../../game/game";
+import type { Game } from "../../game/game";
 
 const RANGE = 5;
 const near = { q: 3, r: 0 };
 const run = (session: Session, ...intents: Intent[]) =>
   intents.reduce(update, session);
-const slotOf = (spell: string) =>
-  STARTING_LOADOUT.findIndex((equipped) => equipped === spell);
 const targeting = (...at: { q: number; r: number }[]) =>
   run(sessionOf(gameWith(at.map((hex) => monster(hex, "troll"))), RANGE), {
     kind: "cycleTarget",
@@ -55,7 +53,7 @@ describe("update", () => {
   test("cycles targets, even while aiming", () => {
     const session = run(
       targeting(east, near),
-      { kind: "slot", slot: slotOf("fireball") },
+      { kind: "use", ability: "fireball" },
       { kind: "cycleTarget" },
     );
     expect(session.mode.kind).toBe("aim");
@@ -65,7 +63,7 @@ describe("update", () => {
   test("aims, steers and casts a hex-aimed spell at the reticle", () => {
     const session = run(
       targeting(near),
-      { kind: "slot", slot: slotOf("fireball") },
+      { kind: "use", ability: "fireball" },
       { kind: "move", direction: "nw" },
       { kind: "confirm" },
     );
@@ -77,7 +75,7 @@ describe("update", () => {
   test("cancelling an aim spends no turn", () => {
     const session = run(
       targeting(near),
-      { kind: "slot", slot: slotOf("fireball") },
+      { kind: "use", ability: "fireball" },
       { kind: "cancel" },
     );
     expect(session.mode).toEqual(EXPLORE);
@@ -86,8 +84,8 @@ describe("update", () => {
 
   test("casts monster-aimed spells at the target", () => {
     const session = run(targeting(east), {
-      kind: "slot",
-      slot: slotOf("strike"),
+      kind: "use",
+      ability: "strike",
     });
     expect(session.log).toContainEqual({ kind: "cast", spell: "strike" });
   });
@@ -100,17 +98,13 @@ describe("update", () => {
     expect(session.target).toBeUndefined();
   });
 
-  test("binding a slot spends a turn; an empty slot then does nothing", () => {
-    const session = run(
-      targeting(east),
-      { kind: "bind", slot: 0, ability: undefined },
-      { kind: "slot", slot: 0 },
-    );
-    expect(session.game.player.loadout[0]).toBeUndefined();
+  test("preparing spends a turn", () => {
+    const session = run(targeting(east), { kind: "prepare" });
     expect(session.game.turn).toBe(1);
+    expect(session.log).toContainEqual({ kind: "prepared" });
   });
 
-  test("a potion slot quaffs at once, even while aiming, spending no turn", () => {
+  test("using a potion quaffs it at once, even while aiming, spending no turn", () => {
     const base = targeting(near);
     const game: Game = {
       ...base.game,
@@ -122,9 +116,9 @@ describe("update", () => {
     };
     const session = run(
       { ...base, game },
-      { kind: "bind", slot: 5, ability: "mana" },
-      { kind: "slot", slot: slotOf("fireball") },
-      { kind: "slot", slot: 5 },
+      { kind: "prepare" },
+      { kind: "use", ability: "fireball" },
+      { kind: "use", ability: "mana" },
     );
     expect(session.mode.kind).toBe("aim");
     expect(session.game.turn).toBe(1);

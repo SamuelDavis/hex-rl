@@ -29,25 +29,25 @@ describe("explore", () => {
   });
 
   test("unaimed and monster-aimed spells cast at once, at the target", () => {
-    expect(transition(EXPLORE, { kind: "slot", spell: "heal" }, game)).toEqual({
+    expect(transition(EXPLORE, { kind: "use", spell: "heal" }, game)).toEqual({
       mode: EXPLORE,
       action: { spell: "heal", at: undefined },
     });
     expect(
-      transition(EXPLORE, { kind: "slot", spell: "strike" }, game, east),
+      transition(EXPLORE, { kind: "use", spell: "strike" }, game, east),
     ).toEqual({ mode: EXPLORE, action: { spell: "strike", at: east } });
   });
 
   test("hex-aimed spells start aiming, on the target if in range", () => {
     expect(
-      transition(EXPLORE, { kind: "slot", spell: "fireball" }, game, ahead),
+      transition(EXPLORE, { kind: "use", spell: "fireball" }, game, ahead),
     ).toEqual({ mode: { ...aiming, at: ahead } });
   });
 
   test("hex-aimed spells that are unready cast at once, to be rejected", () => {
     const drained = { ...game, player: { ...game.player, mp: 0 } };
     expect(
-      transition(EXPLORE, { kind: "slot", spell: "fireball" }, drained),
+      transition(EXPLORE, { kind: "use", spell: "fireball" }, drained),
     ).toEqual({ mode: EXPLORE, action: { spell: "fireball", at: undefined } });
   });
 });
@@ -73,7 +73,7 @@ describe("aim", () => {
     const cast = { mode: EXPLORE, action: { spell: "fireball", at: east } };
     expect(transition(aiming, { kind: "confirm" }, game)).toEqual(cast);
     expect(
-      transition(aiming, { kind: "slot", spell: "fireball" }, game),
+      transition(aiming, { kind: "use", spell: "fireball" }, game),
     ).toEqual(cast);
   });
 
@@ -84,7 +84,7 @@ describe("aim", () => {
   });
 
   test("another slot is chosen afresh", () => {
-    expect(transition(aiming, { kind: "slot", spell: "heal" }, game)).toEqual({
+    expect(transition(aiming, { kind: "use", spell: "heal" }, game)).toEqual({
       mode: EXPLORE,
       action: { spell: "heal", at: undefined },
     });

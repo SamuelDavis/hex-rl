@@ -19,7 +19,7 @@ const REASONS: Record<Rejection, string> = {
 
 const VERBS = {
   transfer: "move that",
-  bind: "bind that",
+  prepare: "prepare",
   quaff: "quaff",
   destroy: "destroy",
 } as const;
@@ -66,6 +66,8 @@ export const narrationOf = (event: GameEvent): string => {
       return `You ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
     case "spilled":
       return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from your pack.`;
+    case "prepared":
+      return "You ready your abilities.";
     case "destroyed":
       return "You destroy the chest.";
     case "quaffed":
