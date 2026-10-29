@@ -1,4 +1,10 @@
-import { newGame, type Game, type Land, type Monster } from "./game";
+import {
+  newGame,
+  type Action,
+  type Game,
+  type Land,
+  type Monster,
+} from "./game";
 import { IDLE } from "./mind";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
@@ -47,4 +53,11 @@ export const facingEast = (world = landOf()): Game => {
 export const gameWith = (monsters: Monster[], world = landOf()): Game => ({
   ...facingEast(world),
   monsters,
+});
+
+export const WAIT: Action = { kind: "wait" };
+
+export const step = (direction: Direction): Action => ({
+  kind: "move",
+  direction,
 });

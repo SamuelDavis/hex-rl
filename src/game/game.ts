@@ -114,7 +114,17 @@ export interface Game {
   readonly events: readonly GameEvent[];
 }
 
+export interface Move {
+  readonly kind: "move";
+  readonly direction: Direction;
+}
+
+export interface Wait {
+  readonly kind: "wait";
+}
+
 export interface Cast {
+  readonly kind: "cast";
   readonly spell: SpellId;
   readonly at?: Hex | undefined;
 }
@@ -146,8 +156,29 @@ export interface Destroy {
   readonly kind: "destroy";
 }
 
-export type Action =
-  Direction | "wait" | Cast | Transfer | Prepare | Quaff | Destroy;
+export type Action = Move | Wait | Cast | Transfer | Prepare | Quaff | Destroy;
+
+export interface Cost {
+  readonly turn: boolean;
+}
+
+const TURN: Cost = { turn: true };
+const FREE: Cost = { turn: false };
+
+type Outcome =
+  | { readonly kind: "performed"; readonly game: Game; readonly cost: Cost }
+  | { readonly kind: "substituted"; readonly action: Action }
+  | { readonly kind: "rejected"; readonly reason: Rejection };
+
+type Rule<A extends Action> = (game: Game, action: A) => Outcome;
+
+const performed = (game: Game, cost: Cost = TURN): Outcome => ({
+  kind: "performed",
+  game,
+  cost,
+});
+
+const refused = (reason: Rejection): Outcome => ({ kind: "rejected", reason });
 
 export type Rejection =
   | "blocked"
@@ -457,17 +488,17 @@ const spilled = (game: Game): Game => {
   );
 };
 
-const transferGold = (game: Game, action: Transfer): Game => {
+const transferGold = (game: Game, action: Transfer): Outcome => {
   const { to } = action;
   const { player } = game;
-  if (isPlace(to)) return rejected(game, action, "misfit");
+  if (isPlace(to)) return refused("misfit");
   const chest = underfoot(game);
   const from = to === "pack" ? "ground" : "pack";
   const amount = to === "pack" ? chest.gold : player.gold;
-  if (amount === 0) return rejected(game, action, "no-item");
+  if (amount === 0) return refused("no-item");
   const gold = to === "pack" ? player.gold + amount : 0;
   const lying = to === "pack" ? 0 : chest.gold + amount;
-  return endTurn(
+  return performed(
     recorded(
       withChest(withPlayer(game, { gold }), player.at, {
         ...chest,
@@ -478,52 +509,53 @@ const transferGold = (game: Game, action: Transfer): Game => {
   );
 };
 
-const transferItem = (game: Game, action: Transfer): Game => {
+const transferItem = (game: Game, action: Transfer): Outcome => {
   const found = locate(game, action.cargo);
-  if (!found) return rejected(game, action, "no-item");
+  if (!found) return refused("no-item");
   const [item, from] = found;
   const { to } = action;
-  if (from === to || (isPlace(to) && !fits(item, to)))
-    return rejected(game, action, "misfit");
+  if (from === to || (isPlace(to) && !fits(item, to))) return refused("misfit");
   const worn = isPlace(to) ? game.player.equipment[to] : undefined;
   const swapped = worn ? relocated(game, worn, to, from) : game;
   const next = relocated(swapped, item, from, to);
   const capacity = capacityOf(next.player.equipment);
   const isOver = loadOf(next.player.pack) > capacity;
   if (isOver && capacity >= capacityOf(game.player.equipment))
-    return rejected(game, action, "full");
-  return endTurn(
+    return refused("full");
+  return performed(
     spilled(recorded(next, { kind: "moved", cargo: item, from, to })),
   );
 };
 
-const transfer = (game: Game, action: Transfer): Game =>
+const transfer: Rule<Transfer> = (game, action) =>
   action.cargo === GOLD
     ? transferGold(game, action)
     : transferItem(game, action);
 
-const destroy = (game: Game): Game => {
-  if (!chestAt(game, game.player.at))
-    return rejected(game, { kind: "destroy" }, "no-chest");
-  return endTurn(
+const destroy: Rule<Destroy> = (game) => {
+  if (!chestAt(game, game.player.at)) return refused("no-chest");
+  return performed(
     recorded(withChest(game, game.player.at, EMPTY), { kind: "destroyed" }),
   );
 };
 
-const quaff = (game: Game, action: Quaff): Game => {
+const quaff: Rule<Quaff> = (game, action) => {
   const { player } = game;
   const potion = player.pack.find(
     (item) => item.kind === "potion" && item.potion === action.potion,
   );
-  if (!potion) return rejected(game, action, "no-item");
+  if (!potion) return refused("no-item");
   const { hp, mp } = POTIONS[action.potion];
-  return recorded(
-    withPlayer(game, {
-      pack: player.pack.filter((item) => item !== potion),
-      hp: Math.min(MAX_HP, player.hp + hp),
-      mp: Math.min(MAX_MP, player.mp + mp),
-    }),
-    { kind: "quaffed", potion: action.potion },
+  return performed(
+    recorded(
+      withPlayer(game, {
+        pack: player.pack.filter((item) => item !== potion),
+        hp: Math.min(MAX_HP, player.hp + hp),
+        mp: Math.min(MAX_MP, player.mp + mp),
+      }),
+      { kind: "quaffed", potion: action.potion },
+    ),
+    FREE,
   );
 };
 
@@ -658,9 +690,9 @@ export const unreadinessOf = (
 const castProblemOf = (game: Game, cast: Cast): Rejection | undefined =>
   unreadinessOf(game, cast.spell) ?? aimProblemOf(game, cast);
 
-const castSpell = (game: Game, cast: Cast): Game => {
+const cast: Rule<Cast> = (game, cast) => {
   const problem = castProblemOf(game, cast);
-  if (problem) return rejected(game, cast, problem);
+  if (problem) return refused(problem);
   const { player, turn } = game;
   const { mp, cooldown } = SPELLS[cast.spell];
   const spent = {
@@ -671,7 +703,7 @@ const castSpell = (game: Game, cast: Cast): Game => {
       [cast.spell, turn + 1 + cooldown],
     ]),
   };
-  return endTurn(
+  return performed(
     EFFECTS[cast.spell](
       recorded({ ...game, player: spent }, { kind: "cast", spell: cast.spell }),
       cast.at,
@@ -869,31 +901,46 @@ const endTurn = (acted: Game): Game =>
     populate(regenerate(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
   );
 
-const actOn = (game: Game, action: Action): Game => {
+const move: Rule<Move> = (game, { direction }) => {
   const { player, land } = game;
-  if (action === "wait") return endTurn(game);
-  if (typeof action === "object") {
-    if ("spell" in action) return castSpell(game, action);
-    switch (action.kind) {
-      case "transfer":
-        return transfer(game, action);
-      case "prepare":
-        return endTurn(recorded(game, { kind: "prepared" }));
-      case "quaff":
-        return quaff(game, action);
-      case "destroy":
-        return destroy(game);
-    }
+  if (direction !== player.facing)
+    return performed(withPlayer(game, { facing: direction }));
+  const to = add(player.at, DIRECTIONS[direction]);
+  if (!canStep(land.tileAt, player.at, to)) return refused("blocked");
+  return performed(playerTurn(game, to));
+};
+
+const RULES: {
+  readonly [K in Action["kind"]]: Rule<Extract<Action, { kind: K }>>;
+} = {
+  move,
+  wait: (game) => performed(game),
+  cast,
+  transfer,
+  prepare: (game) => performed(recorded(game, { kind: "prepared" })),
+  quaff,
+  destroy,
+};
+
+const outcomeOf = <A extends Action>(game: Game, action: A): Outcome =>
+  (RULES[action.kind] as Rule<A>)(game, action);
+
+const paid = (game: Game, { turn }: Cost): Game =>
+  turn ? endTurn(game) : game;
+
+const resolve = (game: Game, action: Action): Game => {
+  const outcome = outcomeOf(game, action);
+  switch (outcome.kind) {
+    case "rejected":
+      return rejected(game, action, outcome.reason);
+    case "substituted":
+      return resolve(game, outcome.action);
+    case "performed":
+      return paid(outcome.game, outcome.cost);
   }
-  if (action !== player.facing)
-    return endTurn({ ...game, player: { ...player, facing: action } });
-  const to = add(player.at, DIRECTIONS[action]);
-  if (!canStep(land.tileAt, player.at, to))
-    return rejected(game, action, "blocked");
-  return endTurn(playerTurn(game, to));
 };
 
 export const act = (game: Game, action: Action): Game =>
   isOver(game)
     ? rejected(game, action, "over")
-    : actOn({ ...game, events: [] }, action);
+    : resolve({ ...game, events: [] }, action);

@@ -5,12 +5,16 @@ test("rejections name the actor, the action and the reason", () => {
   expect(
     narrationOf({
       kind: "rejected",
-      action: { spell: "strike" },
+      action: { kind: "cast", spell: "strike" },
       reason: "out-of-reach",
     }),
   ).toBe("The adventurer cannot cast strike: out of reach.");
   expect(
-    narrationOf({ kind: "rejected", action: "n", reason: "blocked" }),
+    narrationOf({
+      kind: "rejected",
+      action: { kind: "move", direction: "n" },
+      reason: "blocked",
+    }),
   ).toBe("The adventurer cannot move: the way is blocked.");
 });
 

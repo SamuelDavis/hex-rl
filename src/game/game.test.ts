@@ -55,6 +55,8 @@ import {
   landOf,
   monster,
   origin,
+  step,
+  WAIT,
 } from "./testing";
 
 const rejection = (action: Action, reason: Rejection): GameEvent => ({
@@ -72,7 +74,7 @@ const gearOf = (id: string, gear: GearKind): Item => ({
 
 const pit = landOf({ "0,0": land(0) });
 
-const historyOf = (game: Game, turns = 300, action: Action = "wait") =>
+const historyOf = (game: Game, turns = 300, action: Action = WAIT) =>
   Array.from({ length: turns }).reduce<Game[]>(
     (games) => [...games, act(games.at(-1)!, action)],
     [game],
@@ -199,7 +201,7 @@ describe("spawners", () => {
       monsters.find(({ kind }) => kind === SPAWNERS.den.boss);
     const held = historyOf(trapped, 10);
     expect(held.filter(bossOf)).toEqual([]);
-    const freed = act({ ...held.at(-1)!, monsters: [] }, "wait");
+    const freed = act({ ...held.at(-1)!, monsters: [] }, WAIT);
     expect(bossOf(freed)?.at).toEqual(site);
   });
 
@@ -233,7 +235,7 @@ describe("spawners", () => {
       readyAt: Infinity,
     });
     const hits = Math.ceil(spawnerHpOf("den") / PLAYER_DAMAGE);
-    const games = historyOf(idle, hits, "se");
+    const games = historyOf(idle, hits, step("se"));
     expect(games.at(-1)!.player.at).toEqual(origin);
     expect(isWrecked(games.at(-2)!, adjacent)).toBe(false);
     expect(isWrecked(games.at(-1)!, adjacent)).toBe(true);
@@ -245,7 +247,7 @@ describe("spawners", () => {
       readyAt: Infinity,
     });
     const hits = Math.ceil(spawnerHpOf("den") / PLAYER_DAMAGE);
-    const games = historyOf(idle, hits, "se");
+    const games = historyOf(idle, hits, step("se"));
     expect(games.at(-2)!.monsters).toEqual([]);
     expect(games.at(-1)!.monsters).toMatchObject([
       { kind: SPAWNERS.den.boss, home: adjacent, mind: { state: "hostile" } },
@@ -288,19 +290,22 @@ describe("spawners", () => {
 describe("act", () => {
   test("a step too high to climb spends no turn", () => {
     const game = facingEast(landOf({ "1,0": land(12) }));
-    const next = act(game, "se");
-    expect(next).toEqual({ ...game, events: [rejection("se", "blocked")] });
+    const next = act(game, step("se"));
+    expect(next).toEqual({
+      ...game,
+      events: [rejection(step("se"), "blocked")],
+    });
   });
 
   test("a step onto level ground moves and spends a turn", () => {
-    const next = act(facingEast(), "se");
+    const next = act(facingEast(), step("se"));
     expect(next.player.at).toEqual(east);
     expect(next.turn).toBe(1);
   });
 
   test("a direction not faced turns in place and spends a turn", () => {
     const game = { ...newGame(landOf()), monsters: [monster({ q: 4, r: 0 })] };
-    const next = act(game, "se");
+    const next = act(game, step("se"));
     expect(next.player).toMatchObject({ at: origin, facing: "se" });
     expect(next.turn).toBe(1);
     expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
@@ -308,22 +313,22 @@ describe("act", () => {
   });
 
   test("turning toward a cliff is allowed", () => {
-    const next = act(newGame(landOf({ "1,0": land(12) })), "se");
+    const next = act(newGame(landOf({ "1,0": land(12) })), step("se"));
     expect(next.player.facing).toBe("se");
   });
 
   test("waiting keeps facing", () => {
-    expect(act(facingEast(), "wait").player.facing).toBe("se");
+    expect(act(facingEast(), WAIT).player.facing).toBe("se");
   });
 
   test("bumping a monster attacks it", () => {
-    const next = act(gameWith([monster(east, "troll")]), "se");
+    const next = act(gameWith([monster(east, "troll")]), step("se"));
     expect(next.player.at).toEqual(origin);
     expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - PLAYER_DAMAGE);
   });
 
   test("killing a monster removes and counts it", () => {
-    const next = act(gameWith([{ ...monster(east), hp: 1 }]), "se");
+    const next = act(gameWith([{ ...monster(east), hp: 1 }]), step("se"));
     expect(next.monsters).toEqual([]);
     expect(next.kills).toBe(1);
   });
@@ -335,7 +340,7 @@ describe("act", () => {
       hp: 1,
     }));
     const chests = kobolds.map((kobold) =>
-      act(gameWith([kobold]), "se").chests.get(hexKey(east)),
+      act(gameWith([kobold]), step("se")).chests.get(hexKey(east)),
     );
     expect(chests).toEqual(kobolds.map((kobold) => lootOf(0, kobold)));
     expect(chests).toContain(undefined);
@@ -349,7 +354,7 @@ describe("act", () => {
       ...gameWith([troll]),
       chests: new Map([[hexKey(east), { gold: 1, items: [potion] }]]),
     };
-    expect(act(game, "se").chests.get(hexKey(east))).toEqual({
+    expect(act(game, step("se")).chests.get(hexKey(east))).toEqual({
       gold: 1 + loot.gold,
       items: [potion, ...loot.items],
     });
@@ -358,33 +363,28 @@ describe("act", () => {
   test("stepping onto a chest leaves it be", () => {
     const chest = { gold: 5, items: [] };
     const game = { ...facingEast(), chests: new Map([[hexKey(east), chest]]) };
-    const next = act(game, "se");
+    const next = act(game, step("se"));
     expect(next.player.gold).toBe(0);
     expect(next.chests.get(hexKey(east))).toEqual(chest);
   });
 
   test("adjacent monsters attack after the player acts", () => {
-    const next = act(gameWith([monster(east)]), "wait");
+    const next = act(gameWith([monster(east)]), WAIT);
     expect(next.player.hp).toBe(MAX_HP - MONSTERS.goblin.damage);
   });
 
   test("monsters can't strike up a cliff", () => {
     const world = landOf({ "1,0": land(4) });
-    expect(act(gameWith([monster(east)], world), "wait").player.hp).toBe(
-      MAX_HP,
-    );
+    expect(act(gameWith([monster(east)], world), WAIT).player.hp).toBe(MAX_HP);
   });
 
   test("monsters in sight close in", () => {
-    const next = act(gameWith([monster({ q: 4, r: 0 })]), "wait");
+    const next = act(gameWith([monster({ q: 4, r: 0 })]), WAIT);
     expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
   });
 
   test("monsters face the way they step", () => {
-    const next = act(
-      gameWith([monster({ q: 4, r: 0 }, "goblin", "n")]),
-      "wait",
-    );
+    const next = act(gameWith([monster({ q: 4, r: 0 }, "goblin", "n")]), WAIT);
     expect(next.monsters[0]).toMatchObject({
       at: { q: 3, r: 0 },
       facing: "nw",
@@ -392,24 +392,18 @@ describe("act", () => {
   });
 
   test("monsters facing away don't notice the player beyond their awareness", () => {
-    const next = act(
-      gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]),
-      "wait",
-    );
+    const next = act(gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]), WAIT);
     expect(next.monsters[0]!.mind).toBe(IDLE);
   });
 
   test("monsters notice the player within their awareness, whatever their facing", () => {
-    const next = act(
-      gameWith([monster({ q: 2, r: 0 }, "goblin", "se")]),
-      "wait",
-    );
+    const next = act(gameWith([monster({ q: 2, r: 0 }, "goblin", "se")]), WAIT);
     expect(next.monsters[0]).toMatchObject({ at: east, facing: "nw" });
   });
 
   test("monsters that notice the player turn hostile, anchored where they stood idle", () => {
     const at = { q: 4, r: 0 };
-    const next = act(gameWith([monster(at)]), "wait");
+    const next = act(gameWith([monster(at)]), WAIT);
     expect(next.monsters[0]!.mind).toMatchObject({
       state: "hostile",
       anchor: at,
@@ -418,7 +412,7 @@ describe("act", () => {
   });
 
   test("monsters that strike are hostile", () => {
-    const next = act(gameWith([monster(east, "goblin", "se")]), "wait");
+    const next = act(gameWith([monster(east, "goblin", "se")]), WAIT);
     expect(next.monsters[0]!.mind.state).toBe("hostile");
   });
 
@@ -426,7 +420,7 @@ describe("act", () => {
     const at = { q: 6, r: 0 };
     const lastSeen = { q: 6, r: -4 };
     const hostile = { ...monster(at), mind: hostileAt(at, lastSeen) };
-    const next = act(gameWith([hostile], pit), "wait").monsters[0]!;
+    const next = act(gameWith([hostile], pit), WAIT).monsters[0]!;
     expect(hexDistance(next.at, lastSeen)).toBe(3);
   });
 
@@ -516,7 +510,7 @@ describe("act", () => {
       ...monster({ q: 4, r: 0 }),
       mind: huntingAt(anchor, { q: 4, r: -2 }),
     };
-    const next = act(gameWith([hunter]), "wait").monsters[0]!;
+    const next = act(gameWith([hunter]), WAIT).monsters[0]!;
     expect(next.mind).toMatchObject({ state: "hostile", anchor });
   });
 
@@ -540,19 +534,19 @@ describe("act", () => {
   });
 
   test("monsters turn to face the player they strike", () => {
-    const next = act(gameWith([monster(east, "goblin", "se")]), "wait");
+    const next = act(gameWith([monster(east, "goblin", "se")]), WAIT);
     expect(next.monsters[0]!.facing).toBe("nw");
   });
 
   test("monsters out of sight don't notice the player", () => {
     const world = landOf({ "2,0": land(10, true) });
-    const next = act(gameWith([monster({ q: 4, r: 0 })], world), "wait");
+    const next = act(gameWith([monster({ q: 4, r: 0 })], world), WAIT);
     expect(next.monsters[0]!.mind).toBe(IDLE);
   });
 
   test("monsters beyond the forget radius are forgotten", () => {
     const far = monster({ q: FORGET_RADIUS + 2, r: 0 });
-    expect(act(gameWith([far]), "wait").monsters).toEqual([]);
+    expect(act(gameWith([far]), WAIT).monsters).toEqual([]);
   });
 
   test("the game ends when the player dies, and accepts no more actions", () => {
@@ -560,11 +554,11 @@ describe("act", () => {
       ...gameWith([monster(east)]),
       player: { ...newGame(landOf()).player, hp: 1 },
     };
-    const dead = act(game, "wait");
+    const dead = act(game, WAIT);
     expect(isOver(dead)).toBe(true);
-    expect(act(dead, "se")).toEqual({
+    expect(act(dead, step("se"))).toEqual({
       ...dead,
-      events: [rejection("se", "over")],
+      events: [rejection(step("se"), "over")],
     });
   });
 });
@@ -578,14 +572,18 @@ describe("cast", () => {
   const TROLL = MONSTERS.troll.hp;
 
   test("spends mana, a turn, and starts the cooldown", () => {
-    const next = act(facingEast(), { spell: "heal" });
+    const next = act(facingEast(), { kind: "cast", spell: "heal" });
     expect(next.turn).toBe(1);
     expect(next.player.mp).toBe(MAX_MP - SPELLS.heal.mp);
     expect(cooldownOf(next, "heal")).toBe(SPELLS.heal.cooldown);
   });
 
   test("cooldowns count down each turn until ready", () => {
-    const cast = act(facingEast(), { spell: "fireball", at: east });
+    const cast = act(facingEast(), {
+      kind: "cast",
+      spell: "fireball",
+      at: east,
+    });
     const waits = historyOf(cast, SPELLS.fireball.cooldown);
     expect(waits.map((game) => cooldownOf(game, "fireball"))).toEqual([
       5, 4, 3, 2, 1, 0,
@@ -593,19 +591,23 @@ describe("cast", () => {
   });
 
   test("can't be cast while cooling down, spending no turn", () => {
-    const cast = act(facingEast(), { spell: "heal" });
-    const again = act(cast, { spell: "heal" });
+    const cast = act(facingEast(), { kind: "cast", spell: "heal" });
+    const again = act(cast, { kind: "cast", spell: "heal" });
     expect(again.turn).toBe(cast.turn);
     expect(again.player).toEqual(cast.player);
-    expect(again.events).toEqual([rejection({ spell: "heal" }, "not-ready")]);
+    expect(again.events).toEqual([
+      rejection({ kind: "cast", spell: "heal" }, "not-ready"),
+    ]);
   });
 
   test("can't be cast without enough mana, spending no turn", () => {
     const game = facingEast();
     const drained = { ...game, player: { ...game.player, mp: 1 } };
-    const next = act(drained, { spell: "heal" });
+    const next = act(drained, { kind: "cast", spell: "heal" });
     expect(next.turn).toBe(0);
-    expect(next.events).toEqual([rejection({ spell: "heal" }, "no-mana")]);
+    expect(next.events).toEqual([
+      rejection({ kind: "cast", spell: "heal" }, "no-mana"),
+    ]);
   });
 
   test("mana regenerates over time, up to the maximum", () => {
@@ -617,7 +619,10 @@ describe("cast", () => {
   });
 
   test("cleave hits ahead fully and either side by half", () => {
-    const next = act(gameWith(trolls(east, ne, south)), { spell: "cleave" });
+    const next = act(gameWith(trolls(east, ne, south)), {
+      kind: "cast",
+      spell: "cleave",
+    });
     expect(hpAt(next, east)).toBe(TROLL - PLAYER_DAMAGE);
     expect(hpAt(next, ne)).toBe(TROLL - PLAYER_DAMAGE * CLEAVE_SPLASH);
     expect(hpAt(next, south)).toBe(TROLL - PLAYER_DAMAGE * CLEAVE_SPLASH);
@@ -626,7 +631,11 @@ describe("cast", () => {
   test("fireball burns the aimed hex fully and its neighbors by a quarter", () => {
     const at = { q: 3, r: 0 };
     const beside = { q: 4, r: 0 };
-    const next = act(gameWith(trolls(at, beside)), { spell: "fireball", at });
+    const next = act(gameWith(trolls(at, beside)), {
+      kind: "cast",
+      spell: "fireball",
+      at,
+    });
     expect(hpAt(next, at)).toBe(TROLL - FIREBALL_DAMAGE);
     expect(hpAt(next, beside)).toBe(TROLL - FIREBALL_DAMAGE * FIREBALL_SPLASH);
     expect(next.player.hp).toBe(MAX_HP);
@@ -636,7 +645,7 @@ describe("cast", () => {
     const far = { q: SPELLS.fireball.aim.range + 1, r: 0 };
     const behind = { q: -AWARENESS - 1, r: 0 };
     for (const at of [far, behind, undefined]) {
-      const next = act(facingEast(), { spell: "fireball", at });
+      const next = act(facingEast(), { kind: "cast", spell: "fireball", at });
       expect(next.turn).toBe(0);
     }
   });
@@ -644,12 +653,18 @@ describe("cast", () => {
   test("heal restores hit points, up to the maximum", () => {
     const game = facingEast();
     const hurt = { ...game, player: { ...game.player, hp: 1 } };
-    expect(act(hurt, { spell: "heal" }).player.hp).toBe(1 + HEAL_HP);
-    expect(act(game, { spell: "heal" }).player.hp).toBe(MAX_HP);
+    expect(act(hurt, { kind: "cast", spell: "heal" }).player.hp).toBe(
+      1 + HEAL_HP,
+    );
+    expect(act(game, { kind: "cast", spell: "heal" }).player.hp).toBe(MAX_HP);
   });
 
   test("strike faces the adjacent target and attacks it in one turn", () => {
-    const next = act(gameWith(trolls(south)), { spell: "strike", at: south });
+    const next = act(gameWith(trolls(south)), {
+      kind: "cast",
+      spell: "strike",
+      at: south,
+    });
     expect(next.turn).toBe(1);
     expect(next.player).toMatchObject({ at: origin, facing: "s" });
     expect(hpAt(next, south)).toBe(TROLL - PLAYER_DAMAGE);
@@ -657,13 +672,19 @@ describe("cast", () => {
 
   test("strike can't be cast without a target in reach", () => {
     const far = { q: 3, r: 0 };
-    const none = act(gameWith([]), { spell: "strike" });
+    const none = act(gameWith([]), { kind: "cast", spell: "strike" });
     expect(none.turn).toBe(0);
-    expect(none.events).toEqual([rejection({ spell: "strike" }, "no-target")]);
-    const distant = act(gameWith(trolls(far)), { spell: "strike", at: far });
+    expect(none.events).toEqual([
+      rejection({ kind: "cast", spell: "strike" }, "no-target"),
+    ]);
+    const distant = act(gameWith(trolls(far)), {
+      kind: "cast",
+      spell: "strike",
+      at: far,
+    });
     expect(distant.turn).toBe(0);
     expect(distant.events).toEqual([
-      rejection({ spell: "strike", at: far }, "out-of-reach"),
+      rejection({ kind: "cast", spell: "strike", at: far }, "out-of-reach"),
     ]);
   });
 });

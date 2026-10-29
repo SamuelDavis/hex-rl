@@ -28,7 +28,7 @@ export interface Transition {
 
 const released = ({ spell, at }: Aiming): Transition => ({
   mode: EXPLORE,
-  action: { spell, at },
+  action: { kind: "cast", spell, at },
 });
 
 const chosen = (
@@ -38,7 +38,7 @@ const chosen = (
 ): Transition => {
   const { aim } = SPELLS[spell];
   if (aim.kind !== "hex" || unreadinessOf(game, spell))
-    return { mode: EXPLORE, action: { spell, at: target } };
+    return { mode: EXPLORE, action: { kind: "cast", spell, at: target } };
   const at = startAim(game, aim.range, target);
   return { mode: { kind: "aim", spell, range: aim.range, at } };
 };
@@ -50,9 +50,12 @@ const explore = (
 ): Transition => {
   switch (command.kind) {
     case "move":
-      return { mode: EXPLORE, action: command.direction };
+      return {
+        mode: EXPLORE,
+        action: { kind: "move", direction: command.direction },
+      };
     case "wait":
-      return { mode: EXPLORE, action: "wait" };
+      return { mode: EXPLORE, action: { kind: "wait" } };
     case "use":
       return chosen(game, command.spell, target);
     case "confirm":

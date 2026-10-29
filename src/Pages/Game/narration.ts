@@ -1,4 +1,10 @@
-import type { Action, Cargo, GameEvent, Rejection, Where } from "../../game/game";
+import type {
+  Action,
+  Cargo,
+  GameEvent,
+  Rejection,
+  Where,
+} from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
 import { SPAWNERS } from "../../game/monsters";
 
@@ -17,20 +23,17 @@ const REASONS: Record<Rejection, string> = {
   "no-chest": "there is no chest here",
 };
 
-const VERBS = {
+const VERBS: Record<Exclude<Action["kind"], "cast">, string> = {
+  move: "move",
+  wait: "wait",
   transfer: "move that",
   prepare: "prepare",
   quaff: "quaff",
   destroy: "destroy",
-} as const;
-
-const verbOf = (action: Action) => {
-  if (typeof action === "object") {
-    if ("spell" in action) return `cast ${action.spell}`;
-    return VERBS[action.kind];
-  }
-  return action === "wait" ? "wait" : "move";
 };
+
+const verbOf = (action: Action) =>
+  action.kind === "cast" ? `cast ${action.spell}` : VERBS[action.kind];
 
 const PLAYER = "The adventurer";
 

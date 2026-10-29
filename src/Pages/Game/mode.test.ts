@@ -11,11 +11,11 @@ const ahead = { q: 2, r: 0 };
 describe("explore", () => {
   test("moves and waits as actions", () => {
     expect(transition(EXPLORE, { kind: "move", direction: "n" }, game)).toEqual(
-      { mode: EXPLORE, action: "n" },
+      { mode: EXPLORE, action: { kind: "move", direction: "n" } },
     );
     expect(transition(EXPLORE, { kind: "wait" }, game)).toEqual({
       mode: EXPLORE,
-      action: "wait",
+      action: { kind: "wait" },
     });
   });
 
@@ -31,11 +31,14 @@ describe("explore", () => {
   test("unaimed and monster-aimed spells cast at once, at the target", () => {
     expect(transition(EXPLORE, { kind: "use", spell: "heal" }, game)).toEqual({
       mode: EXPLORE,
-      action: { spell: "heal", at: undefined },
+      action: { kind: "cast", spell: "heal", at: undefined },
     });
     expect(
       transition(EXPLORE, { kind: "use", spell: "strike" }, game, east),
-    ).toEqual({ mode: EXPLORE, action: { spell: "strike", at: east } });
+    ).toEqual({
+      mode: EXPLORE,
+      action: { kind: "cast", spell: "strike", at: east },
+    });
   });
 
   test("hex-aimed spells start aiming, on the target if in range", () => {
@@ -48,7 +51,10 @@ describe("explore", () => {
     const drained = { ...game, player: { ...game.player, mp: 0 } };
     expect(
       transition(EXPLORE, { kind: "use", spell: "fireball" }, drained),
-    ).toEqual({ mode: EXPLORE, action: { spell: "fireball", at: undefined } });
+    ).toEqual({
+      mode: EXPLORE,
+      action: { kind: "cast", spell: "fireball", at: undefined },
+    });
   });
 });
 
@@ -70,7 +76,10 @@ describe("aim", () => {
   });
 
   test("confirm, or the same slot again, casts at the reticle", () => {
-    const cast = { mode: EXPLORE, action: { spell: "fireball", at: east } };
+    const cast = {
+      mode: EXPLORE,
+      action: { kind: "cast", spell: "fireball", at: east },
+    };
     expect(transition(aiming, { kind: "confirm" }, game)).toEqual(cast);
     expect(
       transition(aiming, { kind: "use", spell: "fireball" }, game),
@@ -86,7 +95,7 @@ describe("aim", () => {
   test("another slot is chosen afresh", () => {
     expect(transition(aiming, { kind: "use", spell: "heal" }, game)).toEqual({
       mode: EXPLORE,
-      action: { spell: "heal", at: undefined },
+      action: { kind: "cast", spell: "heal", at: undefined },
     });
   });
 });
