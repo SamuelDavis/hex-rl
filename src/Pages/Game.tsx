@@ -566,7 +566,7 @@ function InventoryPanel(props: {
               <li>
                 <Show
                   when={getPlayer().equipment[place]}
-                  fallback={<span>{place}</span>}
+                  fallback={<span>{place}: none</span>}
                 >
                   {(item) => (
                     <>
