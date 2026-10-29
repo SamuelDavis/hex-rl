@@ -136,6 +136,15 @@ export const nameOf = (item: Item): string => {
 export const fits = (item: Item, place: Place): boolean =>
   item.kind === "gear" && GEAR[item.gear].wear === PLACES[place];
 
+/** Where equipping `item` puts it: an empty place if any, else the first worn one, swapped. */
+export const placeFor = (
+  item: Item,
+  equipment: Equipment,
+): Place | undefined => {
+  const fitting = PLACE_NAMES.filter((place) => fits(item, place));
+  return fitting.find((place) => !equipment[place]) ?? fitting[0];
+};
+
 export const sizeOf = (item: Item): number =>
   item.kind === "gear" ? GEAR[item.gear].size : 0;
 

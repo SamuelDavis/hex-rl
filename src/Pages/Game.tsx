@@ -43,6 +43,7 @@ import {
   loadOf,
   nameOf,
   PLACE_NAMES,
+  placeFor,
   POTIONS,
   sizeOf,
   type Item,
@@ -570,21 +571,43 @@ function InventoryPanel(props: {
     );
   }
 
-  const items = (list: readonly Item[]) => (
-    <For each={list}>
-      {(item) => (
-        <Cargo id={item.id}>
-          {nameOf(item)}
-          <Show when={sizeOf(item) > 0}> ({sizeOf(item)})</Show>
-        </Cargo>
-      )}
-    </For>
-  );
+  function Row(rowProps: {
+    id: string;
+    left?: Where;
+    right?: Where;
+    children: JSX.Element;
+  }) {
+    const Arrow = (arrowProps: { to?: Where; children: string }) => (
+      <Show when={arrowProps.to} fallback={<span />}>
+        {(to) => (
+          <button
+            type="button"
+            class="m-0 px-1 py-0.5 text-xs"
+            aria-label={`Move to ${to()}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              transfer(rowProps.id, to());
+            }}
+          >
+            {arrowProps.children}
+          </button>
+        )}
+      </Show>
+    );
+    return (
+      <div class="grid grid-cols-[1.75rem_1fr_1.75rem] gap-1">
+        <Arrow to={rowProps.left}>←</Arrow>
+        <Cargo id={rowProps.id}>{rowProps.children}</Cargo>
+        <Arrow to={rowProps.right}>→</Arrow>
+      </div>
+    );
+  }
 
-  const gold = (amount: number) => (
-    <Show when={amount > 0}>
-      <Cargo id={GOLD}>{amount} gold</Cargo>
-    </Show>
+  const label = (item: Item) => (
+    <>
+      {nameOf(item)}
+      <Show when={sizeOf(item) > 0}> ({sizeOf(item)})</Show>
+    </>
   );
 
   return (
@@ -602,37 +625,67 @@ function InventoryPanel(props: {
         </Show>
         <p>
           <small>
-            Drag, or tap an item then where it goes. Each move spends a turn.
+            Use the arrows, drag, or tap an item then where it goes. Each move
+            spends a turn.
           </small>
         </p>
       </div>
-      <div class="grid grid-cols-4 gap-1">
-        <For each={PLACE_NAMES}>
-          {(place) => (
-            <Zone to={place} label={place} class="min-h-16">
-              <Show when={getPlayer().equipment[place]}>
-                {(item) => items([item()])}
-              </Show>
-            </Zone>
-          )}
-        </For>
-      </div>
-      <div class="mt-(--pico-spacing) grid grid-cols-2 gap-(--pico-spacing)">
+      <div class="grid grid-cols-3 items-start gap-(--pico-spacing)">
+        <section aria-label="Equipment" class="m-0 flex flex-col gap-1">
+          <small>Equipment</small>
+          <For each={PLACE_NAMES}>
+            {(place) => (
+              <Zone to={place} label={place} class="min-h-12">
+                <Show when={getPlayer().equipment[place]}>
+                  {(item) => (
+                    <Row id={item().id} right="pack">
+                      {label(item())}
+                    </Row>
+                  )}
+                </Show>
+              </Zone>
+            )}
+          </For>
+        </section>
         <Zone
           to="pack"
           label={`Pack ${loadOf(getPlayer().pack)}/${capacityOf(getPlayer().equipment)}`}
           class="min-h-32"
         >
-          {gold(getPlayer().gold)}
-          {items(getPlayer().pack)}
+          <Show when={getPlayer().gold > 0}>
+            <Row id={GOLD} right="ground">
+              {getPlayer().gold} gold
+            </Row>
+          </Show>
+          <For each={getPlayer().pack}>
+            {(item) => (
+              <Row
+                id={item.id}
+                left={placeFor(item, getPlayer().equipment)}
+                right="ground"
+              >
+                {label(item)}
+              </Row>
+            )}
+          </For>
         </Zone>
         <Zone
           to="ground"
           label={getChest() ? "Chest" : "Ground"}
           class="min-h-32"
         >
-          {gold(getChest()?.gold ?? 0)}
-          {items(getChest()?.items ?? [])}
+          <Show when={(getChest()?.gold ?? 0) > 0}>
+            <Row id={GOLD} left="pack">
+              {getChest()?.gold} gold
+            </Row>
+          </Show>
+          <For each={getChest()?.items ?? []}>
+            {(item) => (
+              <Row id={item.id} left="pack">
+                {label(item)}
+              </Row>
+            )}
+          </For>
         </Zone>
       </div>
     </>

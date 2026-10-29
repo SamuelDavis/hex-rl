@@ -6,6 +6,7 @@ import {
   lootOf,
   nameOf,
   overflowOf,
+  placeFor,
   type GearKind,
   type Item,
 } from "./items";
@@ -132,5 +133,25 @@ describe("overflowOf", () => {
     for (const spill of spills) expect(spill.slice(0, 2)).toEqual(["c", "p"]);
     expect(new Set(spills.map((spill) => spill[2])).size).toBeGreaterThan(1);
     expect(spillOf(1)).toEqual(spillOf(1));
+  });
+});
+
+describe("placeFor", () => {
+  test("is the place an item is worn, none for potions", () => {
+    expect(placeFor(gear("h", "helm"), {})).toBe("helm");
+    expect(placeFor({ id: "p", kind: "potion", potion: "health" }, {})).toBe(
+      undefined,
+    );
+  });
+
+  test("prefers an empty place, else swaps the first that fits", () => {
+    const bag = gear("b", "bag");
+    expect(placeFor(bag, { "bag 1": gear("x", "bag") })).toBe("bag 2");
+    const full = {
+      "bag 1": gear("x", "bag"),
+      "bag 2": gear("y", "bag"),
+      "bag 3": gear("z", "bag"),
+    };
+    expect(placeFor(bag, full)).toBe("bag 1");
   });
 });
