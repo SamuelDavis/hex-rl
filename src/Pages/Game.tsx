@@ -519,12 +519,11 @@ function InventoryPanel(props: {
     to: Where;
     icon: string;
     label: string;
-    cap: "start" | "end";
   }) {
     return (
       <HTMLIcon
         type={moveProps.icon}
-        data-cap={moveProps.cap}
+        data-cap="end"
         aria-label={moveProps.label}
         title={moveProps.label}
         onClick={() =>
@@ -579,7 +578,6 @@ function InventoryPanel(props: {
                         to="pack"
                         icon="arrow_downward"
                         label={`Unequip ${nameOf(item())}`}
-                        cap="end"
                       />
                     </>
                   )}
@@ -602,13 +600,13 @@ function InventoryPanel(props: {
                 to="ground"
                 icon="arrow_downward"
                 label="Drop gold"
-                cap="end"
               />
             </li>
           </Show>
           <For each={getPlayer().pack}>
             {(item) => (
               <li>
+                {label(item)}
                 <Show when={placeFor(item, getPlayer().equipment)}>
                   {(place) => (
                     <Move
@@ -616,17 +614,14 @@ function InventoryPanel(props: {
                       to={place()}
                       icon="arrow_upward"
                       label={`Equip ${nameOf(item)}`}
-                      cap="start"
                     />
                   )}
                 </Show>
-                {label(item)}
                 <Move
                   cargo={item.id}
                   to="ground"
                   icon="arrow_downward"
                   label={`Drop ${nameOf(item)}`}
-                  cap="end"
                 />
               </li>
             )}
@@ -638,27 +633,25 @@ function InventoryPanel(props: {
         <ul class="max-h-[33vh] overflow-y-auto">
           <Show when={(getChest()?.gold ?? 0) > 0}>
             <li>
+              <span>{getChest()?.gold} gold</span>
               <Move
                 cargo={GOLD}
                 to="pack"
                 icon="arrow_upward"
                 label="Take gold"
-                cap="start"
               />
-              <span>{getChest()?.gold} gold</span>
             </li>
           </Show>
           <For each={getChest()?.items ?? []}>
             {(item) => (
               <li>
+                {label(item)}
                 <Move
                   cargo={item.id}
                   to="pack"
                   icon="arrow_upward"
                   label={`Take ${nameOf(item)}`}
-                  cap="start"
                 />
-                {label(item)}
               </li>
             )}
           </For>

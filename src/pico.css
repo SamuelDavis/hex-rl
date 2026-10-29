@@ -101,7 +101,11 @@ layer(icons);
     block-size: 1lh;
   }
 
-  :where(ul:has(> li > [data-cap])) > li {
-    list-style: none;
+  :where(ul:has(> li > [data-cap])) {
+    padding-inline-start: 0;
+
+    > li {
+      list-style: none;
+    }
   }
 }
