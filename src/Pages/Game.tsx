@@ -64,7 +64,7 @@ const ARROWS: Record<Direction, string> = {
   se: "↘︎",
 };
 
-const TABS = ["Play", "Log", "Other", "Debug"] as const;
+const TABS = ["Play", "Slots", "Log", "Other", "Debug"] as const;
 type Tab = (typeof TABS)[number];
 
 const BIOME_NAMES = Object.fromEntries(
@@ -222,8 +222,14 @@ export default function Game() {
               isAiming={isAiming()}
               keymap={getKeymap()}
               dispatch={dispatch}
-              editSlot={(slot) => setEditing({ slot })}
               restart={restart}
+            />
+          </Match>
+          <Match when={getTab() === "Slots"}>
+            <SlotsPanel
+              game={getGame()}
+              keymap={getKeymap()}
+              editSlot={(slot) => setEditing({ slot })}
             />
           </Match>
           <Match when={getTab() === "Log"}>
@@ -290,7 +296,6 @@ function PlayPanel(props: {
   isAiming: boolean;
   keymap: Keymap;
   dispatch: (intent: Intent) => void;
-  editSlot: (slot: number) => void;
   restart: () => void;
 }) {
   return (
@@ -308,7 +313,7 @@ function PlayPanel(props: {
       <SpellSlots
         game={props.game}
         keymap={props.keymap}
-        editSlot={props.editSlot}
+        dispatch={props.dispatch}
       />
       <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
         <div class="col-span-3 grid grid-cols-3 gap-(--pico-spacing)">
@@ -384,7 +389,7 @@ const stockOf = (game: GameState, potion: PotionKind) =>
 function SpellSlots(props: {
   game: GameState;
   keymap: Keymap;
-  editSlot: (slot: number) => void;
+  dispatch: (intent: Intent) => void;
 }) {
   return (
     <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
@@ -404,7 +409,7 @@ function SpellSlots(props: {
                 "opacity-40 grayscale": getCooldown() > 0 || getStock() === 0,
               }}
               aria-label={`Slot ${slot() + 1} (${getHotkey()}): ${ability ?? "empty"}`}
-              onClick={() => props.editSlot(slot())}
+              onClick={() => props.dispatch({ kind: "slot", slot: slot() })}
             >
               <Hotkey>{getHotkey()}</Hotkey>
               <Show when={getCooldown() > 0} fallback={ability ?? "—"}>
@@ -420,6 +425,37 @@ function SpellSlots(props: {
     </div>
   );
 }
+
+function SlotsPanel(props: {
+  game: GameState;
+  keymap: Keymap;
+  editSlot: (slot: number) => void;
+}) {
+  return (
+    <>
+      <p>
+        <small>
+          Choose what each slot does. Changing a slot spends a turn.
+        </small>
+      </p>
+      <For each={props.game.player.loadout}>
+        {(ability, slot) => (
+          <button
+            type="button"
+            class="block w-full text-left"
+            onClick={() => props.editSlot(slot())}
+          >
+            <kbd>{hotkeyOf(props.keymap, `slot-${slot() + 1}`)}</kbd> Slot{" "}
+            {slot() + 1}: {ability ? abilityNameOf(ability) : "empty"}
+          </button>
+        )}
+      </For>
+    </>
+  );
+}
+
+const abilityNameOf = (ability: Ability) =>
+  isPotion(ability) ? `${ability} potion` : ability;
 
 function AbilityPicker(props: {
   slot: number;
@@ -726,13 +762,13 @@ function OtherPanel(props: {
         mines and caves to wreck them until they heal. Press {key("target")} to
         cycle through monsters in view and see what each can see, even while
         aiming. Press {key("slot-1")}–{key("slot-6")} to cast the spell in that
-        slot; tap a slot to bind a spell or potion to it (spends a turn);
-        potions are drunk without spending a turn. Step onto a chest, or press{" "}
-        {key("inventory")}, to equip gear and move loot between your pack and
-        the ground (each move spends a turn). Aimed spells move their reticle
-        with the movement keys; cast with {key("confirm")} or the slot's key
-        again, or cancel with {key("cancel")}. Climb one block at a time; swim
-        freely.
+        slot, or tap it; choose what each slot holds, spell or potion, in the
+        Slots tab (spends a turn); potions are drunk without spending a turn.
+        Step onto a chest, or press {key("inventory")}, to equip gear and move
+        loot between your pack and the ground (each move spends a turn). Aimed
+        spells move their reticle with the movement keys; cast with{" "}
+        {key("confirm")} or the slot's key again, or cancel with {key("cancel")}
+        . Climb one block at a time; swim freely.
       </p>
       <button type="button" onClick={() => props.remap()}>
         Controls
