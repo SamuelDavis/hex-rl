@@ -327,6 +327,26 @@ describe("act", () => {
     expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - PLAYER_DAMAGE);
   });
 
+  test("attacking an adjacent monster hits it and spends a turn", () => {
+    const next = act(gameWith([monster(east, "troll")]), {
+      kind: "attack",
+      at: east,
+    });
+    expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - PLAYER_DAMAGE);
+    expect(next.turn).toBe(1);
+  });
+
+  test("attacking where nothing stands, or out of reach, spends no turn", () => {
+    const empty: Action = { kind: "attack", at: east };
+    expect(act(facingEast(), empty).events).toEqual([
+      rejection(empty, "no-target"),
+    ]);
+    const far: Action = { kind: "attack", at: { q: 2, r: 0 } };
+    expect(act(gameWith([monster({ q: 2, r: 0 })]), far).events).toEqual([
+      rejection(far, "out-of-reach"),
+    ]);
+  });
+
   test("killing a monster removes and counts it", () => {
     const next = act(gameWith([{ ...monster(east), hp: 1 }]), step("se"));
     expect(next.monsters).toEqual([]);

@@ -25,6 +25,7 @@ const REASONS: Record<Rejection, string> = {
 
 const VERBS: Record<Exclude<Action["kind"], "cast">, string> = {
   move: "move",
+  attack: "attack",
   wait: "wait",
   transfer: "move that",
   prepare: "prepare",

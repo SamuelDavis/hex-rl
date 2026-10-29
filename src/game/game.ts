@@ -119,6 +119,11 @@ export interface Move {
   readonly direction: Direction;
 }
 
+export interface Attack {
+  readonly kind: "attack";
+  readonly at: Hex;
+}
+
 export interface Wait {
   readonly kind: "wait";
 }
@@ -156,7 +161,8 @@ export interface Destroy {
   readonly kind: "destroy";
 }
 
-export type Action = Move | Wait | Cast | Transfer | Prepare | Quaff | Destroy;
+export type Action =
+  Move | Attack | Wait | Cast | Transfer | Prepare | Quaff | Destroy;
 
 export interface Cost {
   readonly turn: boolean;
@@ -614,11 +620,6 @@ const hit = (game: Game, at: Hex, damage: number): Game => {
 const hitAll = (game: Game, hits: readonly (readonly [Hex, number])[]) =>
   hits.reduce((state, [at, damage]) => hit(state, at, damage), game);
 
-const playerTurn = (game: Game, to: Hex): Game =>
-  isBlocked(game, to)
-    ? hit(game, to, PLAYER_DAMAGE)
-    : { ...game, player: { ...game.player, at: to } };
-
 const melee = (game: Game, toward: Direction, damage: number): Game => {
   const { land, player } = game;
   const to = add(player.at, DIRECTIONS[toward]);
@@ -658,18 +659,26 @@ const EFFECTS: Record<SpellId, (game: Game, at: Hex | undefined) => Game> = {
   },
 };
 
+const reachProblemOf = (
+  { land, player }: Game,
+  at: Hex,
+): Rejection | undefined => {
+  const isAdjacent = directionBetween(player.at, at) !== undefined;
+  if (!isAdjacent || !canStep(land.tileAt, player.at, at))
+    return "out-of-reach";
+  return undefined;
+};
+
 const aimProblemOf = (
   game: Game,
   { spell, at }: Cast,
 ): Rejection | undefined => {
   const { aim } = SPELLS[spell];
-  const { land, player } = game;
+  const { player } = game;
   if (aim.kind === "monster") {
     const target = at && monsterAt(game, at);
     if (!target) return "no-target";
-    const isAdjacent = directionBetween(player.at, target.at) !== undefined;
-    if (!isAdjacent || !canStep(land.tileAt, player.at, target.at))
-      return "out-of-reach";
+    return reachProblemOf(game, target.at);
   }
   if (aim.kind === "hex") {
     if (!at || hexDistance(player.at, at) > aim.range) return "out-of-range";
@@ -907,13 +916,23 @@ const move: Rule<Move> = (game, { direction }) => {
     return performed(withPlayer(game, { facing: direction }));
   const to = add(player.at, DIRECTIONS[direction]);
   if (!canStep(land.tileAt, player.at, to)) return refused("blocked");
-  return performed(playerTurn(game, to));
+  if (isBlocked(game, to))
+    return { kind: "substituted", action: { kind: "attack", at: to } };
+  return performed(withPlayer(game, { at: to }));
+};
+
+const attack: Rule<Attack> = (game, { at }) => {
+  if (!monsterAt(game, at) && !spawnerAt(game, at)) return refused("no-target");
+  const problem = reachProblemOf(game, at);
+  if (problem) return refused(problem);
+  return performed(hit(game, at, PLAYER_DAMAGE));
 };
 
 const RULES: {
   readonly [K in Action["kind"]]: Rule<Extract<Action, { kind: K }>>;
 } = {
   move,
+  attack,
   wait: (game) => performed(game),
   cast,
   transfer,
