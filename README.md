@@ -19,3 +19,4 @@ Personal starting point for SolidJS SPAs: classless semantic HTML styled by Pico
 - Monster AI state machines, prior art, and refactor recommendations: [docs/monster-ai.md](docs/monster-ai.md).
 - UI/game separation contract (session, modes, events) and prior art: [docs/ui-architecture.md](docs/ui-architecture.md).
 - Inventory, loot, and paper-doll equipment decisions and prior art: [docs/inventory.md](docs/inventory.md).
+- Intent → action → consequence pipeline, glossary, CQRS/ECS comparison and prior art: [docs/action-pipeline.md](docs/action-pipeline.md).
