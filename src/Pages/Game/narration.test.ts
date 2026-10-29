@@ -5,7 +5,7 @@ test("rejections name the actor, the action and the reason", () => {
   expect(
     narrationOf({
       kind: "rejected",
-      action: { kind: "cast", spell: "strike" },
+      action: { kind: "use", ability: "strike" },
       reason: "out-of-reach",
     }),
   ).toBe("The adventurer cannot cast strike: out of reach.");

@@ -1,11 +1,11 @@
 import { aimed, startAim } from "./aim";
 import { unreadinessOf, type Action, type Game } from "../../game/game";
 import type { Direction, Hex } from "../../game/hex";
-import { SPELLS, type SpellId } from "../../game/spells";
+import { abilityOf, type AbilityId } from "../../game/abilities";
 
 export interface Aiming {
   readonly kind: "aim";
-  readonly spell: SpellId;
+  readonly ability: AbilityId;
   readonly range: number;
   readonly at: Hex;
 }
@@ -17,7 +17,7 @@ export const EXPLORE: Mode = { kind: "explore" };
 export type Command =
   | { readonly kind: "move"; readonly direction: Direction }
   | { readonly kind: "wait" }
-  | { readonly kind: "use"; readonly spell: SpellId }
+  | { readonly kind: "use"; readonly ability: AbilityId }
   | { readonly kind: "confirm" }
   | { readonly kind: "cancel" };
 
@@ -26,21 +26,21 @@ export interface Transition {
   readonly action?: Action;
 }
 
-const released = ({ spell, at }: Aiming): Transition => ({
+const released = ({ ability, at }: Aiming): Transition => ({
   mode: EXPLORE,
-  action: { kind: "cast", spell, at },
+  action: { kind: "use", ability, at },
 });
 
 const chosen = (
   game: Game,
-  spell: SpellId,
+  ability: AbilityId,
   target: Hex | undefined,
 ): Transition => {
-  const { aim } = SPELLS[spell];
-  if (aim.kind !== "hex" || unreadinessOf(game, spell))
-    return { mode: EXPLORE, action: { kind: "cast", spell, at: target } };
+  const { aim } = abilityOf(ability);
+  if (aim.kind !== "hex" || unreadinessOf(game, ability))
+    return { mode: EXPLORE, action: { kind: "use", ability, at: target } };
   const at = startAim(game, aim.range, target);
-  return { mode: { kind: "aim", spell, range: aim.range, at } };
+  return { mode: { kind: "aim", ability, range: aim.range, at } };
 };
 
 const explore = (
@@ -57,7 +57,7 @@ const explore = (
     case "wait":
       return { mode: EXPLORE, action: { kind: "wait" } };
     case "use":
-      return chosen(game, command.spell, target);
+      return chosen(game, command.ability, target);
     case "confirm":
     case "cancel":
       return { mode: EXPLORE };
@@ -81,9 +81,10 @@ const aim = (
     case "wait":
       return { mode };
     case "use":
-      return command.spell === mode.spell
-        ? released(mode)
-        : chosen(game, command.spell, target);
+      if (command.ability === mode.ability) return released(mode);
+      if (!abilityOf(command.ability).spendsTurn)
+        return { mode, action: { kind: "use", ability: command.ability } };
+      return chosen(game, command.ability, target);
     case "confirm":
       return released(mode);
     case "cancel":

@@ -5,7 +5,6 @@ import {
   centerOf,
   DIRECTIONS,
   directionBetween,
-  flanksOf,
   HEADINGS,
   hexDistance,
   hexKey,
@@ -24,18 +23,15 @@ import {
 } from "./monsters";
 import { canNotice, SIGHT, visibleFrom } from "./sight";
 import {
-  CLEAVE_SPLASH,
-  FIREBALL_DAMAGE,
-  FIREBALL_SPLASH,
-  fireballSplashOf,
-  HEAL_HP,
-  SPELLS,
-  type SpellId,
-} from "./spells";
+  abilityOf,
+  areaOf,
+  MELEE_AREAS,
+  PLAYER_DAMAGE,
+  type AbilityId,
+  type Effect,
+} from "./abilities";
 import type { Spawner, Tile } from "./terrain";
 import {
-  POTIONS,
-  type PotionKind,
   capacityOf,
   fits,
   loadOf,
@@ -51,7 +47,6 @@ import {
 
 export const MAX_HP = 20;
 export const MAX_MP = 10;
-export const PLAYER_DAMAGE = 2;
 export const ACTIVE_RADIUS = SIGHT + 4;
 export const FORGET_RADIUS = ACTIVE_RADIUS + 8;
 export const HUNT_RADIUS = 4;
@@ -73,8 +68,8 @@ export interface Player {
   readonly facing: Direction;
   readonly hp: number;
   readonly mp: number;
-  /** The turn each spell cast is ready again. */
-  readonly spellsReadyAt: ReadonlyMap<SpellId, number>;
+  /** The turn each ability used is ready again. */
+  readonly readyAt: ReadonlyMap<AbilityId, number>;
   readonly gold: number;
   readonly pack: readonly Item[];
   readonly equipment: Equipment;
@@ -128,9 +123,9 @@ export interface Wait {
   readonly kind: "wait";
 }
 
-export interface Cast {
-  readonly kind: "cast";
-  readonly spell: SpellId;
+export interface Use {
+  readonly kind: "use";
+  readonly ability: AbilityId;
   readonly at?: Hex | undefined;
 }
 
@@ -152,36 +147,27 @@ export interface Prepare {
   readonly kind: "prepare";
 }
 
-export interface Quaff {
-  readonly kind: "quaff";
-  readonly potion: PotionKind;
-}
-
 export interface Destroy {
   readonly kind: "destroy";
 }
 
-export type Action =
-  Move | Attack | Wait | Cast | Transfer | Prepare | Quaff | Destroy;
-
-export interface Cost {
-  readonly turn: boolean;
-}
-
-const TURN: Cost = { turn: true };
-const FREE: Cost = { turn: false };
+export type Action = Move | Attack | Wait | Use | Transfer | Prepare | Destroy;
 
 type Outcome =
-  | { readonly kind: "performed"; readonly game: Game; readonly cost: Cost }
+  | {
+      readonly kind: "performed";
+      readonly game: Game;
+      readonly spendsTurn: boolean;
+    }
   | { readonly kind: "substituted"; readonly action: Action }
   | { readonly kind: "rejected"; readonly reason: Rejection };
 
 type Rule<A extends Action> = (game: Game, action: A) => Outcome;
 
-const performed = (game: Game, cost: Cost = TURN): Outcome => ({
+const performed = (game: Game, spendsTurn = true): Outcome => ({
   kind: "performed",
   game,
-  cost,
+  spendsTurn,
 });
 
 const refused = (reason: Rejection): Outcome => ({ kind: "rejected", reason });
@@ -207,7 +193,7 @@ export type GameEvent =
       readonly action: Action;
       readonly reason: Rejection;
     }
-  | { readonly kind: "cast"; readonly spell: SpellId }
+  | { readonly kind: "used"; readonly ability: AbilityId }
   | { readonly kind: "hitMonster"; readonly monster: MonsterKind }
   | { readonly kind: "killed"; readonly monster: MonsterKind }
   | { readonly kind: "dropped"; readonly monster: MonsterKind }
@@ -220,7 +206,6 @@ export type GameEvent =
   | { readonly kind: "spilled"; readonly items: readonly Item[] }
   | { readonly kind: "destroyed" }
   | { readonly kind: "prepared" }
-  | { readonly kind: "quaffed"; readonly potion: PotionKind }
   | { readonly kind: "hitSpawner"; readonly spawner: SpawnerKind }
   | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
   | { readonly kind: "emerged"; readonly monster: MonsterKind }
@@ -229,8 +214,10 @@ export type GameEvent =
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
 
-export const cooldownOf = ({ player, turn }: Game, spell: SpellId): number =>
-  Math.max(0, (player.spellsReadyAt.get(spell) ?? 0) - turn);
+export const cooldownOf = (
+  { player, turn }: Game,
+  ability: AbilityId,
+): number => Math.max(0, (player.readyAt.get(ability) ?? 0) - turn);
 
 const stateOf = (game: Game, { kind, at }: Spawner): SpawnerState =>
   game.spawners.get(hexKey(at)) ?? {
@@ -393,7 +380,7 @@ export const newGame = (land: Land): Game =>
         facing: "n",
         hp: MAX_HP,
         mp: MAX_MP,
-        spellsReadyAt: new Map(),
+        readyAt: new Map(),
         gold: 0,
         pack: [],
         equipment: {},
@@ -545,26 +532,6 @@ const destroy: Rule<Destroy> = (game) => {
   );
 };
 
-const quaff: Rule<Quaff> = (game, action) => {
-  const { player } = game;
-  const potion = player.pack.find(
-    (item) => item.kind === "potion" && item.potion === action.potion,
-  );
-  if (!potion) return refused("no-item");
-  const { hp, mp } = POTIONS[action.potion];
-  return performed(
-    recorded(
-      withPlayer(game, {
-        pack: player.pack.filter((item) => item !== potion),
-        hp: Math.min(MAX_HP, player.hp + hp),
-        mp: Math.min(MAX_MP, player.mp + mp),
-      }),
-      { kind: "quaffed", potion: action.potion },
-    ),
-    FREE,
-  );
-};
-
 const attackMonster = (game: Game, target: Monster, damage: number): Game => {
   const hp = target.hp - damage;
   if (hp > 0)
@@ -617,106 +584,95 @@ const hit = (game: Game, at: Hex, damage: number): Game => {
   return game;
 };
 
-const hitAll = (game: Game, hits: readonly (readonly [Hex, number])[]) =>
-  hits.reduce((state, [at, damage]) => hit(state, at, damage), game);
+const isInReach = ({ land, player }: Game, at: Hex): boolean =>
+  canStep(land.tileAt, player.at, at);
 
-const melee = (game: Game, toward: Direction, damage: number): Game => {
-  const { land, player } = game;
-  const to = add(player.at, DIRECTIONS[toward]);
-  return canStep(land.tileAt, player.at, to) ? hit(game, to, damage) : game;
+const applied = (game: Game, effect: Effect, at: Hex | undefined): Game => {
+  const { player } = game;
+  switch (effect.kind) {
+    case "face":
+      return withPlayer(game, { facing: directionBetween(player.at, at!)! });
+    case "damage":
+      return areaOf(effect.area, player.at, player.facing, at)
+        .filter((hex) => !MELEE_AREAS.has(effect.area) || isInReach(game, hex))
+        .reduce((state, hex) => hit(state, hex, effect.amount), game);
+    case "restore": {
+      const max = effect.stat === "hp" ? MAX_HP : MAX_MP;
+      return withPlayer(game, {
+        [effect.stat]: Math.min(max, player[effect.stat] + effect.amount),
+      });
+    }
+  }
 };
 
-const splashed = (damage: number, fraction: number) =>
-  Math.ceil(damage * fraction);
-
-const EFFECTS: Record<SpellId, (game: Game, at: Hex | undefined) => Game> = {
-  cleave: (game) => {
-    const { facing } = game.player;
-    const splash = splashed(PLAYER_DAMAGE, CLEAVE_SPLASH);
-    return flanksOf(facing).reduce(
-      (state, side) => melee(state, side, splash),
-      melee(game, facing, PLAYER_DAMAGE),
-    );
-  },
-  fireball: (game, at) => {
-    const splash = splashed(FIREBALL_DAMAGE, FIREBALL_SPLASH);
-    return hitAll(game, [
-      [at!, FIREBALL_DAMAGE],
-      ...fireballSplashOf(at!).map((hex) => [hex, splash] as const),
-    ]);
-  },
-  heal: ({ player, ...game }) => ({
-    ...game,
-    player: { ...player, hp: Math.min(MAX_HP, player.hp + HEAL_HP) },
-  }),
-  strike: (game, at) => {
-    const facing = directionBetween(game.player.at, at!)!;
-    return melee(
-      { ...game, player: { ...game.player, facing } },
-      facing,
-      PLAYER_DAMAGE,
-    );
-  },
-};
-
-const reachProblemOf = (
-  { land, player }: Game,
-  at: Hex,
-): Rejection | undefined => {
-  const isAdjacent = directionBetween(player.at, at) !== undefined;
-  if (!isAdjacent || !canStep(land.tileAt, player.at, at))
-    return "out-of-reach";
+const reachProblemOf = (game: Game, at: Hex): Rejection | undefined => {
+  const isAdjacent = directionBetween(game.player.at, at) !== undefined;
+  if (!isAdjacent || !isInReach(game, at)) return "out-of-reach";
   return undefined;
 };
 
 const aimProblemOf = (
   game: Game,
-  { spell, at }: Cast,
+  { ability, at }: Use,
 ): Rejection | undefined => {
-  const { aim } = SPELLS[spell];
-  const { player } = game;
+  const { aim } = abilityOf(ability);
   if (aim.kind === "monster") {
     const target = at && monsterAt(game, at);
     if (!target) return "no-target";
     return reachProblemOf(game, target.at);
   }
   if (aim.kind === "hex") {
-    if (!at || hexDistance(player.at, at) > aim.range) return "out-of-range";
+    if (!at || hexDistance(game.player.at, at) > aim.range)
+      return "out-of-range";
     if (!visibleOf(game).has(hexKey(at))) return "out-of-sight";
   }
   return undefined;
 };
 
+const supplyOf = ({ player }: Game, id: AbilityId): Item | undefined => {
+  const { consumes } = abilityOf(id);
+  return player.pack.find(
+    (item) => item.kind === "potion" && item.potion === consumes,
+  );
+};
+
 export const unreadinessOf = (
   game: Game,
-  spell: SpellId,
+  id: AbilityId,
 ): Rejection | undefined => {
-  if (cooldownOf(game, spell) > 0) return "not-ready";
-  if (game.player.mp < SPELLS[spell].mp) return "no-mana";
+  const { mp, consumes } = abilityOf(id);
+  if (cooldownOf(game, id) > 0) return "not-ready";
+  if (game.player.mp < mp) return "no-mana";
+  if (consumes && !supplyOf(game, id)) return "no-item";
   return undefined;
 };
 
-const castProblemOf = (game: Game, cast: Cast): Rejection | undefined =>
-  unreadinessOf(game, cast.spell) ?? aimProblemOf(game, cast);
-
-const cast: Rule<Cast> = (game, cast) => {
-  const problem = castProblemOf(game, cast);
-  if (problem) return refused(problem);
+const spent = (game: Game, id: AbilityId): Game => {
   const { player, turn } = game;
-  const { mp, cooldown } = SPELLS[cast.spell];
-  const spent = {
-    ...player,
+  const { mp, cooldown } = abilityOf(id);
+  const supply = supplyOf(game, id);
+  return withPlayer(game, {
     mp: player.mp - mp,
-    spellsReadyAt: new Map([
-      ...player.spellsReadyAt,
-      [cast.spell, turn + 1 + cooldown],
-    ]),
-  };
+    pack: player.pack.filter((item) => item !== supply),
+    readyAt:
+      cooldown > 0
+        ? new Map([...player.readyAt, [id, turn + 1 + cooldown]])
+        : player.readyAt,
+  });
+};
+
+const use: Rule<Use> = (game, action) => {
+  const problem =
+    unreadinessOf(game, action.ability) ?? aimProblemOf(game, action);
+  if (problem) return refused(problem);
+  const { effects, spendsTurn } = abilityOf(action.ability);
+  const used = recorded(spent(game, action.ability), {
+    kind: "used",
+    ability: action.ability,
+  });
   return performed(
-    EFFECTS[cast.spell](
-      recorded({ ...game, player: spent }, { kind: "cast", spell: cast.spell }),
-      cast.at,
-    ),
+    effects.reduce((state, effect) => applied(state, effect, action.at), used),
+    spendsTurn,
   );
 };
 
@@ -934,18 +890,14 @@ const RULES: {
   move,
   attack,
   wait: (game) => performed(game),
-  cast,
+  use,
   transfer,
   prepare: (game) => performed(recorded(game, { kind: "prepared" })),
-  quaff,
   destroy,
 };
 
 const outcomeOf = <A extends Action>(game: Game, action: A): Outcome =>
   (RULES[action.kind] as Rule<A>)(game, action);
-
-const paid = (game: Game, { turn }: Cost): Game =>
-  turn ? endTurn(game) : game;
 
 const resolve = (game: Game, action: Action): Game => {
   const outcome = outcomeOf(game, action);
@@ -955,7 +907,7 @@ const resolve = (game: Game, action: Action): Game => {
     case "substituted":
       return resolve(game, outcome.action);
     case "performed":
-      return paid(outcome.game, outcome.cost);
+      return outcome.spendsTurn ? endTurn(outcome.game) : outcome.game;
   }
 };
 

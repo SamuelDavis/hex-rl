@@ -73,17 +73,12 @@ export const GEAR = {
 
 export type GearKind = keyof typeof GEAR;
 
-export const POTIONS = {
-  health: { hp: 8, mp: 0 },
-  mana: { hp: 0, mp: 5 },
-} as const satisfies Record<
-  string,
-  { readonly hp: number; readonly mp: number }
->;
+export const POTION_KINDS = ["health", "mana"] as const;
 
-export type PotionKind = keyof typeof POTIONS;
+export type PotionKind = (typeof POTION_KINDS)[number];
 
-export const isPotion = (name: string): name is PotionKind => name in POTIONS;
+export const isPotion = (name: string): name is PotionKind =>
+  (POTION_KINDS as readonly string[]).includes(name);
 
 export interface Name {
   readonly prefix?: string;

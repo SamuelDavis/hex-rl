@@ -10,7 +10,6 @@ import {
   MAX_HP,
   MAX_MP,
   newGame,
-  PLAYER_DAMAGE,
   HUNT_RADIUS,
   SPAWNER_HEAL_INTERVAL,
   type Action,
@@ -38,14 +37,16 @@ import {
 } from "./hex";
 import { MONSTERS, SPAWNERS, spawnerHpOf, type SpawnerKind } from "./monsters";
 import {
+  ABILITIES,
   CLEAVE_SPLASH,
   FIREBALL_DAMAGE,
   FIREBALL_SPLASH,
   HEAL_HP,
-  SPELLS,
-} from "./spells";
+  HEALTH_POTION_HP,
+  PLAYER_DAMAGE,
+} from "./abilities";
 import type { Spawner } from "./terrain";
-import { lootOf, POTIONS, type Chest, type GearKind, type Item } from "./items";
+import { lootOf, type Chest, type GearKind, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
 import {
   east,
@@ -583,7 +584,7 @@ describe("act", () => {
   });
 });
 
-describe("cast", () => {
+describe("use", () => {
   const ne = add(origin, DIRECTIONS.ne);
   const south = add(origin, DIRECTIONS.s);
   const trolls = (...at: Hex[]) => at.map((hex) => monster(hex, "troll", "nw"));
@@ -592,41 +593,41 @@ describe("cast", () => {
   const TROLL = MONSTERS.troll.hp;
 
   test("spends mana, a turn, and starts the cooldown", () => {
-    const next = act(facingEast(), { kind: "cast", spell: "heal" });
+    const next = act(facingEast(), { kind: "use", ability: "heal" });
     expect(next.turn).toBe(1);
-    expect(next.player.mp).toBe(MAX_MP - SPELLS.heal.mp);
-    expect(cooldownOf(next, "heal")).toBe(SPELLS.heal.cooldown);
+    expect(next.player.mp).toBe(MAX_MP - ABILITIES.heal.mp);
+    expect(cooldownOf(next, "heal")).toBe(ABILITIES.heal.cooldown);
   });
 
   test("cooldowns count down each turn until ready", () => {
     const cast = act(facingEast(), {
-      kind: "cast",
-      spell: "fireball",
+      kind: "use",
+      ability: "fireball",
       at: east,
     });
-    const waits = historyOf(cast, SPELLS.fireball.cooldown);
+    const waits = historyOf(cast, ABILITIES.fireball.cooldown);
     expect(waits.map((game) => cooldownOf(game, "fireball"))).toEqual([
       5, 4, 3, 2, 1, 0,
     ]);
   });
 
   test("can't be cast while cooling down, spending no turn", () => {
-    const cast = act(facingEast(), { kind: "cast", spell: "heal" });
-    const again = act(cast, { kind: "cast", spell: "heal" });
+    const cast = act(facingEast(), { kind: "use", ability: "heal" });
+    const again = act(cast, { kind: "use", ability: "heal" });
     expect(again.turn).toBe(cast.turn);
     expect(again.player).toEqual(cast.player);
     expect(again.events).toEqual([
-      rejection({ kind: "cast", spell: "heal" }, "not-ready"),
+      rejection({ kind: "use", ability: "heal" }, "not-ready"),
     ]);
   });
 
   test("can't be cast without enough mana, spending no turn", () => {
     const game = facingEast();
     const drained = { ...game, player: { ...game.player, mp: 1 } };
-    const next = act(drained, { kind: "cast", spell: "heal" });
+    const next = act(drained, { kind: "use", ability: "heal" });
     expect(next.turn).toBe(0);
     expect(next.events).toEqual([
-      rejection({ kind: "cast", spell: "heal" }, "no-mana"),
+      rejection({ kind: "use", ability: "heal" }, "no-mana"),
     ]);
   });
 
@@ -640,8 +641,8 @@ describe("cast", () => {
 
   test("cleave hits ahead fully and either side by half", () => {
     const next = act(gameWith(trolls(east, ne, south)), {
-      kind: "cast",
-      spell: "cleave",
+      kind: "use",
+      ability: "cleave",
     });
     expect(hpAt(next, east)).toBe(TROLL - PLAYER_DAMAGE);
     expect(hpAt(next, ne)).toBe(TROLL - PLAYER_DAMAGE * CLEAVE_SPLASH);
@@ -652,8 +653,8 @@ describe("cast", () => {
     const at = { q: 3, r: 0 };
     const beside = { q: 4, r: 0 };
     const next = act(gameWith(trolls(at, beside)), {
-      kind: "cast",
-      spell: "fireball",
+      kind: "use",
+      ability: "fireball",
       at,
     });
     expect(hpAt(next, at)).toBe(TROLL - FIREBALL_DAMAGE);
@@ -662,10 +663,10 @@ describe("cast", () => {
   });
 
   test("fireball can't reach beyond its range or out of sight", () => {
-    const far = { q: SPELLS.fireball.aim.range + 1, r: 0 };
+    const far = { q: ABILITIES.fireball.aim.range + 1, r: 0 };
     const behind = { q: -AWARENESS - 1, r: 0 };
     for (const at of [far, behind, undefined]) {
-      const next = act(facingEast(), { kind: "cast", spell: "fireball", at });
+      const next = act(facingEast(), { kind: "use", ability: "fireball", at });
       expect(next.turn).toBe(0);
     }
   });
@@ -673,16 +674,16 @@ describe("cast", () => {
   test("heal restores hit points, up to the maximum", () => {
     const game = facingEast();
     const hurt = { ...game, player: { ...game.player, hp: 1 } };
-    expect(act(hurt, { kind: "cast", spell: "heal" }).player.hp).toBe(
+    expect(act(hurt, { kind: "use", ability: "heal" }).player.hp).toBe(
       1 + HEAL_HP,
     );
-    expect(act(game, { kind: "cast", spell: "heal" }).player.hp).toBe(MAX_HP);
+    expect(act(game, { kind: "use", ability: "heal" }).player.hp).toBe(MAX_HP);
   });
 
   test("strike faces the adjacent target and attacks it in one turn", () => {
     const next = act(gameWith(trolls(south)), {
-      kind: "cast",
-      spell: "strike",
+      kind: "use",
+      ability: "strike",
       at: south,
     });
     expect(next.turn).toBe(1);
@@ -692,19 +693,19 @@ describe("cast", () => {
 
   test("strike can't be cast without a target in reach", () => {
     const far = { q: 3, r: 0 };
-    const none = act(gameWith([]), { kind: "cast", spell: "strike" });
+    const none = act(gameWith([]), { kind: "use", ability: "strike" });
     expect(none.turn).toBe(0);
     expect(none.events).toEqual([
-      rejection({ kind: "cast", spell: "strike" }, "no-target"),
+      rejection({ kind: "use", ability: "strike" }, "no-target"),
     ]);
     const distant = act(gameWith(trolls(far)), {
-      kind: "cast",
-      spell: "strike",
+      kind: "use",
+      ability: "strike",
       at: far,
     });
     expect(distant.turn).toBe(0);
     expect(distant.events).toEqual([
-      rejection({ kind: "cast", spell: "strike", at: far }, "out-of-reach"),
+      rejection({ kind: "use", ability: "strike", at: far }, "out-of-reach"),
     ]);
   });
 });
@@ -826,7 +827,7 @@ describe("transfer", () => {
   });
 });
 
-describe("quaff", () => {
+describe("use a potion", () => {
   const health: Item = { id: "h", kind: "potion", potion: "health" };
   const mana: Item = { id: "m", kind: "potion", potion: "mana" };
   const holding = (game: Game, player: Partial<Game["player"]>): Game => ({
@@ -840,19 +841,31 @@ describe("quaff", () => {
       mp: 9,
       pack: [health, mana, { ...health, id: "h2" }],
     });
-    const healed = act(game, { kind: "quaff", potion: "health" });
-    expect(healed.player.hp).toBe(5 + POTIONS.health.hp);
+    const healed = act(game, { kind: "use", ability: "health" });
+    expect(healed.player.hp).toBe(5 + HEALTH_POTION_HP);
     expect(healed.player.pack).toEqual([mana, { ...health, id: "h2" }]);
     expect(healed.turn).toBe(0);
     expect(healed.monsters).toEqual(game.monsters);
-    expect(healed.events).toEqual([{ kind: "quaffed", potion: "health" }]);
-    expect(act(healed, { kind: "quaff", potion: "mana" }).player.mp).toBe(
+    expect(healed.events).toEqual([{ kind: "used", ability: "health" }]);
+    expect(act(healed, { kind: "use", ability: "mana" }).player.mp).toBe(
       MAX_MP,
     );
   });
 
+  test("potions can be drunk back to back", () => {
+    const game = holding(facingEast(), {
+      hp: 1,
+      pack: [health, { ...health, id: "h2" }],
+    });
+    const twice = act(act(game, { kind: "use", ability: "health" }), {
+      kind: "use",
+      ability: "health",
+    });
+    expect(twice.player.pack).toEqual([]);
+  });
+
   test("can't quaff a potion not in the pack", () => {
-    const action: Action = { kind: "quaff", potion: "mana" };
+    const action: Action = { kind: "use", ability: "mana" };
     expect(act(facingEast(), action).events).toEqual([
       rejection(action, "no-item"),
     ]);

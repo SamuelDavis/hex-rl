@@ -69,7 +69,7 @@ describe("update", () => {
     );
     expect(session.mode).toEqual(EXPLORE);
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({ kind: "cast", spell: "fireball" });
+    expect(session.log).toContainEqual({ kind: "used", ability: "fireball" });
   });
 
   test("cancelling an aim spends no turn", () => {
@@ -87,7 +87,7 @@ describe("update", () => {
       kind: "use",
       ability: "strike",
     });
-    expect(session.log).toContainEqual({ kind: "cast", spell: "strike" });
+    expect(session.log).toContainEqual({ kind: "used", ability: "strike" });
   });
 
   test("drops the target once it is out of range", () => {
@@ -122,7 +122,7 @@ describe("update", () => {
     );
     expect(session.mode.kind).toBe("aim");
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({ kind: "quaffed", potion: "mana" });
+    expect(session.log).toContainEqual({ kind: "used", ability: "mana" });
   });
 
   test("resizing the view changes the target range", () => {

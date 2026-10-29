@@ -8,8 +8,6 @@ import {
   type Prepare,
   type Transfer,
 } from "../../game/game";
-import { isPotion } from "../../game/items";
-import type { Ability } from "./loadout";
 import { hexKey, sameHex, type Hex } from "../../game/hex";
 import { EXPLORE, transition, type Command, type Mode } from "./mode";
 import { nextTarget, targetInView, tracked, type Target } from "./target";
@@ -29,8 +27,7 @@ export interface Session {
 }
 
 export type Intent =
-  | Exclude<Command, { readonly kind: "use" }>
-  | { readonly kind: "use"; readonly ability: Ability }
+  | Command
   | { readonly kind: "cycleTarget" }
   | { readonly kind: "inventory" }
   | { readonly kind: "dismiss" }
@@ -82,10 +79,6 @@ const commanded = (session: Session, command: Command): Session => {
 
 export const update = (session: Session, intent: Intent): Session => {
   switch (intent.kind) {
-    case "use":
-      return isPotion(intent.ability)
-        ? performed(session, { kind: "quaff", potion: intent.ability })
-        : commanded(session, { kind: "use", spell: intent.ability });
     case "cycleTarget": {
       const { game, range, target } = session;
       return { ...session, target: nextTarget(game, range, target) };

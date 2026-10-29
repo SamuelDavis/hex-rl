@@ -27,7 +27,6 @@ import {
   intentOf,
   slotted,
   STARTING_LOADOUT,
-  type Ability,
   type Loadout,
 } from "./loadout";
 import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
@@ -47,18 +46,21 @@ import { directionToward, hexKey, type Direction } from "../../game/hex";
 import { narrationOf } from "./narration";
 import {
   capacityOf,
-  isPotion,
   loadOf,
   nameOf,
   PLACE_NAMES,
   placeFor,
-  POTIONS,
   sizeOf,
   type Item,
   type PotionKind,
 } from "../../game/items";
 import { newSession, update, type Intent } from "./session";
-import { fireballSplashOf, SPELL_IDS, SPELLS } from "../../game/spells";
+import {
+  ABILITY_IDS,
+  abilityOf,
+  areaOf,
+  type AbilityId,
+} from "../../game/abilities";
 import { sightOf, targetInView } from "./target";
 import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 
@@ -118,15 +120,18 @@ export default function Game() {
   });
 
   const getAimMark = createMemo(() => {
-    const { mode } = getSession();
+    const { mode, game } = getSession();
     if (mode.kind !== "aim") return undefined;
-    const area = [mode.at, ...fireballSplashOf(mode.at)];
+    const { at, facing } = game.player;
+    const area = abilityOf(mode.ability).effects.flatMap((effect) =>
+      effect.kind === "damage" ? areaOf(effect.area, at, facing, mode.at) : [],
+    );
     return { at: mode.at, area: new Set(area.map(hexKey)) };
   });
 
   createEffect(on(getRange, (range) => dispatch({ kind: "view", range })));
 
-  function bind(slot: number, ability: Ability | undefined) {
+  function bind(slot: number, ability: AbilityId | undefined) {
     setLoadout((loadout) => slotted(loadout, slot, ability));
     dispatch({ kind: "prepare" });
     setEditing(undefined);
@@ -407,10 +412,11 @@ function SpellSlots(props: {
     <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
       <For each={props.loadout}>
         {(ability, slot) => {
+          const consumes = ability && abilityOf(ability).consumes;
           const getCooldown = () =>
-            ability && !isPotion(ability) ? cooldownOf(props.game, ability) : 0;
+            ability ? cooldownOf(props.game, ability) : 0;
           const getStock = () =>
-            ability && isPotion(ability) ? stockOf(props.game, ability) : 1;
+            consumes ? stockOf(props.game, consumes) : 1;
           const getHotkey = () => hotkeyOf(props.keymap, `slot-${slot() + 1}`);
           return (
             <button
@@ -427,7 +433,7 @@ function SpellSlots(props: {
               <Show when={getCooldown() > 0} fallback={ability ?? "—"}>
                 <span class="text-2xl">{getCooldown()}</span>
               </Show>
-              <Show when={ability && isPotion(ability)}>
+              <Show when={consumes}>
                 <span class="absolute right-1 bottom-0.5">×{getStock()}</span>
               </Show>
             </button>
@@ -466,15 +472,20 @@ function SlotsPanel(props: {
   );
 }
 
-const abilityNameOf = (ability: Ability) =>
-  isPotion(ability) ? `${ability} potion` : ability;
+const abilityNameOf = (ability: AbilityId) =>
+  abilityOf(ability).consumes ? `${ability} potion` : ability;
+
+const costOf = (ability: AbilityId) => {
+  const { spendsTurn, mp, cooldown } = abilityOf(ability);
+  return spendsTurn ? `${mp} MP · ${cooldown} turn cooldown` : "free action";
+};
 
 function AbilityPicker(props: {
   slot: number;
-  bound: Ability | undefined;
-  bind: (ability: Ability | undefined) => void;
+  bound: AbilityId | undefined;
+  bind: (ability: AbilityId | undefined) => void;
 }) {
-  const option = (ability: Ability, detail: JSX.Element) => (
+  const option = (ability: AbilityId, detail: JSX.Element) => (
     <button
       type="button"
       class="block w-full text-left"
@@ -489,30 +500,14 @@ function AbilityPicker(props: {
       <header>
         <h3>Slot {props.slot + 1}</h3>
       </header>
-      <For each={SPELL_IDS}>
-        {(spell) =>
+      <For each={ABILITY_IDS}>
+        {(ability) =>
           option(
-            spell,
+            ability,
             <>
-              <strong>{spell}</strong> · {SPELLS[spell].mp} MP ·{" "}
-              {SPELLS[spell].cooldown} turn cooldown
+              <strong>{abilityNameOf(ability)}</strong> · {costOf(ability)}
               <br />
-              <small>{SPELLS[spell].summary}</small>
-            </>,
-          )
-        }
-      </For>
-      <For each={Object.keys(POTIONS) as PotionKind[]}>
-        {(potion) =>
-          option(
-            potion,
-            <>
-              <strong>{potion} potion</strong> · free action
-              <br />
-              <small>
-                Restore {POTIONS[potion].hp || POTIONS[potion].mp}{" "}
-                {POTIONS[potion].hp ? "HP" : "MP"}.
-              </small>
+              <small>{abilityOf(ability).summary}</small>
             </>,
           )
         }

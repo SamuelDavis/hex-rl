@@ -1,3 +1,4 @@
+import { abilityOf, type AbilityId } from "../../game/abilities";
 import type {
   Action,
   Cargo,
@@ -18,23 +19,29 @@ const REASONS: Record<Rejection, string> = {
   "out-of-range": "out of range",
   "out-of-sight": "out of sight",
   misfit: "it doesn't go there",
-  "no-item": "there is nothing to move",
+  "no-item": "there is none",
   full: "the pack is full",
   "no-chest": "there is no chest here",
 };
 
-const VERBS: Record<Exclude<Action["kind"], "cast">, string> = {
+const VERBS: Record<Exclude<Action["kind"], "use">, string> = {
   move: "move",
   attack: "attack",
   wait: "wait",
   transfer: "move that",
   prepare: "prepare",
-  quaff: "quaff",
   destroy: "destroy",
 };
 
+const usingOf = (ability: AbilityId, verbs: readonly [string, string]) =>
+  abilityOf(ability).consumes
+    ? `${verbs[0]} a ${ability} potion`
+    : `${verbs[1]} ${ability}`;
+
 const verbOf = (action: Action) =>
-  action.kind === "cast" ? `cast ${action.spell}` : VERBS[action.kind];
+  action.kind === "use"
+    ? usingOf(action.ability, ["quaff", "cast"])
+    : VERBS[action.kind];
 
 const PLAYER = "The adventurer";
 
@@ -60,8 +67,8 @@ export const narrationOf = (event: GameEvent): string => {
       return `${PLAYER} sets out into the wilds.`;
     case "rejected":
       return `${PLAYER} cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
-    case "cast":
-      return `${PLAYER} casts ${event.spell}.`;
+    case "used":
+      return `${PLAYER} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
     case "hitMonster":
       return `${PLAYER} hits the ${event.monster}.`;
     case "killed":
@@ -76,8 +83,6 @@ export const narrationOf = (event: GameEvent): string => {
       return `${PLAYER} prepares themselves.`;
     case "destroyed":
       return `${PLAYER} destroys the chest.`;
-    case "quaffed":
-      return `${PLAYER} quaffs a ${event.potion} potion.`;
     case "hitSpawner":
       return `${PLAYER} hits the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":
