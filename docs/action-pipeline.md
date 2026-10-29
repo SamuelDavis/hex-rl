@@ -1,13 +1,11 @@
 # Action Pipeline
 
-Contract for turning any actor's choice into authoritative game events. One vocabulary, one execution path, for the player and monsters alike. Scoped to today's game (hex movement, bump combat, abilities, potions, inventory); extension points are named, not built.
+Contract for turning any actor's choice into authoritative game events. One vocabulary, one execution path, for the player and monsters alike. The pipeline starts at `Action`: Intents, aiming and bindings are UI ([ui-architecture.md](ui-architecture.md)) and never enter the game. Scoped to today's game (hex movement, bump combat, abilities, potions, inventory); extension points are named, not built.
 
 ## Vocabulary
 
 | Term | Meaning | Lives in |
 |---|---|---|
-| Intent | UI input: a key, a tap, a menu choice. Never touches `Game`. | `Intent`, `session.ts` |
-| Mode | UI state that turns Intents into Actions (aiming). | `mode.ts` |
 | Actor | Something that takes turns: the player or a monster. | `ActorId` |
 | Action | What an actor attempts this turn; data only. The pipeline's sole input. | `Action` |
 | Rule | Per-Action-kind logic: check, cost, perform, or substitute. The only place situational logic lives. | `RULES` |
@@ -20,12 +18,12 @@ Contract for turning any actor's choice into authoritative game events. One voca
 | Event | Authoritative record of one consequence. The pipeline's sole output. | `GameEvent` |
 | Turn | One round: the player's Action, then each monster's, then upkeep. | `endTurn` |
 
-Rename map from today: `Cast` + `Quaff` → `use` Action over an `AbilityId`; `SPELLS` + `POTIONS` → `ABILITIES`; `EFFECTS` (per-spell functions) → `Effect` data plus `applyEffect`; `strike`, `playerTurn`, `melee` → the `attack` Rule; `Ability` (loadout type) → `AbilityId`.
+Rename map from today: `Cast` + `Quaff` → `use` Action over an `AbilityId`; `SPELLS` + `POTIONS` → `ABILITIES`; `EFFECTS` (per-spell functions) → `Effect` data plus `applyEffect`; `strike`, `playerTurn`, `melee` → the `attack` Rule.
 
 ## Pipeline
 
 ```
-Intent ─(Mode)→ Action ─resolve→ Rule ─┬─ rejected(reason)        → Event
+UI ──────────→ Action ─resolve→ Rule ─┬─ rejected(reason)        → Event
                    ▲                   ├─ substituted(action) ──┐
                    └───────────────────┼────────────────────────┘
                                        └─ performed(cost) → Effects → Events
@@ -39,7 +37,7 @@ Contracts:
 - Every state change records an Event with its actor. Frontends derive everything from Events and `Game`, never from re-deriving rules (e.g. "stepped onto a chest" is an Event, not a hex comparison in `session.ts`).
 - Checks run before costs; costs are paid once, by `resolve`, from the Rule's declared `Cost`. Rules never call `endTurn`.
 - Substitution is acyclic by construction (only `move` substitutes, only to non-substituting kinds); a test pins it.
-- Monster Actions that fail their check are recorded and spend the monster's turn; Minds should only choose checked Actions.
+- A rejected player Action spends nothing. A rejected monster Action is recorded and the monster loses its turn; Minds should only choose checked Actions.
 
 ## Types (sketch)
 
@@ -51,7 +49,7 @@ export type Action =
   | { readonly kind: "wait"; readonly actor: ActorId }
   | { readonly kind: "attack"; readonly actor: ActorId; readonly at: Hex }
   | { readonly kind: "use"; readonly actor: ActorId; readonly ability: AbilityId; readonly at?: Hex }
-  | Transfer | Bind | Destroy;
+  | Transfer | Prepare | Destroy;
 
 export interface Cost {
   readonly turn: boolean;
@@ -94,7 +92,7 @@ How today's actions map:
 | use cleave / fireball / heal / strike | check aim; apply effects | turn, AP, cooldown |
 | use potion | check item held; apply effects | item |
 | transfer, destroy | as today | turn |
-| bind | as today | turn |
+| prepare (UI rebinds a slot) | none | turn |
 
 ## Extension points
 
@@ -123,7 +121,7 @@ Each step green on existing tests:
 
 1. Tag every `Action` with `kind` and `actor`; add `resolve` with the mapped `RULES` table; Rules return `Outcome`; delete scattered `endTurn` calls.
 2. `move` substitutes `attack`; delete `playerTurn`, `melee`.
-3. `ABILITIES` + `Effect` + `applyEffect` replace `SPELLS`, `POTIONS`, `EFFECTS`, `Cast`, `Quaff`; slot dispatch leaves `session.ts`.
+3. `ABILITIES` + `Effect` + `applyEffect` replace `SPELLS`, `POTIONS`, `EFFECTS`, `Cast`, `Quaff`.
 4. Monster Minds emit Actions through `resolve`; delete `strike`.
 5. `steppedOnChest` Event replaces the chest check in `session.ts`.
 
