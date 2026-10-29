@@ -1,21 +1,30 @@
 import { expect, test } from "vitest";
 import { narrationOf } from "./narration";
 
-test("rejections name the action and the reason", () => {
+test("rejections name the actor, the action and the reason", () => {
   expect(
     narrationOf({
       kind: "rejected",
       action: { spell: "strike" },
       reason: "out-of-reach",
     }),
-  ).toBe("Cannot cast strike: out of reach.");
+  ).toBe("The adventurer cannot cast strike: out of reach.");
   expect(
     narrationOf({ kind: "rejected", action: "n", reason: "blocked" }),
-  ).toBe("Cannot move: the way is blocked.");
+  ).toBe("The adventurer cannot move: the way is blocked.");
+});
+
+test("events are told in the third person", () => {
+  expect(narrationOf({ kind: "prepared" })).toBe(
+    "The adventurer prepares themselves.",
+  );
+  expect(narrationOf({ kind: "struck", monster: "troll" })).toBe(
+    "The troll hits the adventurer.",
+  );
 });
 
 test("spawners are named for what they are", () => {
   expect(narrationOf({ kind: "wrecked", spawner: "den" })).toMatch(
-    /^You wreck/,
+    /^The adventurer wrecks the /,
   );
 });

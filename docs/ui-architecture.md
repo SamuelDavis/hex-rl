@@ -27,7 +27,7 @@ One-way flow, Elm-style [Elm-Architecture]: frontend → `Intent` → `update` (
 - **Bindings are UI, rebinding is a turn**: the loadout lives in the page, persisted to `localStorage`; changing a slot dispatches the game's `prepare` action, which spends a turn and changes nothing else.
 - **Target is orthogonal to mode**: lives on `Session`, so `cycleTarget` works while aiming.
 - **`Action` is the sole game input** (Command pattern [GPP-Command]); `act` is the sole entry.
-- **The game reports what happened as data**: `Game.events` holds the typed `GameEvent`s of the action that produced the state (cleared each `act`); rejected actions spend no turn and record `{ kind: "rejected", action, reason: Rejection }`. No prose in the domain; `narrationOf` (`src/Pages/Game/narration.ts`) renders events for any text frontend.
+- **The game reports what happened as data**: `Game.events` holds the typed `GameEvent`s of the action that produced the state (cleared each `act`); rejected actions spend no turn and record `{ kind: "rejected", action, reason: Rejection }`. No prose in the domain; `narrationOf` (`src/Pages/Game/narration.ts`) renders events as log lines, always third person with the actor named ("The adventurer prepares themselves.", "The troll hits the adventurer.").
 - **No event queue**: turn-based input-driven loop; events are returned synchronously, not dispatched [GPP-EventQueue, GPP-GameLoop].
 - **Renderers read a snapshot**, never live getters.
 

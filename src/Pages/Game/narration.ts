@@ -4,7 +4,7 @@ import { SPAWNERS } from "../../game/monsters";
 
 const REASONS: Record<Rejection, string> = {
   blocked: "the way is blocked",
-  over: "you are dead",
+  over: "dead",
   "not-ready": "not ready",
   "no-mana": "not enough mana",
   "no-target": "no target",
@@ -13,7 +13,7 @@ const REASONS: Record<Rejection, string> = {
   "out-of-sight": "out of sight",
   misfit: "it doesn't go there",
   "no-item": "there is nothing to move",
-  full: "your pack is full",
+  full: "the pack is full",
   "no-chest": "there is no chest here",
 };
 
@@ -32,6 +32,8 @@ const verbOf = (action: Action) => {
   return action === "wait" ? "wait" : "move";
 };
 
+const PLAYER = "The adventurer";
+
 const cargoNameOf = (cargo: Cargo) =>
   cargo.kind === "gold" ? `${cargo.amount} gold` : `the ${nameOf(cargo)}`;
 
@@ -43,44 +45,44 @@ const listOf = (items: readonly Item[]) => {
 };
 
 const movingOf = (from: Where, to: Where) => {
-  if (to === "ground") return "put down";
-  if (to !== "pack") return "equip";
-  return from === "ground" ? "take" : "take off";
+  if (to === "ground") return "puts down";
+  if (to !== "pack") return "equips";
+  return from === "ground" ? "takes" : "takes off";
 };
 
 export const narrationOf = (event: GameEvent): string => {
   switch (event.kind) {
     case "began":
-      return "You set out into the wilds.";
+      return `${PLAYER} sets out into the wilds.`;
     case "rejected":
-      return `Cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
+      return `${PLAYER} cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
     case "cast":
-      return `You cast ${event.spell}.`;
+      return `${PLAYER} casts ${event.spell}.`;
     case "hitMonster":
-      return `You hit the ${event.monster}.`;
+      return `${PLAYER} hits the ${event.monster}.`;
     case "killed":
-      return `You kill the ${event.monster}.`;
+      return `${PLAYER} kills the ${event.monster}.`;
     case "dropped":
       return `The ${event.monster} drops a chest.`;
     case "moved":
-      return `You ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
+      return `${PLAYER} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
     case "spilled":
-      return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from your pack.`;
+      return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from the pack.`;
     case "prepared":
-      return "You ready your abilities.";
+      return `${PLAYER} prepares themselves.`;
     case "destroyed":
-      return "You destroy the chest.";
+      return `${PLAYER} destroys the chest.`;
     case "quaffed":
-      return `You quaff a ${event.potion} potion.`;
+      return `${PLAYER} quaffs a ${event.potion} potion.`;
     case "hitSpawner":
-      return `You hit the ${SPAWNERS[event.spawner].name}.`;
+      return `${PLAYER} hits the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":
-      return `You wreck the ${SPAWNERS[event.spawner].name}.`;
+      return `${PLAYER} wrecks the ${SPAWNERS[event.spawner].name}.`;
     case "emerged":
       return `The ${event.monster} emerges!`;
     case "struck":
-      return `The ${event.monster} hits you.`;
+      return `The ${event.monster} hits ${PLAYER.toLowerCase()}.`;
     case "died":
-      return "You die.";
+      return `${PLAYER} dies.`;
   }
 };
