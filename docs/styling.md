@@ -30,7 +30,8 @@ Contract:
 - Don't cap direct children of `td`/`th`; the cell would stop being a table cell. Wrap the content instead.
 - Inside `[role="group"]`, caps join form controls Pico-style; elsewhere they are spaced.
 - A row owns its vertical spacing: its children's block margins are zeroed. Pico-spaced rows keep Pico's margin; others get typography spacing.
-- Clickable `HTMLIcon` caps are squares spanning the row's height.
+- Clickable `HTMLIcon` caps are squares spanning the row's height, except in `li`, where they are one line tall and top-aligned: list text wraps, and a stretched cap outgrows its `contain: inline-size` track.
+- A `ul` with any cap row drops markers on every `li`: cap rows are grids, which lose markers, so mixed lists would be ragged.
 - Padded containers set `--cap-offset` (block minus inline padding) so caps get equal insets. `article > :is(header, footer)` mirrors Pico's sectioning padding formula; update it with Pico.
 
 Rationale:

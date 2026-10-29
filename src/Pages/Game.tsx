@@ -10,7 +10,7 @@ import {
   Switch,
   type JSX,
 } from "solid-js";
-import { HTMLDialog } from "@samueldavis/solidlib";
+import { HTMLDialog, HTMLIcon } from "@samueldavis/solidlib";
 import {
   CONTROL_BY_ID,
   CONTROLS,
@@ -507,187 +507,163 @@ function AbilityPicker(props: {
   );
 }
 
-const CARGO_TYPE = "text/plain";
-
 function InventoryPanel(props: {
   game: GameState;
   dispatch: (intent: Intent) => void;
 }) {
-  const [getHeld, setHeld] = createSignal<string>();
   const getPlayer = () => props.game.player;
   const getChest = () => props.game.chests.get(hexKey(getPlayer().at));
 
-  function transfer(cargo: string, to: Where) {
-    setHeld(undefined);
-    props.dispatch({ kind: "transfer", cargo, to });
-  }
-
-  function Cargo(cargoProps: { id: string; children: JSX.Element }) {
-    return (
-      <button
-        type="button"
-        draggable="true"
-        class="m-0 block w-full px-1 py-0.5 text-left text-xs aria-pressed:ring-4 aria-pressed:ring-amber-400"
-        aria-pressed={getHeld() === cargoProps.id}
-        onDragStart={(event) =>
-          event.dataTransfer?.setData(CARGO_TYPE, cargoProps.id)
-        }
-        onClick={(event) => {
-          event.stopPropagation();
-          setHeld((held) =>
-            held === cargoProps.id ? undefined : cargoProps.id,
-          );
-        }}
-      >
-        {cargoProps.children}
-      </button>
-    );
-  }
-
-  function Zone(zoneProps: {
+  function Move(moveProps: {
+    cargo: string;
     to: Where;
+    icon: string;
     label: string;
-    class?: string;
-    children: JSX.Element;
+    cap: "start" | "end";
   }) {
     return (
-      <section
-        aria-label={zoneProps.label}
-        class={`m-0 flex flex-col gap-1 rounded border border-(--pico-muted-border-color) p-1 ${zoneProps.class ?? ""}`}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const cargo = event.dataTransfer?.getData(CARGO_TYPE);
-          if (cargo) transfer(cargo, zoneProps.to);
-        }}
-        onClick={() => {
-          const held = getHeld();
-          if (held) transfer(held, zoneProps.to);
-        }}
-      >
-        <small>{zoneProps.label}</small>
-        {zoneProps.children}
-      </section>
-    );
-  }
-
-  function Row(rowProps: {
-    id: string;
-    left?: Where;
-    right?: Where;
-    children: JSX.Element;
-  }) {
-    const Arrow = (arrowProps: { to?: Where; children: string }) => (
-      <Show when={arrowProps.to} fallback={<span />}>
-        {(to) => (
-          <button
-            type="button"
-            class="m-0 px-1 py-0.5 text-xs"
-            aria-label={`Move to ${to()}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              transfer(rowProps.id, to());
-            }}
-          >
-            {arrowProps.children}
-          </button>
-        )}
-      </Show>
-    );
-    return (
-      <div class="grid grid-cols-[1.75rem_1fr_1.75rem] gap-1">
-        <Arrow to={rowProps.left}>←</Arrow>
-        <Cargo id={rowProps.id}>{rowProps.children}</Cargo>
-        <Arrow to={rowProps.right}>→</Arrow>
-      </div>
+      <HTMLIcon
+        type={moveProps.icon}
+        data-cap={moveProps.cap}
+        aria-label={moveProps.label}
+        title={moveProps.label}
+        onClick={() =>
+          props.dispatch({
+            kind: "transfer",
+            cargo: moveProps.cargo,
+            to: moveProps.to,
+          })
+        }
+      />
     );
   }
 
   const label = (item: Item) => (
-    <>
+    <span>
       {nameOf(item)}
       <Show when={sizeOf(item) > 0}> ({sizeOf(item)})</Show>
-    </>
+    </span>
   );
 
   return (
     <>
-      <div>
-        <Show when={getChest()}>
-          <button
-            type="button"
-            data-cap="start"
-            class="secondary"
-            onClick={() => props.dispatch({ kind: "destroy" })}
-          >
-            Destroy chest
-          </button>
-        </Show>
-        <p>
-          <small>
-            Use the arrows, drag, or tap an item then where it goes. Each move
-            spends a turn.
-          </small>
-        </p>
-      </div>
-      <div class="grid grid-cols-3 items-start gap-(--pico-spacing)">
-        <section aria-label="Equipment" class="m-0 flex flex-col gap-1">
-          <small>Equipment</small>
+      <Show when={getChest()}>
+        <button
+          type="button"
+          class="secondary"
+          onClick={() => props.dispatch({ kind: "destroy" })}
+        >
+          Destroy chest
+        </button>
+      </Show>
+      <p>
+        <small>Each move spends a turn.</small>
+      </p>
+      <details>
+        <summary>Equipment</summary>
+        <ul>
           <For each={PLACE_NAMES}>
             {(place) => (
-              <Zone to={place} label={place} class="min-h-12">
-                <Show when={getPlayer().equipment[place]}>
+              <li>
+                <Show
+                  when={getPlayer().equipment[place]}
+                  fallback={<span>{place}</span>}
+                >
                   {(item) => (
-                    <Row id={item().id} right="pack">
-                      {label(item())}
-                    </Row>
+                    <>
+                      <span>
+                        {place}: {label(item())}
+                      </span>
+                      <Move
+                        cargo={item().id}
+                        to="pack"
+                        icon="arrow_downward"
+                        label={`Unequip ${nameOf(item())}`}
+                        cap="end"
+                      />
+                    </>
                   )}
                 </Show>
-              </Zone>
+              </li>
             )}
           </For>
-        </section>
-        <Zone
-          to="pack"
-          label={`Pack ${loadOf(getPlayer().pack)}/${capacityOf(getPlayer().equipment)}`}
-          class="min-h-32"
-        >
+        </ul>
+      </details>
+      <section>
+        <h4>
+          Pack {loadOf(getPlayer().pack)}/{capacityOf(getPlayer().equipment)}
+        </h4>
+        <ul class="max-h-[33vh] overflow-y-auto">
           <Show when={getPlayer().gold > 0}>
-            <Row id={GOLD} right="ground">
-              {getPlayer().gold} gold
-            </Row>
+            <li>
+              <span>{getPlayer().gold} gold</span>
+              <Move
+                cargo={GOLD}
+                to="ground"
+                icon="arrow_downward"
+                label="Drop gold"
+                cap="end"
+              />
+            </li>
           </Show>
           <For each={getPlayer().pack}>
             {(item) => (
-              <Row
-                id={item.id}
-                left={placeFor(item, getPlayer().equipment)}
-                right="ground"
-              >
+              <li>
+                <Show when={placeFor(item, getPlayer().equipment)}>
+                  {(place) => (
+                    <Move
+                      cargo={item.id}
+                      to={place()}
+                      icon="arrow_upward"
+                      label={`Equip ${nameOf(item)}`}
+                      cap="start"
+                    />
+                  )}
+                </Show>
                 {label(item)}
-              </Row>
+                <Move
+                  cargo={item.id}
+                  to="ground"
+                  icon="arrow_downward"
+                  label={`Drop ${nameOf(item)}`}
+                  cap="end"
+                />
+              </li>
             )}
           </For>
-        </Zone>
-        <Zone
-          to="ground"
-          label={getChest() ? "Chest" : "Ground"}
-          class="min-h-32"
-        >
+        </ul>
+      </section>
+      <section>
+        <h4>{getChest() ? "Chest" : "Ground"}</h4>
+        <ul class="max-h-[33vh] overflow-y-auto">
           <Show when={(getChest()?.gold ?? 0) > 0}>
-            <Row id={GOLD} left="pack">
-              {getChest()?.gold} gold
-            </Row>
+            <li>
+              <Move
+                cargo={GOLD}
+                to="pack"
+                icon="arrow_upward"
+                label="Take gold"
+                cap="start"
+              />
+              <span>{getChest()?.gold} gold</span>
+            </li>
           </Show>
           <For each={getChest()?.items ?? []}>
             {(item) => (
-              <Row id={item.id} left="pack">
+              <li>
+                <Move
+                  cargo={item.id}
+                  to="pack"
+                  icon="arrow_upward"
+                  label={`Take ${nameOf(item)}`}
+                  cap="start"
+                />
                 {label(item)}
-              </Row>
+              </li>
             )}
           </For>
-        </Zone>
-      </div>
+        </ul>
+      </section>
     </>
   );
 }

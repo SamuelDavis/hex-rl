@@ -95,4 +95,13 @@ layer(icons);
     aspect-ratio: 1;
     contain: inline-size;
   }
+
+  :where(li) > [data-icon][role="button"][data-cap] {
+    align-self: start;
+    block-size: 1lh;
+  }
+
+  :where(ul:has(> li > [data-cap])) > li {
+    list-style: none;
+  }
 }
