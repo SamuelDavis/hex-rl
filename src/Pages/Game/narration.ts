@@ -14,6 +14,9 @@ import { SPAWNERS } from "../../game/monsters";
 
 const REASONS: Record<Rejection, string> = {
   blocked: "the way is blocked",
+  occupied: "something is in the way",
+  "not-facing": "not facing that way",
+  "already-facing": "already facing that way",
   over: "dead",
   "not-ready": "not ready",
   "no-mana": "not enough mana",
@@ -29,6 +32,8 @@ const REASONS: Record<Rejection, string> = {
 
 const VERBS: Record<Exclude<Action["kind"], "use">, string> = {
   move: "move",
+  turn: "turn",
+  step: "step",
   attack: "attack",
   wait: "wait",
   transfer: "move that",

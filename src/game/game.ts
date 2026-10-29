@@ -125,6 +125,16 @@ export interface Move {
   readonly direction: Direction;
 }
 
+export interface Turn {
+  readonly kind: "turn";
+  readonly direction: Direction;
+}
+
+export interface Step {
+  readonly kind: "step";
+  readonly direction: Direction;
+}
+
 export interface Attack {
   readonly kind: "attack";
   readonly at: Hex;
@@ -162,7 +172,9 @@ export interface Destroy {
   readonly kind: "destroy";
 }
 
-export type Action = Move | Attack | Wait | Use | Transfer | Prepare | Destroy;
+type Deed = Turn | Step | Attack | Wait | Use | Transfer | Prepare | Destroy;
+
+export type Action = Move | Deed;
 
 type Outcome =
   | {
@@ -170,14 +182,9 @@ type Outcome =
       readonly game: Game;
       readonly spendsTurn: boolean;
     }
-  | { readonly kind: "substituted"; readonly action: Action }
   | { readonly kind: "rejected"; readonly reason: Rejection };
 
-type Rule<A extends Action> = (
-  game: Game,
-  action: A,
-  actor: ActorId,
-) => Outcome;
+type Rule<A extends Deed> = (game: Game, action: A, actor: ActorId) => Outcome;
 
 const performed = (game: Game, spendsTurn = true): Outcome => ({
   kind: "performed",
@@ -189,6 +196,9 @@ const refused = (reason: Rejection): Outcome => ({ kind: "rejected", reason });
 
 export type Rejection =
   | "blocked"
+  | "occupied"
+  | "not-facing"
+  | "already-facing"
   | "over"
   | "not-ready"
   | "no-mana"
@@ -855,19 +865,32 @@ const destinationOf = (game: Game, monster: Monster): Hex | undefined => {
   }
 };
 
-const toward = ({ at }: Monster, to: Hex | undefined): Action => {
-  const direction = to && directionBetween(at, to);
-  return direction ? { kind: "move", direction } : { kind: "wait" };
+const facing = (
+  monster: Monster,
+  to: Hex | undefined,
+  then: (direction: Direction) => Deed,
+): Deed => {
+  const direction = to && directionBetween(monster.at, to);
+  if (!direction) return { kind: "wait" };
+  return direction === monster.facing
+    ? then(direction)
+    : { kind: "turn", direction };
 };
 
-const choiceOf = (game: Game, monster: Monster): Action => {
+const choiceOf = (game: Game, monster: Monster): Deed => {
   const { land, player } = game;
   const isBeside =
     directionBetween(monster.at, player.at) !== undefined &&
     canStep(land.tileAt, monster.at, player.at);
-  return monster.mind.state === "hostile" && isBeside
-    ? toward(monster, player.at)
-    : toward(monster, destinationOf(game, monster));
+  if (monster.mind.state === "hostile" && isBeside)
+    return facing(monster, player.at, () => ({
+      kind: "attack",
+      at: player.at,
+    }));
+  return facing(monster, destinationOf(game, monster), (direction) => ({
+    kind: "step",
+    direction,
+  }));
 };
 
 const monsterTurn = (game: Game, monster: Monster): Game => {
@@ -908,25 +931,28 @@ const endTurn = (acted: Game): Game =>
     populate(regenerate(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
   );
 
-const move: Rule<Move> = (game, { direction }, actor) => {
+const turn: Rule<Turn> = (game, { direction }, actor) => {
+  if (bodyOf(game, actor).facing === direction)
+    return refused("already-facing");
+  return performed(
+    recorded(withBody(game, actor, { facing: direction }), {
+      kind: "turned",
+      actor: kindOf(game, actor),
+      facing: direction,
+    }),
+  );
+};
+
+const step: Rule<Step> = (game, { direction }, actor) => {
   const { at, facing } = bodyOf(game, actor);
-  const kind = kindOf(game, actor);
-  if (direction !== facing)
-    return performed(
-      recorded(withBody(game, actor, { facing: direction }), {
-        kind: "turned",
-        actor: kind,
-        facing: direction,
-      }),
-    );
+  if (facing !== direction) return refused("not-facing");
   const to = add(at, DIRECTIONS[direction]);
   if (!canStep(game.land.tileAt, at, to)) return refused("blocked");
-  if (isBlocked(game, to))
-    return { kind: "substituted", action: { kind: "attack", at: to } };
+  if (isBlocked(game, to)) return refused("occupied");
   return performed(
     recorded(withBody(game, actor, { at: to }), {
       kind: "stepped",
-      actor: kind,
+      actor: kindOf(game, actor),
       direction,
       to,
     }),
@@ -940,8 +966,10 @@ const isFoeAt = (game: Game, actor: ActorId, at: Hex): boolean =>
 
 const attack: Rule<Attack> = (game, { at }, actor) => {
   if (!isFoeAt(game, actor, at)) return refused("no-target");
-  const problem = reachProblemOf(game, bodyOf(game, actor).at, at);
+  const { at: from, facing } = bodyOf(game, actor);
+  const problem = reachProblemOf(game, from, at);
   if (problem) return refused(problem);
+  if (directionBetween(from, at) !== facing) return refused("not-facing");
   return performed(
     actor === PLAYER
       ? hit(game, at, PLAYER_DAMAGE)
@@ -950,9 +978,10 @@ const attack: Rule<Attack> = (game, { at }, actor) => {
 };
 
 const RULES: {
-  readonly [K in Action["kind"]]: Rule<Extract<Action, { kind: K }>>;
+  readonly [K in Deed["kind"]]: Rule<Extract<Deed, { kind: K }>>;
 } = {
-  move,
+  turn,
+  step,
   attack,
   wait: (game) => performed(game),
   use,
@@ -966,25 +995,40 @@ interface Settlement {
   readonly spendsTurn: boolean;
 }
 
-const outcomeOf = <A extends Action>(
+const outcomeOf = <A extends Deed>(
   game: Game,
   action: A,
   actor: ActorId,
 ): Outcome => (RULES[action.kind] as Rule<A>)(game, action, actor);
 
+const MOVE_FALLBACKS: {
+  readonly [R in Rejection]?: (step: Step, from: Hex) => Deed;
+} = {
+  "not-facing": ({ direction }) => ({ kind: "turn", direction }),
+  occupied: ({ direction }, from) => ({
+    kind: "attack",
+    at: add(from, DIRECTIONS[direction]),
+  }),
+};
+
+const attemptOf = (game: Game, actor: ActorId, action: Action): Outcome => {
+  if (action.kind !== "move") return outcomeOf(game, action, actor);
+  const attempt: Step = { kind: "step", direction: action.direction };
+  const outcome = outcomeOf(game, attempt, actor);
+  if (outcome.kind === "performed") return outcome;
+  const fallback = MOVE_FALLBACKS[outcome.reason];
+  return fallback
+    ? outcomeOf(game, fallback(attempt, bodyOf(game, actor).at), actor)
+    : outcome;
+};
+
 const settled = (game: Game, actor: ActorId, action: Action): Settlement => {
-  const outcome = outcomeOf(game, action, actor);
-  switch (outcome.kind) {
-    case "rejected":
-      return {
-        game: rejected(game, actor, action, outcome.reason),
-        spendsTurn: false,
-      };
-    case "substituted":
-      return settled(game, actor, outcome.action);
-    case "performed":
-      return outcome;
-  }
+  const outcome = attemptOf(game, actor, action);
+  if (outcome.kind === "performed") return outcome;
+  return {
+    game: rejected(game, actor, action, outcome.reason),
+    spendsTurn: false,
+  };
 };
 
 const resolve = (game: Game, action: Action): Game => {

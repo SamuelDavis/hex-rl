@@ -289,6 +289,38 @@ describe("spawners", () => {
   });
 });
 
+describe("turn, step and attack", () => {
+  test("turn faces a direction and spends a turn; facing it already is rejected", () => {
+    const turned = act(facingEast(), { kind: "turn", direction: "n" });
+    expect(turned.player.facing).toBe("n");
+    expect(turned.turn).toBe(1);
+    const again: Action = { kind: "turn", direction: "se" };
+    expect(act(facingEast(), again).events).toEqual([
+      rejection(again, "already-facing"),
+    ]);
+  });
+
+  test("step moves the way faced, never turns, and never attacks", () => {
+    const stepped = act(facingEast(), { kind: "step", direction: "se" });
+    expect(stepped.player.at).toEqual(east);
+    const sideways: Action = { kind: "step", direction: "n" };
+    expect(act(facingEast(), sideways).events).toEqual([
+      rejection(sideways, "not-facing"),
+    ]);
+    const into: Action = { kind: "step", direction: "se" };
+    const blocked = act(gameWith([monster(east, "troll")]), into);
+    expect(blocked.monsters[0]!.hp).toBe(MONSTERS.troll.hp);
+    expect(blocked.events).toEqual([rejection(into, "occupied")]);
+  });
+
+  test("attack needs the target faced", () => {
+    const behind: Action = { kind: "attack", at: { q: -1, r: 0 } };
+    expect(act(gameWith([monster({ q: -1, r: 0 })]), behind).events).toEqual([
+      rejection(behind, "not-facing"),
+    ]);
+  });
+});
+
 describe("act", () => {
   test("a step too high to climb spends no turn", () => {
     const game = facingEast(landOf({ "1,0": land(12) }));
