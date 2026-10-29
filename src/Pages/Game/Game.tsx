@@ -38,6 +38,7 @@ import {
   MAX_HP,
   MAX_MP,
   visibleOf,
+  unreadinessOf,
   type Game as GameState,
   type GameEvent,
   type Where,
@@ -424,7 +425,9 @@ function SpellSlots(props: {
               tabIndex={-1}
               class="relative m-0 aspect-square p-0 text-xs"
               classList={{
-                "opacity-40 grayscale": getCooldown() > 0 || getStock() === 0,
+                "opacity-40 grayscale":
+                  ability !== undefined &&
+                  unreadinessOf(props.game, ability) !== undefined,
               }}
               aria-label={`Slot ${slot() + 1} (${getHotkey()}): ${ability ?? "empty"}`}
               onClick={() => props.press({ kind: "slot", slot: slot() })}
