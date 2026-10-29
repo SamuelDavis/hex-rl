@@ -1,6 +1,6 @@
 import {
   newGame,
-  type Action,
+  type Intent,
   type Game,
   type Land,
   type Monster,
@@ -55,9 +55,9 @@ export const gameWith = (monsters: Monster[], world = landOf()): Game => ({
   monsters,
 });
 
-export const WAIT: Action = { kind: "wait" };
+export const WAIT: Intent = { kind: "wait" };
 
-export const step = (direction: Direction): Action => ({
+export const step = (direction: Direction): Intent => ({
   kind: "move",
   direction,
 });

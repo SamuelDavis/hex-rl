@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   decodeLoadout,
-  intentOf,
+  messageOf,
   slotted,
   SLOT_COUNT,
   STARTING_LOADOUT,
@@ -40,14 +40,14 @@ describe("decodeLoadout", () => {
   });
 });
 
-describe("intentOf", () => {
+describe("messageOf", () => {
   test("a slot uses its ability; an empty slot does nothing; other input passes through", () => {
     const loadout = slotted(STARTING_LOADOUT, 1, undefined);
-    expect(intentOf(loadout, { kind: "slot", slot: 0 })).toEqual({
+    expect(messageOf(loadout, { kind: "slot", slot: 0 })).toEqual({
       kind: "use",
       ability: "cleave",
     });
-    expect(intentOf(loadout, { kind: "slot", slot: 1 })).toBeUndefined();
-    expect(intentOf(loadout, { kind: "wait" })).toEqual({ kind: "wait" });
+    expect(messageOf(loadout, { kind: "slot", slot: 1 })).toBeUndefined();
+    expect(messageOf(loadout, { kind: "wait" })).toEqual({ kind: "wait" });
   });
 });

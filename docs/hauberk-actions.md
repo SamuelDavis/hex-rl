@@ -1,6 +1,6 @@
 # Hauberk Actions
 
-Study of Hauberk's command/result system: how input and AI become `Action`s, how an `Action` either performs, fails, or returns an alternate, and how `Game.update()` runs the result. Prior art for [action-pipeline.md](action-pipeline.md). Contrast drawn against `move` + `MOVE_FALLBACKS` in `src/game/game.ts`.
+Study of Hauberk's command/result system: how input and AI become `Action`s, how an `Action` either performs, fails, or returns an alternate, and how `Game.update()` runs the result. Prior art for [action-pipeline.md](action-pipeline.md). Contrast drawn against `move` + `MOVE_FALLBACKS` in `src/game/game.ts`. The hexrl contrast below describes `4922f0b`; hexrl then chose per-actor Plans over both the table and Hauberk-style alternates (see [action-pipeline.md](action-pipeline.md)).
 
 ## Sources
 

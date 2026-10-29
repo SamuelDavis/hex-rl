@@ -1,6 +1,6 @@
 import { isAbility, type AbilityId } from "../../game/abilities";
 import type { Input } from "./controls";
-import type { Intent } from "./session";
+import type { Message } from "./session";
 
 export const SLOT_COUNT = 6;
 
@@ -28,7 +28,7 @@ export const decodeLoadout = (json: string): Loadout => {
   return fitted(stored.map((entry) => (isAbility(entry) ? entry : undefined)));
 };
 
-export const intentOf = (loadout: Loadout, input: Input): Intent | undefined => {
+export const messageOf = (loadout: Loadout, input: Input): Message | undefined => {
   if (input.kind !== "slot") return input;
   const ability = loadout[input.slot];
   return ability && { kind: "use", ability };

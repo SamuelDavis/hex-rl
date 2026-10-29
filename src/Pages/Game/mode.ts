@@ -1,5 +1,5 @@
 import { aimed, startAim } from "./aim";
-import { unreadinessOf, type Action, type Game } from "../../game/game";
+import { unreadinessOf, type Intent, type Game } from "../../game/game";
 import type { Direction, Hex } from "../../game/hex";
 import { abilityOf, type AbilityId } from "../../game/abilities";
 
@@ -23,7 +23,7 @@ export type Command =
 
 export interface Transition {
   readonly mode: Mode;
-  readonly action?: Action;
+  readonly action?: Intent;
 }
 
 const released = ({ ability, at }: Aiming): Transition => ({

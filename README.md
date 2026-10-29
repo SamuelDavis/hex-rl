@@ -20,4 +20,4 @@ Personal starting point for SolidJS SPAs: classless semantic HTML styled by Pico
 - UI/game separation contract (session, modes, events) and prior art: [docs/ui-architecture.md](docs/ui-architecture.md).
 - Inventory, loot, and paper-doll equipment decisions and prior art: [docs/inventory.md](docs/inventory.md).
 - Action pipeline contract (intent → action → events, shared by player and monsters), vocabulary and prior art: [docs/action-pipeline.md](docs/action-pipeline.md).
-- Hauberk's action, alternative and event system, cited, with a sketch for hexrl's `move`: [docs/hauberk-actions.md](docs/hauberk-actions.md).
+- Hauberk's action, alternative and event system, cited, contrasted with hexrl's per-actor Plans: [docs/hauberk-actions.md](docs/hauberk-actions.md).

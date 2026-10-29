@@ -2,7 +2,7 @@ import {
   act,
   newGame,
   PLAYER,
-  type Action,
+  type Intent,
   type Destroy,
   type Game,
   type GameEvent,
@@ -27,7 +27,7 @@ export interface Session {
   readonly log: readonly GameEvent[];
 }
 
-export type Intent =
+export type Message =
   | Command
   | { readonly kind: "cycleTarget" }
   | { readonly kind: "inventory" }
@@ -52,7 +52,7 @@ export const newSession = (seed: number, range: number): Session =>
 export const targetedAt = ({ game, range, target }: Session): Hex | undefined =>
   target && targetInView(game, range, target)?.at;
 
-const performed = (session: Session, action: Action): Session => {
+const performed = (session: Session, action: Intent): Session => {
   const { range, target, log } = session;
   const game = act(session.game, action);
   const hasStepped = game.events.some(
@@ -80,8 +80,8 @@ const commanded = (session: Session, command: Command): Session => {
   return action ? performed(moded, action) : moded;
 };
 
-export const update = (session: Session, intent: Intent): Session => {
-  switch (intent.kind) {
+export const update = (session: Session, message: Message): Session => {
+  switch (message.kind) {
     case "cycleTarget": {
       const { game, range, target } = session;
       return { ...session, target: nextTarget(game, range, target) };
@@ -89,14 +89,14 @@ export const update = (session: Session, intent: Intent): Session => {
     case "transfer":
     case "prepare":
     case "destroy":
-      return performed(session, intent);
+      return performed(session, message);
     case "inventory":
       return { ...session, isInventoryOpen: true };
     case "dismiss":
       return { ...session, isInventoryOpen: false };
     case "view":
-      return { ...session, range: intent.range };
+      return { ...session, range: message.range };
     default:
-      return commanded(session, intent);
+      return commanded(session, message);
   }
 };

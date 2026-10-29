@@ -12,7 +12,7 @@ import {
   newGame,
   HUNT_RADIUS,
   SPAWNER_HEAL_INTERVAL,
-  type Action,
+  type Intent,
   type Game,
   type GameEvent,
   type Rejection,
@@ -60,7 +60,7 @@ import {
   WAIT,
 } from "./testing";
 
-const rejection = (action: Action, reason: Rejection): GameEvent => ({
+const rejection = (action: Intent, reason: Rejection): GameEvent => ({
   kind: "rejected",
   actor: "player",
   action,
@@ -76,7 +76,7 @@ const gearOf = (id: string, gear: GearKind): Item => ({
 
 const pit = landOf({ "0,0": land(0) });
 
-const historyOf = (game: Game, turns = 300, action: Action = WAIT) =>
+const historyOf = (game: Game, turns = 300, action: Intent = WAIT) =>
   Array.from({ length: turns }).reduce<Game[]>(
     (games) => [...games, act(games.at(-1)!, action)],
     [game],
@@ -294,7 +294,7 @@ describe("turn, step and attack", () => {
     const turned = act(facingEast(), { kind: "turn", direction: "n" });
     expect(turned.player.facing).toBe("n");
     expect(turned.turn).toBe(1);
-    const again: Action = { kind: "turn", direction: "se" };
+    const again: Intent = { kind: "turn", direction: "se" };
     expect(act(facingEast(), again).events).toEqual([
       rejection(again, "already-facing"),
     ]);
@@ -303,18 +303,18 @@ describe("turn, step and attack", () => {
   test("step moves the way faced, never turns, and never attacks", () => {
     const stepped = act(facingEast(), { kind: "step", direction: "se" });
     expect(stepped.player.at).toEqual(east);
-    const sideways: Action = { kind: "step", direction: "n" };
+    const sideways: Intent = { kind: "step", direction: "n" };
     expect(act(facingEast(), sideways).events).toEqual([
       rejection(sideways, "not-facing"),
     ]);
-    const into: Action = { kind: "step", direction: "se" };
+    const into: Intent = { kind: "step", direction: "se" };
     const blocked = act(gameWith([monster(east, "troll")]), into);
     expect(blocked.monsters[0]!.hp).toBe(MONSTERS.troll.hp);
     expect(blocked.events).toEqual([rejection(into, "occupied")]);
   });
 
   test("attack needs the target faced", () => {
-    const behind: Action = { kind: "attack", at: { q: -1, r: 0 } };
+    const behind: Intent = { kind: "attack", at: { q: -1, r: 0 } };
     expect(act(gameWith([monster({ q: -1, r: 0 })]), behind).events).toEqual([
       rejection(behind, "not-facing"),
     ]);
@@ -327,7 +327,7 @@ describe("act", () => {
     const next = act(game, step("se"));
     expect(next).toEqual({
       ...game,
-      events: [rejection(step("se"), "blocked")],
+      events: [rejection({ kind: "step", direction: "se" }, "blocked")],
     });
   });
 
@@ -371,11 +371,11 @@ describe("act", () => {
   });
 
   test("attacking where nothing stands, or out of reach, spends no turn", () => {
-    const empty: Action = { kind: "attack", at: east };
+    const empty: Intent = { kind: "attack", at: east };
     expect(act(facingEast(), empty).events).toEqual([
       rejection(empty, "no-target"),
     ]);
-    const far: Action = { kind: "attack", at: { q: 2, r: 0 } };
+    const far: Intent = { kind: "attack", at: { q: 2, r: 0 } };
     expect(act(gameWith([monster({ q: 2, r: 0 })]), far).events).toEqual([
       rejection(far, "out-of-reach"),
     ]);
@@ -793,7 +793,7 @@ describe("transfer", () => {
         : new Map(),
     };
   };
-  const move = (cargo: string, to: Where): Action => ({
+  const move = (cargo: string, to: Where): Intent => ({
     kind: "transfer",
     cargo,
     to,
@@ -846,7 +846,7 @@ describe("transfer", () => {
         equipment: { boots },
       },
     );
-    const attempts: readonly (readonly [Action, Rejection])[] = [
+    const attempts: readonly (readonly [Intent, Rejection])[] = [
       [move("helm", "boots"), "misfit"],
       [move("potion", "helm"), "misfit"],
       [move(GOLD, "helm"), "misfit"],
@@ -926,7 +926,7 @@ describe("use a potion", () => {
   });
 
   test("can't quaff a potion not in the pack", () => {
-    const action: Action = { kind: "use", ability: "mana" };
+    const action: Intent = { kind: "use", ability: "mana" };
     expect(act(facingEast(), action).events).toEqual([
       rejection(action, "no-item"),
     ]);

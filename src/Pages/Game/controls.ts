@@ -1,6 +1,6 @@
 import type { Direction } from "../../game/hex";
 import { SLOT_COUNT } from "./loadout";
-import type { Intent } from "./session";
+import type { Message } from "./session";
 
 export type ControlId =
   | `move-${Direction}`
@@ -11,7 +11,7 @@ export type ControlId =
   | "inventory"
   | `slot-${number}`;
 
-export type Input = Intent | { readonly kind: "slot"; readonly slot: number };
+export type Input = Message | { readonly kind: "slot"; readonly slot: number };
 
 export interface Control {
   readonly id: ControlId;

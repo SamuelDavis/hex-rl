@@ -2,7 +2,7 @@ import { abilityOf, type AbilityId } from "../../game/abilities";
 import type { Direction } from "../../game/hex";
 import {
   PLAYER,
-  type Action,
+  type Intent,
   type ActorKind,
   type Cargo,
   type GameEvent,
@@ -30,7 +30,7 @@ const REASONS: Record<Rejection, string> = {
   "no-chest": "there is no chest here",
 };
 
-const VERBS: Record<Exclude<Action["kind"], "use">, string> = {
+const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
   move: "move",
   turn: "turn",
   step: "step",
@@ -46,7 +46,7 @@ const usingOf = (ability: AbilityId, verbs: readonly [string, string]) =>
     ? `${verbs[0]} a ${ability} potion`
     : `${verbs[1]} ${ability}`;
 
-const verbOf = (action: Action) =>
+const verbOf = (action: Intent) =>
   action.kind === "use"
     ? usingOf(action.ability, ["quaff", "cast"])
     : VERBS[action.kind];

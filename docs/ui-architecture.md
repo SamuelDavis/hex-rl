@@ -2,7 +2,7 @@
 
 Prior art researched at `706f1d4`; [Architecture](#architecture) is the implemented contract. Sources: [Sources](#sources).
 
-Goal: the game (`src/game/`) is independent of the UI (`src/Pages/Game/`); the UI translates human input into `Action`s and renders `Game` and its events. UI owns input mode, bindings and keymap; game owns outcomes.
+Goal: the game (`src/game/`) is independent of the UI (`src/Pages/Game/`); the UI translates human input into game `Intent`s and renders `Game` and its events. UI owns input mode, bindings and keymap; game owns outcomes.
 
 ## Prior art
 
@@ -18,15 +18,15 @@ Goal: the game (`src/game/`) is independent of the UI (`src/Pages/Game/`); the U
 
 ## Architecture
 
-One-way flow, Elm-style [Elm-Architecture]: frontend → `Intent` → `update` (`src/Pages/Game/session.ts`) → `transition` (`src/Pages/Game/mode.ts`) → `Action` → `act` (`src/game/game.ts`) → `Game.events` → frontend.
+One-way flow, Elm-style [Elm-Architecture]: frontend → `Message` → `update` (`src/Pages/Game/session.ts`) → `transition` (`src/Pages/Game/mode.ts`) → game `Intent` → `act` (`src/game/game.ts`) → `Game.events` → frontend.
 
 - **Dependency direction**: the UI imports the game, never the reverse; `src/game/**` may not import `solid-js` or `Pages` (`eslint.config.js`). Game tests call `act` directly.
-- **Session is the UI's state reducer.** `newSession(seed, range)` / `update(session, intent)` are pure; the Solid page holds it in a signal. The page owns the seed source, rendering, and locally persisted preferences (keymap, slot loadout). Invariants run once, in `update`: target re-tracked after every action, log bounded to `LOG_LENGTH`.
-- **Mode is UI state, not game state** [Redux-FAQ]: `Mode = explore | aim`, exhaustive switches, `(mode, command, game, target) → { mode, action? }`. Cancel never yields an `Action`; confirm or re-pressing the aimed slot yields one `use` action; a free ability (potion) used while aiming acts without leaving aim. Legality comes from the domain (`unreadinessOf`), as NetHack's `getpos` takes validity from its caller [NH-do_name.c].
-- **Controls are the single input vocabulary**: `CONTROLS` (`src/Pages/Game/controls.ts`) names every remappable `Input`; keys resolve through a `Keymap` (`inputOf`, `rebound` swaps on conflict) and on-screen buttons press the same `Control.input`, so a button and its hotkey can't diverge. A slot `Input` resolves through the `Loadout` (`src/Pages/Game/loadout.ts`, `intentOf`) to a `use` intent. Pointer taps map to `move` directly.
+- **Session is the UI's state reducer.** `newSession(seed, range)` / `update(session, message)` are pure; the Solid page holds it in a signal. The page owns the seed source, rendering, and locally persisted preferences (keymap, slot loadout). Invariants run once, in `update`: target re-tracked after every action, log bounded to `LOG_LENGTH`.
+- **Mode is UI state, not game state** [Redux-FAQ]: `Mode = explore | aim`, exhaustive switches, `(mode, command, game, target) → { mode, action? }`. Cancel never yields an `Intent`; confirm or re-pressing the aimed slot yields one `use` action; a free ability (potion) used while aiming acts without leaving aim. Legality comes from the domain (`unreadinessOf`), as NetHack's `getpos` takes validity from its caller [NH-do_name.c].
+- **Controls are the single input vocabulary**: `CONTROLS` (`src/Pages/Game/controls.ts`) names every remappable `Input`; keys resolve through a `Keymap` (`inputOf`, `rebound` swaps on conflict) and on-screen buttons press the same `Control.input`, so a button and its hotkey can't diverge. A slot `Input` resolves through the `Loadout` (`src/Pages/Game/loadout.ts`, `messageOf`) to a `use` intent. Pointer taps map to `move` directly.
 - **Bindings are UI, rebinding is a turn**: the loadout lives in the page, persisted to `localStorage`; changing a slot dispatches the game's `prepare` action, which spends a turn and changes nothing else.
 - **Target is orthogonal to mode**: lives on `Session`, so `cycleTarget` works while aiming.
-- **`Action` is the sole game input** (Command pattern [GPP-Command]); `act` is the sole entry.
+- **`Intent` is the sole game input** (Command pattern [GPP-Command]); `act` is the sole entry.
 - **The game reports what happened as data**: `Game.events` holds the typed `GameEvent`s of the action that produced the state (cleared each `act`); rejected actions spend no turn and record `{ kind: "rejected", action, reason: Rejection }`. No prose in the domain; `narrationOf` (`src/Pages/Game/narration.ts`) renders events as log lines, always third person with the actor named ("The adventurer prepares themselves.", "The troll hits the adventurer.").
 - **No event queue**: turn-based input-driven loop; events are returned synchronously, not dispatched [GPP-EventQueue, GPP-GameLoop].
 - **Renderers read a snapshot**, never live getters.

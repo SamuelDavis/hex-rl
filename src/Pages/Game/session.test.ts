@@ -6,7 +6,7 @@ import {
   sessionOf,
   targetedAt,
   update,
-  type Intent,
+  type Message,
   type Session,
 } from "./session";
 import { east, gameWith, monster } from "../../game/testing";
@@ -15,8 +15,8 @@ import type { Game } from "../../game/game";
 
 const RANGE = 5;
 const near = { q: 3, r: 0 };
-const run = (session: Session, ...intents: Intent[]) =>
-  intents.reduce(update, session);
+const run = (session: Session, ...messages: Message[]) =>
+  messages.reduce(update, session);
 const targeting = (...at: { q: number; r: number }[]) =>
   run(sessionOf(gameWith(at.map((hex) => monster(hex, "troll"))), RANGE), {
     kind: "cycleTarget",
@@ -41,7 +41,7 @@ describe("update", () => {
   });
 
   test("keeps only the latest log entries", () => {
-    const waits = Array.from<Intent>({ length: LOG_LENGTH }).fill({
+    const waits = Array.from<Message>({ length: LOG_LENGTH }).fill({
       kind: "wait",
     });
     const game = gameWith([]);
@@ -136,7 +136,7 @@ describe("update", () => {
       ...base,
       game: { ...base.game, chests: new Map([[hexKey(east), chest]]) },
     };
-    const step = (direction: "se" | "nw"): Intent => ({
+    const step = (direction: "se" | "nw"): Message => ({
       kind: "move",
       direction,
     });

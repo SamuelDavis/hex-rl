@@ -24,7 +24,7 @@ import {
 } from "./controls";
 import {
   decodeLoadout,
-  intentOf,
+  messageOf,
   slotted,
   STARTING_LOADOUT,
   type Loadout,
@@ -54,7 +54,7 @@ import {
   type Item,
   type PotionKind,
 } from "../../game/items";
-import { newSession, update, type Intent } from "./session";
+import { newSession, update, type Message } from "./session";
 import {
   ABILITY_IDS,
   abilityOf,
@@ -99,11 +99,11 @@ export default function Game() {
     decode: decodeLoadout,
   });
   const [isRemapping, setRemapping] = createSignal(false);
-  const dispatch = (intent: Intent) =>
-    setSession((session) => update(session, intent));
+  const dispatch = (message: Message) =>
+    setSession((session) => update(session, message));
   const press = (input: Input) => {
-    const intent = intentOf(getLoadout(), input);
-    if (intent) dispatch(intent);
+    const message = messageOf(getLoadout(), input);
+    if (message) dispatch(message);
   };
   const getGame = () => getSession().game;
   const getTile = () => getGame().land.tileAt(getGame().player.at);
@@ -528,7 +528,7 @@ function AbilityPicker(props: {
 
 function InventoryPanel(props: {
   game: GameState;
-  dispatch: (intent: Intent) => void;
+  dispatch: (message: Message) => void;
 }) {
   const getPlayer = () => props.game.player;
   const getChest = () => props.game.chests.get(hexKey(getPlayer().at));
