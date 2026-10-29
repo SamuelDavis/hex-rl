@@ -64,7 +64,7 @@ const ARROWS: Record<Direction, string> = {
   se: "↘︎",
 };
 
-const TABS = ["Play", "Slots", "Log", "Other", "Debug"] as const;
+const TABS = ["Play", "Slots", "Pack", "Log", "Other"] as const;
 type Tab = (typeof TABS)[number];
 
 const BIOME_NAMES = Object.fromEntries(
@@ -232,31 +232,19 @@ export default function Game() {
               editSlot={(slot) => setEditing({ slot })}
             />
           </Match>
+          <Match when={getTab() === "Pack"}>
+            <InventoryPanel game={getGame()} dispatch={dispatch} />
+          </Match>
           <Match when={getTab() === "Log"}>
             <LogPanel log={getSession().log} />
           </Match>
           <Match when={getTab() === "Other"}>
             <OtherPanel
+              game={getGame()}
               keymap={getKeymap()}
               remap={() => setRemapping(true)}
               restart={restart}
             />
-          </Match>
-          <Match when={getTab() === "Debug"}>
-            <dl>
-              <dt>Height</dt>
-              <dd>{surfaceOf(getTile()) - SEA_LEVEL}</dd>
-              <dt>Position</dt>
-              <dd>
-                {getGame().player.at.q}, {getGame().player.at.r}
-              </dd>
-              <dt>Seed</dt>
-              <dd>{getGame().land.seed}</dd>
-              <dt>Monsters awake</dt>
-              <dd>{getGame().monsters.length}</dd>
-              <dt>Monsters slain</dt>
-              <dd>{getGame().kills}</dd>
-            </dl>
           </Match>
         </Switch>
       </footer>
@@ -273,11 +261,17 @@ export default function Game() {
         open={getSession().isInventoryOpen}
         onClose={() => dispatch({ kind: "dismiss" })}
       >
-        <Inventory
-          game={getGame()}
-          dispatch={dispatch}
-          dismiss={() => dispatch({ kind: "dismiss" })}
-        />
+        <article>
+          <header>
+            <h3>Inventory</h3>
+          </header>
+          <InventoryPanel game={getGame()} dispatch={dispatch} />
+          <footer>
+            <button type="button" onClick={() => dispatch({ kind: "dismiss" })}>
+              Dismiss
+            </button>
+          </footer>
+        </article>
       </HTMLDialog>
       <HTMLDialog open={isRemapping()} onClose={() => setRemapping(false)}>
         <KeymapEditor
@@ -367,13 +361,6 @@ function PlayPanel(props: {
             dispatch={props.dispatch}
           >
             Target
-          </PadButton>
-          <PadButton
-            control="inventory"
-            keymap={props.keymap}
-            dispatch={props.dispatch}
-          >
-            Pack
           </PadButton>
         </div>
       </div>
@@ -521,10 +508,9 @@ function AbilityPicker(props: {
 
 const CARGO_TYPE = "text/plain";
 
-function Inventory(props: {
+function InventoryPanel(props: {
   game: GameState;
   dispatch: (intent: Intent) => void;
-  dismiss: () => void;
 }) {
   const [getHeld, setHeld] = createSignal<string>();
   const getPlayer = () => props.game.player;
@@ -602,27 +588,24 @@ function Inventory(props: {
   );
 
   return (
-    <article>
-      <header>
-        <Show when={getChest()} fallback={<h3>Inventory</h3>}>
-          <div>
-            <button
-              type="button"
-              data-cap="start"
-              class="secondary outline"
-              onClick={() => props.dispatch({ kind: "destroy" })}
-            >
-              Destroy chest
-            </button>
-            <h3>Inventory</h3>
-          </div>
+    <>
+      <div>
+        <Show when={getChest()}>
+          <button
+            type="button"
+            data-cap="start"
+            class="secondary"
+            onClick={() => props.dispatch({ kind: "destroy" })}
+          >
+            Destroy chest
+          </button>
         </Show>
-      </header>
-      <p>
-        <small>
-          Drag, or tap an item then where it goes. Each move spends a turn.
-        </small>
-      </p>
+        <p>
+          <small>
+            Drag, or tap an item then where it goes. Each move spends a turn.
+          </small>
+        </p>
+      </div>
       <div class="grid grid-cols-4 gap-1">
         <For each={PLACE_NAMES}>
           {(place) => (
@@ -652,12 +635,7 @@ function Inventory(props: {
           {items(getChest()?.items ?? [])}
         </Zone>
       </div>
-      <footer>
-        <button type="button" onClick={() => props.dismiss()}>
-          Dismiss
-        </button>
-      </footer>
-    </article>
+    </>
   );
 }
 
@@ -747,11 +725,13 @@ function LogPanel(props: { log: readonly GameEvent[] }) {
 }
 
 function OtherPanel(props: {
+  game: GameState;
   keymap: Keymap;
   remap: () => void;
   restart: () => void;
 }) {
   const key = (id: ControlId) => <kbd>{hotkeyOf(props.keymap, id)}</kbd>;
+  const getTile = () => props.game.land.tileAt(props.game.player.at);
   return (
     <>
       <p>
@@ -764,11 +744,11 @@ function OtherPanel(props: {
         aiming. Press {key("slot-1")}–{key("slot-6")} to cast the spell in that
         slot, or tap it; choose what each slot holds, spell or potion, in the
         Slots tab (spends a turn); potions are drunk without spending a turn.
-        Step onto a chest, or press {key("inventory")}, to equip gear and move
-        loot between your pack and the ground (each move spends a turn). Aimed
-        spells move their reticle with the movement keys; cast with{" "}
-        {key("confirm")} or the slot's key again, or cancel with {key("cancel")}
-        . Climb one block at a time; swim freely.
+        Step onto a chest, open the Pack tab, or press {key("inventory")}, to
+        equip gear and move loot between your pack and the ground (each move
+        spends a turn). Aimed spells move their reticle with the movement keys;
+        cast with {key("confirm")} or the slot's key again, or cancel with{" "}
+        {key("cancel")}. Climb one block at a time; swim freely.
       </p>
       <button type="button" onClick={() => props.remap()}>
         Controls
@@ -776,6 +756,23 @@ function OtherPanel(props: {
       <button type="button" onClick={() => props.restart()}>
         New world
       </button>
+      <details>
+        <summary>Debug</summary>
+        <dl>
+          <dt>Height</dt>
+          <dd>{surfaceOf(getTile()) - SEA_LEVEL}</dd>
+          <dt>Position</dt>
+          <dd>
+            {props.game.player.at.q}, {props.game.player.at.r}
+          </dd>
+          <dt>Seed</dt>
+          <dd>{props.game.land.seed}</dd>
+          <dt>Monsters awake</dt>
+          <dd>{props.game.monsters.length}</dd>
+          <dt>Monsters slain</dt>
+          <dd>{props.game.kills}</dd>
+        </dl>
+      </details>
     </>
   );
 }
