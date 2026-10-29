@@ -62,6 +62,7 @@ import {
 
 const rejection = (action: Action, reason: Rejection): GameEvent => ({
   kind: "rejected",
+  actor: "player",
   action,
   reason,
 });
@@ -404,12 +405,40 @@ describe("act", () => {
     expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
   });
 
-  test("monsters face the way they step", () => {
-    const next = act(gameWith([monster({ q: 4, r: 0 }, "goblin", "n")]), WAIT);
-    expect(next.monsters[0]).toMatchObject({
+  test("monsters turn to face the way they head, then step, like the player", () => {
+    const turned = act(
+      gameWith([monster({ q: 4, r: 0 }, "goblin", "n")]),
+      WAIT,
+    );
+    expect(turned.monsters[0]).toMatchObject({
+      at: { q: 4, r: 0 },
+      facing: "nw",
+    });
+    expect(turned.events).toContainEqual({
+      kind: "turned",
+      actor: "goblin",
+      facing: "nw",
+    });
+    const stepped = act(turned, WAIT);
+    expect(stepped.monsters[0]).toMatchObject({
       at: { q: 3, r: 0 },
       facing: "nw",
     });
+    expect(stepped.events).toContainEqual({
+      kind: "stepped",
+      actor: "goblin",
+      direction: "nw",
+      to: { q: 3, r: 0 },
+    });
+  });
+
+  test("an adjacent hostile monster facing away turns before it strikes", () => {
+    const beside = monster(east, "troll", "se");
+    const turned = act(gameWith([beside]), WAIT);
+    expect(turned.player.hp).toBe(MAX_HP);
+    expect(turned.monsters[0]!.facing).toBe("nw");
+    const struck = act(turned, WAIT);
+    expect(struck.player.hp).toBe(MAX_HP - MONSTERS.troll.damage);
   });
 
   test("monsters facing away don't notice the player beyond their awareness", () => {
@@ -419,7 +448,7 @@ describe("act", () => {
 
   test("monsters notice the player within their awareness, whatever their facing", () => {
     const next = act(gameWith([monster({ q: 2, r: 0 }, "goblin", "se")]), WAIT);
-    expect(next.monsters[0]).toMatchObject({ at: east, facing: "nw" });
+    expect(next.monsters[0]!.mind.state).toBe("hostile");
   });
 
   test("monsters that notice the player turn hostile, anchored where they stood idle", () => {
@@ -441,7 +470,7 @@ describe("act", () => {
     const at = { q: 6, r: 0 };
     const lastSeen = { q: 6, r: -4 };
     const hostile = { ...monster(at), mind: hostileAt(at, lastSeen) };
-    const next = act(gameWith([hostile], pit), WAIT).monsters[0]!;
+    const next = historyOf(gameWith([hostile], pit), 2).at(-1)!.monsters[0]!;
     expect(hexDistance(next.at, lastSeen)).toBe(3);
   });
 

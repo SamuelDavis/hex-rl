@@ -1,6 +1,7 @@
 import {
   act,
   newGame,
+  PLAYER,
   type Action,
   type Destroy,
   type Game,
@@ -8,7 +9,7 @@ import {
   type Prepare,
   type Transfer,
 } from "../../game/game";
-import { hexKey, sameHex, type Hex } from "../../game/hex";
+import { hexKey, type Hex } from "../../game/hex";
 import { EXPLORE, transition, type Command, type Mode } from "./mode";
 import { nextTarget, targetInView, tracked, type Target } from "./target";
 import { createTerrain } from "../../game/terrain";
@@ -54,7 +55,9 @@ export const targetedAt = ({ game, range, target }: Session): Hex | undefined =>
 const performed = (session: Session, action: Action): Session => {
   const { range, target, log } = session;
   const game = act(session.game, action);
-  const hasStepped = !sameHex(game.player.at, session.game.player.at);
+  const hasStepped = game.events.some(
+    (event) => event.kind === "stepped" && event.actor === PLAYER,
+  );
   return {
     ...session,
     game,

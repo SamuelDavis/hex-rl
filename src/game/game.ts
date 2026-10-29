@@ -75,6 +75,17 @@ export interface Player {
   readonly equipment: Equipment;
 }
 
+export const PLAYER = "player";
+
+export type ActorId = typeof PLAYER | Monster["id"];
+
+export type ActorKind = typeof PLAYER | MonsterKind;
+
+interface Body {
+  readonly at: Hex;
+  readonly facing: Direction;
+}
+
 export interface Monster {
   readonly id: string;
   readonly kind: MonsterKind;
@@ -162,7 +173,11 @@ type Outcome =
   | { readonly kind: "substituted"; readonly action: Action }
   | { readonly kind: "rejected"; readonly reason: Rejection };
 
-type Rule<A extends Action> = (game: Game, action: A) => Outcome;
+type Rule<A extends Action> = (
+  game: Game,
+  action: A,
+  actor: ActorId,
+) => Outcome;
 
 const performed = (game: Game, spendsTurn = true): Outcome => ({
   kind: "performed",
@@ -190,8 +205,20 @@ export type GameEvent =
   | { readonly kind: "began" }
   | {
       readonly kind: "rejected";
+      readonly actor: ActorKind;
       readonly action: Action;
       readonly reason: Rejection;
+    }
+  | {
+      readonly kind: "turned";
+      readonly actor: ActorKind;
+      readonly facing: Direction;
+    }
+  | {
+      readonly kind: "stepped";
+      readonly actor: ActorKind;
+      readonly direction: Direction;
+      readonly to: Hex;
     }
   | { readonly kind: "used"; readonly ability: AbilityId }
   | { readonly kind: "hitMonster"; readonly monster: MonsterKind }
@@ -243,10 +270,27 @@ const recorded = (game: Game, ...events: GameEvent[]): Game => ({
   events: [...game.events, ...events],
 });
 
-const rejected = (game: Game, action: Action, reason: Rejection): Game => ({
-  ...game,
-  events: [{ kind: "rejected", action, reason }],
-});
+const rejected = (
+  game: Game,
+  actor: ActorId,
+  action: Action,
+  reason: Rejection,
+): Game =>
+  recorded(game, {
+    kind: "rejected",
+    actor: kindOf(game, actor),
+    action,
+    reason,
+  });
+
+const monsterOf = (game: Game, id: Monster["id"]): Monster =>
+  game.monsters.find((monster) => monster.id === id)!;
+
+const bodyOf = (game: Game, actor: ActorId): Body =>
+  actor === PLAYER ? game.player : monsterOf(game, actor);
+
+const kindOf = (game: Game, actor: ActorId): ActorKind =>
+  actor === PLAYER ? PLAYER : monsterOf(game, actor).kind;
 
 export const visibleOf = ({ land, player }: Game): Set<string> =>
   visibleFrom(land.tileAt, player.at, player.facing);
@@ -576,6 +620,15 @@ const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
   });
 };
 
+const struck = (game: Game, monster: Monster): Game => {
+  const hp = game.player.hp - MONSTERS[monster.kind].damage;
+  return recorded(
+    withPlayer(game, { hp }),
+    { kind: "struck", monster: monster.kind },
+    ...(hp > 0 ? [] : [{ kind: "died" } as const]),
+  );
+};
+
 const hit = (game: Game, at: Hex, damage: number): Game => {
   const target = monsterAt(game, at);
   if (target) return attackMonster(game, target, damage);
@@ -584,8 +637,8 @@ const hit = (game: Game, at: Hex, damage: number): Game => {
   return game;
 };
 
-const isInReach = ({ land, player }: Game, at: Hex): boolean =>
-  canStep(land.tileAt, player.at, at);
+const isInReach = ({ land }: Game, from: Hex, at: Hex): boolean =>
+  canStep(land.tileAt, from, at);
 
 const applied = (game: Game, effect: Effect, at: Hex | undefined): Game => {
   const { player } = game;
@@ -594,7 +647,10 @@ const applied = (game: Game, effect: Effect, at: Hex | undefined): Game => {
       return withPlayer(game, { facing: directionBetween(player.at, at!)! });
     case "damage":
       return areaOf(effect.area, player.at, player.facing, at)
-        .filter((hex) => !MELEE_AREAS.has(effect.area) || isInReach(game, hex))
+        .filter(
+          (hex) =>
+            !MELEE_AREAS.has(effect.area) || isInReach(game, player.at, hex),
+        )
         .reduce((state, hex) => hit(state, hex, effect.amount), game);
     case "restore": {
       const max = effect.stat === "hp" ? MAX_HP : MAX_MP;
@@ -605,9 +661,13 @@ const applied = (game: Game, effect: Effect, at: Hex | undefined): Game => {
   }
 };
 
-const reachProblemOf = (game: Game, at: Hex): Rejection | undefined => {
-  const isAdjacent = directionBetween(game.player.at, at) !== undefined;
-  if (!isAdjacent || !isInReach(game, at)) return "out-of-reach";
+const reachProblemOf = (
+  game: Game,
+  from: Hex,
+  at: Hex,
+): Rejection | undefined => {
+  const isAdjacent = directionBetween(from, at) !== undefined;
+  if (!isAdjacent || !isInReach(game, from, at)) return "out-of-reach";
   return undefined;
 };
 
@@ -619,7 +679,7 @@ const aimProblemOf = (
   if (aim.kind === "monster") {
     const target = at && monsterAt(game, at);
     if (!target) return "no-target";
-    return reachProblemOf(game, target.at);
+    return reachProblemOf(game, game.player.at, target.at);
   }
   if (aim.kind === "hex") {
     if (!at || hexDistance(game.player.at, at) > aim.range)
@@ -698,20 +758,17 @@ const stepToward = (
   return "path" in route ? route.path[1] : undefined;
 };
 
-const updated = (game: Game, monster: Monster, change: Partial<Monster>) => ({
+const updated = (
+  game: Game,
+  id: Monster["id"],
+  change: Partial<Monster>,
+): Game => ({
   ...game,
-  monsters: game.monsters.map((m) =>
-    m.id === monster.id ? { ...m, ...change } : m,
-  ),
+  monsters: game.monsters.map((m) => (m.id === id ? { ...m, ...change } : m)),
 });
 
-const moved = (game: Game, monster: Monster, to: Hex | undefined): Game =>
-  to
-    ? updated(game, monster, {
-        at: to,
-        facing: directionBetween(monster.at, to)!,
-      })
-    : game;
+const withBody = (game: Game, actor: ActorId, change: Partial<Body>): Game =>
+  actor === PLAYER ? withPlayer(game, change) : updated(game, actor, change);
 
 interface Leash {
   readonly center: Hex;
@@ -741,10 +798,10 @@ const wander = (
   area: Leash,
   chance: number,
   heading?: Direction,
-): Game => {
+): Hex | undefined => {
   const { at, id } = monster;
   const rng = rngOf(game.land.seed, "wander").child(id);
-  if (!rng.chance(chance, game.turn)) return game;
+  if (!rng.chance(chance, game.turn)) return undefined;
   const options = neighborsOf(at)
     .filter(
       (next) =>
@@ -754,21 +811,8 @@ const wander = (
         !isBlocked(game, next),
     )
     .map((next) => [next, alignment(at, next, heading)] as const);
-  if (options.length === 0) return game;
-  return moved(game, monster, rng.weighted(options, game.turn, 1));
-};
-
-const strike = (game: Game, monster: Monster, toward: Direction): Game => {
-  const { player } = game;
-  const hp = player.hp - MONSTERS[monster.kind].damage;
-  return recorded(
-    updated({ ...game, player: { ...player, hp } }, monster, {
-      facing: toward,
-      mind: sighted(monster.mind, monster.at, game.player),
-    }),
-    { kind: "struck", monster: monster.kind },
-    ...(hp > 0 ? [] : [{ kind: "died" } as const]),
-  );
+  if (options.length === 0) return undefined;
+  return rng.weighted(options, game.turn, 1);
 };
 
 const mindOf = ({ land, player }: Game, { at, facing, mind }: Monster): Mind =>
@@ -781,24 +825,19 @@ const approach = (
   monster: Monster,
   goal: Hex,
   reach: number,
-): Game => {
+): Hex | undefined => {
   const step = stepToward(game, monster, goal, reach);
-  if (!step || !isWithin(step, leashOf(monster))) return game;
-  return moved(game, monster, step);
+  return step && isWithin(step, leashOf(monster)) ? step : undefined;
 };
 
-const behave = (game: Game, monster: Monster): Game => {
+const destinationOf = (game: Game, monster: Monster): Hex | undefined => {
   const { mind, at, home } = monster;
   switch (mind.state) {
     case "idle": {
       const leash = leashOf(monster);
       return isWithin(at, leash)
         ? wander(game, monster, leash, WANDER_CHANCE)
-        : moved(
-            game,
-            monster,
-            stepToward(game, monster, home.at, leash.radius),
-          );
+        : stepToward(game, monster, home.at, leash.radius);
     }
     case "hostile":
       return approach(
@@ -816,28 +855,31 @@ const behave = (game: Game, monster: Monster): Game => {
   }
 };
 
-const monsterTurn = (game: Game, monster: Monster): Game => {
+const toward = ({ at }: Monster, to: Hex | undefined): Action => {
+  const direction = to && directionBetween(at, to);
+  return direction ? { kind: "move", direction } : { kind: "wait" };
+};
+
+const choiceOf = (game: Game, monster: Monster): Action => {
   const { land, player } = game;
+  const isBeside =
+    directionBetween(monster.at, player.at) !== undefined &&
+    canStep(land.tileAt, monster.at, player.at);
+  return monster.mind.state === "hostile" && isBeside
+    ? toward(monster, player.at)
+    : toward(monster, destinationOf(game, monster));
+};
+
+const monsterTurn = (game: Game, monster: Monster): Game => {
   if (isOver(game)) return game;
-  const mind = mindOf(game, monster);
-  const aware = { ...monster, mind };
-  const toward = directionBetween(monster.at, player.at);
-  if (
-    mind.state === "hostile" &&
-    toward &&
-    canStep(land.tileAt, monster.at, player.at)
-  )
-    return strike(game, aware, toward);
-  return behave(updated(game, monster, { mind }), aware);
+  const aware = { ...monster, mind: mindOf(game, monster) };
+  const minded = updated(game, aware.id, { mind: aware.mind });
+  return settled(minded, aware.id, choiceOf(minded, aware)).game;
 };
 
 const monstersTurn = (game: Game): Game =>
   game.monsters.reduce(
-    (state, { id }) =>
-      monsterTurn(
-        state,
-        state.monsters.find((m) => m.id === id)!,
-      ),
+    (state, { id }) => monsterTurn(state, monsterOf(state, id)),
     game,
   );
 
@@ -866,22 +908,45 @@ const endTurn = (acted: Game): Game =>
     populate(regenerate(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
   );
 
-const move: Rule<Move> = (game, { direction }) => {
-  const { player, land } = game;
-  if (direction !== player.facing)
-    return performed(withPlayer(game, { facing: direction }));
-  const to = add(player.at, DIRECTIONS[direction]);
-  if (!canStep(land.tileAt, player.at, to)) return refused("blocked");
+const move: Rule<Move> = (game, { direction }, actor) => {
+  const { at, facing } = bodyOf(game, actor);
+  const kind = kindOf(game, actor);
+  if (direction !== facing)
+    return performed(
+      recorded(withBody(game, actor, { facing: direction }), {
+        kind: "turned",
+        actor: kind,
+        facing: direction,
+      }),
+    );
+  const to = add(at, DIRECTIONS[direction]);
+  if (!canStep(game.land.tileAt, at, to)) return refused("blocked");
   if (isBlocked(game, to))
     return { kind: "substituted", action: { kind: "attack", at: to } };
-  return performed(withPlayer(game, { at: to }));
+  return performed(
+    recorded(withBody(game, actor, { at: to }), {
+      kind: "stepped",
+      actor: kind,
+      direction,
+      to,
+    }),
+  );
 };
 
-const attack: Rule<Attack> = (game, { at }) => {
-  if (!monsterAt(game, at) && !spawnerAt(game, at)) return refused("no-target");
-  const problem = reachProblemOf(game, at);
+const isFoeAt = (game: Game, actor: ActorId, at: Hex): boolean =>
+  actor === PLAYER
+    ? monsterAt(game, at) !== undefined || spawnerAt(game, at) !== undefined
+    : sameHex(at, game.player.at);
+
+const attack: Rule<Attack> = (game, { at }, actor) => {
+  if (!isFoeAt(game, actor, at)) return refused("no-target");
+  const problem = reachProblemOf(game, bodyOf(game, actor).at, at);
   if (problem) return refused(problem);
-  return performed(hit(game, at, PLAYER_DAMAGE));
+  return performed(
+    actor === PLAYER
+      ? hit(game, at, PLAYER_DAMAGE)
+      : struck(game, monsterOf(game, actor)),
+  );
 };
 
 const RULES: {
@@ -896,22 +961,38 @@ const RULES: {
   destroy,
 };
 
-const outcomeOf = <A extends Action>(game: Game, action: A): Outcome =>
-  (RULES[action.kind] as Rule<A>)(game, action);
+interface Settlement {
+  readonly game: Game;
+  readonly spendsTurn: boolean;
+}
 
-const resolve = (game: Game, action: Action): Game => {
-  const outcome = outcomeOf(game, action);
+const outcomeOf = <A extends Action>(
+  game: Game,
+  action: A,
+  actor: ActorId,
+): Outcome => (RULES[action.kind] as Rule<A>)(game, action, actor);
+
+const settled = (game: Game, actor: ActorId, action: Action): Settlement => {
+  const outcome = outcomeOf(game, action, actor);
   switch (outcome.kind) {
     case "rejected":
-      return rejected(game, action, outcome.reason);
+      return {
+        game: rejected(game, actor, action, outcome.reason),
+        spendsTurn: false,
+      };
     case "substituted":
-      return resolve(game, outcome.action);
+      return settled(game, actor, outcome.action);
     case "performed":
-      return outcome.spendsTurn ? endTurn(outcome.game) : outcome.game;
+      return outcome;
   }
+};
+
+const resolve = (game: Game, action: Action): Game => {
+  const { game: next, spendsTurn } = settled(game, PLAYER, action);
+  return spendsTurn ? endTurn(next) : next;
 };
 
 export const act = (game: Game, action: Action): Game =>
   isOver(game)
-    ? rejected(game, action, "over")
+    ? rejected({ ...game, events: [] }, PLAYER, action, "over")
     : resolve({ ...game, events: [] }, action);

@@ -1,10 +1,13 @@
 import { abilityOf, type AbilityId } from "../../game/abilities";
-import type {
-  Action,
-  Cargo,
-  GameEvent,
-  Rejection,
-  Where,
+import type { Direction } from "../../game/hex";
+import {
+  PLAYER,
+  type Action,
+  type ActorKind,
+  type Cargo,
+  type GameEvent,
+  type Rejection,
+  type Where,
 } from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
 import { SPAWNERS } from "../../game/monsters";
@@ -43,7 +46,19 @@ const verbOf = (action: Action) =>
     ? usingOf(action.ability, ["quaff", "cast"])
     : VERBS[action.kind];
 
-const PLAYER = "The adventurer";
+const PLAYER_NAME = "The adventurer";
+
+const actorNameOf = (actor: ActorKind) =>
+  actor === PLAYER ? PLAYER_NAME : `The ${actor}`;
+
+const DIRECTION_NAMES: Record<Direction, string> = {
+  nw: "north-west",
+  n: "north",
+  ne: "north-east",
+  sw: "south-west",
+  s: "south",
+  se: "south-east",
+};
 
 const cargoNameOf = (cargo: Cargo) =>
   cargo.kind === "gold" ? `${cargo.amount} gold` : `the ${nameOf(cargo)}`;
@@ -64,34 +79,38 @@ const movingOf = (from: Where, to: Where) => {
 export const narrationOf = (event: GameEvent): string => {
   switch (event.kind) {
     case "began":
-      return `${PLAYER} sets out into the wilds.`;
+      return `${PLAYER_NAME} sets out into the wilds.`;
     case "rejected":
-      return `${PLAYER} cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
+      return `${actorNameOf(event.actor)} cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
+    case "turned":
+      return `${actorNameOf(event.actor)} turns ${DIRECTION_NAMES[event.facing]}.`;
+    case "stepped":
+      return `${actorNameOf(event.actor)} steps ${DIRECTION_NAMES[event.direction]}.`;
     case "used":
-      return `${PLAYER} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
+      return `${PLAYER_NAME} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
     case "hitMonster":
-      return `${PLAYER} hits the ${event.monster}.`;
+      return `${PLAYER_NAME} hits the ${event.monster}.`;
     case "killed":
-      return `${PLAYER} kills the ${event.monster}.`;
+      return `${PLAYER_NAME} kills the ${event.monster}.`;
     case "dropped":
       return `The ${event.monster} drops a chest.`;
     case "moved":
-      return `${PLAYER} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
+      return `${PLAYER_NAME} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
     case "spilled":
       return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from the pack.`;
     case "prepared":
-      return `${PLAYER} prepares themselves.`;
+      return `${PLAYER_NAME} prepares themselves.`;
     case "destroyed":
-      return `${PLAYER} destroys the chest.`;
+      return `${PLAYER_NAME} destroys the chest.`;
     case "hitSpawner":
-      return `${PLAYER} hits the ${SPAWNERS[event.spawner].name}.`;
+      return `${PLAYER_NAME} hits the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":
-      return `${PLAYER} wrecks the ${SPAWNERS[event.spawner].name}.`;
+      return `${PLAYER_NAME} wrecks the ${SPAWNERS[event.spawner].name}.`;
     case "emerged":
       return `The ${event.monster} emerges!`;
     case "struck":
-      return `The ${event.monster} hits ${PLAYER.toLowerCase()}.`;
+      return `The ${event.monster} hits ${PLAYER_NAME.toLowerCase()}.`;
     case "died":
-      return `${PLAYER} dies.`;
+      return `${PLAYER_NAME} dies.`;
   }
 };

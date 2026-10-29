@@ -4,101 +4,41 @@ Contract for turning any actor's choice into authoritative game events. One voca
 
 ## Vocabulary
 
-| Term | Meaning | Lives in |
+| Term | Meaning | In code (`src/game/`) |
 |---|---|---|
-| Actor | Something that takes turns: the player or a monster. | `ActorId` |
-| Action | What an actor attempts this turn; data only. The pipeline's sole input. | `Action` |
-| Rule | Per-Action-kind logic: check, cost, perform, or substitute. The only place situational logic lives. | `RULES` |
-| Check | Precondition; failing it rejects the Action at no cost. | `Rule.check` |
+| Actor | Takes turns: the player or a monster. | `ActorId` (`PLAYER` or monster id); `ActorKind` names it in events |
+| Action | What an actor attempts; data only. The pipeline's sole input. | `Action` |
+| Rule | Per-Action-kind logic: check, perform, or substitute. The only place situational logic lives. | `RULES`, `Rule` |
+| Outcome | A Rule's verdict: performed (and whether a turn passes), substituted, or rejected. | `Outcome` |
 | Rejection | Typed reason an Action did nothing. | `Rejection` |
-| Substitution | A Rule replacing its Action with another, e.g. move into an occupant → attack. | `Outcome` |
-| Cost | What performing spends: turn, AP, cooldown, an item. Data, not code. | `Cost` |
-| Ability | Data-defined bindable Action payload: cost, aim, effects. Spells and potions alike. | `ABILITIES` |
-| Effect | Primitive state change (damage, restore). One applier for every source. | `applyEffect` |
+| Substitution | A Rule replacing its Action with another: move into an occupant → attack. | `Outcome` `substituted` |
+| Ability | Data row: MP, cooldown, whether it spends a turn, item consumed, aim, effects. Spells and potions alike. | `ABILITIES`, `abilities.ts` |
+| Effect | Primitive state change: face, damage over an `Area`, restore. One applier. | `Effect`, `applied` |
 | Event | Authoritative record of one consequence. The pipeline's sole output. | `GameEvent` |
-| Turn | One round: the player's Action, then each monster's, then upkeep. | `endTurn` |
+| Turn | The player's Action, then each monster's, then upkeep. | `endTurn` |
 
-Rename map from today: `Cast` + `Quaff` → `use` Action over an `AbilityId`; `SPELLS` + `POTIONS` → `ABILITIES`; `EFFECTS` (per-spell functions) → `Effect` data plus `applyEffect`; `strike`, `playerTurn`, `melee` → the `attack` Rule.
-
-## Pipeline
+## Contract
 
 ```
-UI ──────────→ Action ─resolve→ Rule ─┬─ rejected(reason)        → Event
-                   ▲                   ├─ substituted(action) ──┐
-                   └───────────────────┼────────────────────────┘
-                                       └─ performed(cost) → Effects → Events
-Monster Mind ─→ Action ─resolve→ (same)
+player Action ─act→ settled ─→ Rule ─┬─ rejected   → `rejected` Event, nothing spent
+monster Mind  ─→ Action ─settled─┘   ├─ substituted → settled(new Action)
+                                     └─ performed  → Events; player's: endTurn if it spends a turn
 ```
 
-Contracts:
-
-- `act(game, action)` stays the only public entry. It resolves the player's Action; if it costs a turn, each monster's Mind chooses an Action, resolved by the same `resolve`; then upkeep (regeneration, spawning, sight) and `turn + 1`.
-- Every Rule is reached through one exhaustive mapped table, so adding an Action kind without a Rule is a type error.
-- Every state change records an Event with its actor. Frontends derive everything from Events and `Game`, never from re-deriving rules (e.g. "stepped onto a chest" is an Event, not a hex comparison in `session.ts`).
-- Checks run before costs; costs are paid once, by `resolve`, from the Rule's declared `Cost`. Rules never call `endTurn`.
-- Substitution is acyclic by construction (only `move` substitutes, only to non-substituting kinds); a test pins it.
-- A rejected player Action spends nothing. A rejected monster Action is recorded and the monster loses its turn; Minds should only choose checked Actions.
-
-## Types (sketch)
-
-```ts
-export type ActorId = "player" | Monster["id"];
-
-export type Action =
-  | { readonly kind: "move"; readonly actor: ActorId; readonly direction: Direction }
-  | { readonly kind: "wait"; readonly actor: ActorId }
-  | { readonly kind: "attack"; readonly actor: ActorId; readonly at: Hex }
-  | { readonly kind: "use"; readonly actor: ActorId; readonly ability: AbilityId; readonly at?: Hex }
-  | Transfer | Prepare | Destroy;
-
-export interface Cost {
-  readonly turn: boolean;
-  readonly ap?: number;
-  readonly cooldown?: number;
-  readonly item?: PotionKind;
-}
-
-export type Outcome =
-  | { readonly kind: "performed"; readonly game: Game; readonly cost: Cost }
-  | { readonly kind: "substituted"; readonly action: Action }
-  | { readonly kind: "rejected"; readonly reason: Rejection };
-
-type Rule<A extends Action> = (game: Game, action: A) => Outcome;
-
-const RULES: { readonly [K in Action["kind"]]: Rule<Extract<Action, { kind: K }>> };
-
-export type Effect =
-  | { readonly kind: "damage"; readonly amount: number; readonly area: Area }
-  | { readonly kind: "restore"; readonly stat: "hp" | "ap"; readonly amount: number };
-
-export interface Ability {
-  readonly cost: Cost;
-  readonly aim: Aim;
-  readonly effects: readonly Effect[];
-  readonly summary: string;
-}
-```
-
-`Area` names the hexes an effect covers relative to actor and aim (`target`, `ahead`, `flanks`, `ring`), each with a damage fraction; cleave is `ahead` 1 + `flanks` 0.5, fireball `target` 1 + `ring` 0.25.
-
-How today's actions map:
-
-| Action | Rule | Cost |
-|---|---|---|
-| move, unfaced direction | turn to face | turn |
-| move, faced, occupant ahead | substitute `attack` | (attack's) |
-| move, faced, open | step; record `moved`, `steppedOnChest` | turn |
-| attack | damage occupant (monster, spawner, player) | turn |
-| use cleave / fireball / heal / strike | check aim; apply effects | turn, AP, cooldown |
-| use potion | check item held; apply effects | item |
-| transfer, destroy | as today | turn |
-| prepare (UI rebinds a slot) | none | turn |
+- `act(game, action)` is the only entry; the UI only ever sends the player's Action. `endTurn` runs each monster's chosen Action through the same `settled`.
+- `RULES` is a mapped type over `Action["kind"]`: a kind without a Rule, or a narration verb, is a type error.
+- One rule set for every actor: turning to face costs a turn, stepping requires facing, moving into a foe attacks. Combined behaviours are Abilities (strike faces and attacks in one turn).
+- A rejected player Action spends nothing. A rejected monster Action is recorded and costs that monster its turn.
+- Every consequence is an Event naming its actor (`turned`, `stepped`, `rejected`, ...). The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
+- Substitution is acyclic: only `move` substitutes, only to `attack`, which never substitutes.
+- `use` pays its Ability's costs (MP, cooldown, item) itself; only it has costs beyond the turn.
+- Player-only for now: `use`, `transfer`, `prepare`, `destroy` act on the player's resources; monster Minds choose only `move` and `wait`. Foes: the player attacks monsters and spawners; monsters attack only the player.
 
 ## Extension points
 
 Named so later features land in one place; none built now (YAGNI).
 
-- **Speed**: `Cost.turn: boolean` becomes an energy amount and the turn loop an energy scheduler. [Hauberk energy.dart; Nystrom-2014]
+- **Speed**: `spendsTurn: boolean` becomes an energy amount and the turn loop an energy scheduler. [Hauberk energy.dart; Nystrom-2014]
 - **Reactions**: when one Event needs a second consequence (on-kill loot is inline today), add post-perform reaction rules keyed by Event kind. [Inform "After" rules; Qud-Events]
 - **Replay**: seed + performed Actions reproduce a run; log them if a regression test needs it. [Fowler-ES]
 - **Confirmation**: a Rule may later return an outcome asking the UI to confirm before performing.
@@ -114,16 +54,6 @@ What each contributes to the design above; not adopted wholesale.
 - **Game Programming Patterns, Type Object**: `ABILITIES` is a type-object table; behaviour stays in a small closed set of `Effect` primitives rather than per-ability functions. [GPP-TypeObject]
 - **ECS** (Bevy, Adam Martin): rejected. Pays off with many cross-cutting traits and parallel systems; here traits are tagged unions, turns are serial, and mutable component stores conflict with the pure reducer. [Bevy-ECS; T-Machine-1]
 - **CQRS / event sourcing**: rejected as structure; the split already exists (`act` writes; `Session`, narration, draw read). Events-as-truth informs the Event contract. [Fowler-CQRS; Fowler-DE]
-
-## Migration
-
-Each step green on existing tests:
-
-1. Tag every `Action` with `kind` and `actor`; add `resolve` with the mapped `RULES` table; Rules return `Outcome`; delete scattered `endTurn` calls.
-2. `move` substitutes `attack`; delete `playerTurn`, `melee`.
-3. `ABILITIES` + `Effect` + `applyEffect` replace `SPELLS`, `POTIONS`, `EFFECTS`, `Cast`, `Quaff`.
-4. Monster Minds emit Actions through `resolve`; delete `strike`.
-5. `steppedOnChest` Event replaces the chest check in `session.ts`.
 
 ## Sources
 
