@@ -1,0 +1,1 @@
+import{c as e,f as t,i as n,s as r,t as i}from"./index-JOZlx1Hd.js";var a=t(`<article><header><h1>Home</h1></header><button type=button>Count: `);function o(){let{getCount:t,increment:r}=i();return(()=>{var i=a(),o=i.firstChild.nextSibling;return o.firstChild,n(o,`click`,r,!0),e(o,t,null),i})()}r([`click`]);export{o as default};

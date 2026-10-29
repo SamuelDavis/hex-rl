@@ -1,0 +1,1 @@
+import{c as e,f as t,n,y as r}from"./index-JOZlx1Hd.js";var i=t(`<article><header><h1>Not Found</h1></header><p>The page you're looking for could not be found.</p><p>Try returning <!>.`);function a(){return(()=>{var t=i(),a=t.firstChild.nextSibling.nextSibling,o=a.firstChild.nextSibling;return o.nextSibling,e(a,r(n,{href:`/`,children:`Home`}),o),t})()}export{a as default};
