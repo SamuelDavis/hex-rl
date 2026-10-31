@@ -79,7 +79,7 @@ const BANDIT: Sprite = [
   { tone: "blood", path: "M21.5 22 L27 24 L26.5 25.5 L21 23.5 Z" },
 ];
 
-const KOBOLD: Sprite = [
+const KOBOLD_BODY: Sprite = [
   { tone: "blood", path: "M11 17 L21 17 L23 29 L19 29 L16 24 L13 29 L9 29 Z" },
   {
     tone: "bone",
@@ -87,13 +87,15 @@ const KOBOLD: Sprite = [
   },
   { tone: "blood", path: "M17 10.5 L20 11 L18 12.5 Z" },
   { tone: "etch", path: "M21 13.8 L28 13 M24 11 L24.5 13.3" },
+];
+
+const KOBOLD: Sprite = [
+  ...KOBOLD_BODY,
   { tone: "bone", path: "M3 29 L8 9 L9.5 9.5 L4.5 29.5 Z" },
   { tone: "bone", path: "M3 11 C5 7 11 6 13 8 C10 8.5 7 9.5 4.5 12 Z" },
 ];
 
-const GOBLIN: Sprite = [
-  { tone: "blood", path: "M10 18 L22 18 L24.5 29 L7.5 29 Z" },
-  { tone: "etch", path: "M9 24 L23 24" },
+const GOBLIN_HEAD: Sprite = [
   {
     tone: "bone",
     path: "M16 6 C20 6 22 8.5 22 11.5 L30.5 7.5 L24.5 15 C23.5 18 20 19.5 16 19.5 C12 19.5 8.5 18 7.5 15 L1.5 7.5 L10 11.5 C10 8.5 12 6 16 6 Z",
@@ -112,6 +114,87 @@ const GOBLIN: Sprite = [
   },
 ];
 
+const GOBLIN: Sprite = [
+  { tone: "blood", path: "M10 18 L22 18 L24.5 29 L7.5 29 Z" },
+  { tone: "etch", path: "M9 24 L23 24" },
+  ...GOBLIN_HEAD,
+];
+
+const ALPHA_WOLF: Sprite = [
+  {
+    tone: "bone",
+    path: "M6 15 L12 13 L18 13.5 L21 10 L23 5.5 L25 9 L27.5 10 L31.5 13 L30 15.5 L27 15.8 L25.5 18.5 L25 29 L22 29 L21 22 L13 21.5 L12 29 L9 29 L8.5 21 L4.5 24 L1 23.5 L4 20 Z",
+  },
+  {
+    tone: "blood",
+    path: "M11 14 L12.5 9.5 L14.5 12.5 L16 8 L17.5 11.5 L19.5 6.5 L21 10 L22.5 5 L24 10 L22.5 15.5 L18.5 17.5 L13 16.5 Z",
+  },
+  { tone: "ink", path: "M25.5 10.4 L28 11 L26 12 Z" },
+  { tone: "ink", path: "M27.5 13.6 L31.8 13.2 L29.5 16 Z" },
+  { tone: "etch", path: "M13 18 L13.8 21 M16 18 L16.6 21.5 M19 18 L19.4 21.5" },
+];
+
+const BANDIT_CHIEF: Sprite = [
+  {
+    tone: "blood",
+    path: "M9 14 L23 14 L27 29.5 L21.5 27.5 L16 29.5 L10.5 27.5 L5 29.5 Z",
+  },
+  { tone: "etch", path: "M16 14 L16 21 M12 16 L10.5 26 M20 16 L21.5 26" },
+  { tone: "bone", path: "M8.5 21 L23.5 21 L24 23.5 L8 23.5 Z" },
+  { tone: "ink", path: "M15 21.5 h2 v1.5 h-2 Z" },
+  {
+    tone: "bone",
+    path: "M12 6 L20 6 L20.5 11 L18.5 14.5 L13.5 14.5 L11.5 11 Z",
+  },
+  {
+    tone: "ink",
+    path: "M13.3 8.3 h2.2 v2.2 h-2.2 Z M16.5 8.3 h2.2 v2.2 h-2.2 Z",
+  },
+  {
+    tone: "etch",
+    path: "M14 12.8 L18 12.8 M15.3 12 L15.3 13.8 M16.8 12 L16.8 13.8",
+  },
+  {
+    tone: "ink",
+    path: "M6.5 8 C10 1.5 22 1.5 25.5 8 L20.5 6.5 L16 8.5 L11.5 6.5 Z",
+  },
+  { tone: "bone", path: "M24 27.5 L27.5 5.5 L29 5.8 L25.5 27.8 Z" },
+  { tone: "blood", path: "M27.8 6.5 C31.5 5.5 32 10.5 31 13.5 L26.9 12 Z" },
+];
+
+const GOBLIN_CHIEF: Sprite = [
+  { tone: "blood", path: "M8 17 L24 17 L27.5 29.5 L4.5 29.5 Z" },
+  { tone: "etch", path: "M11 20 L9 29 M16 20 L16 29 M21 20 L23 29" },
+  {
+    tone: "bone",
+    path: "M11.5 8 L8.5 1.5 L11.2 4.2 L11.8 0.5 L14 6.5 Z M20.5 8 L23.5 1.5 L20.8 4.2 L20.2 0.5 L18 6.5 Z",
+  },
+  ...GOBLIN_HEAD,
+  { tone: "bone", path: "M26.5 30 L27.5 11 L29 11 L28 30 Z" },
+  {
+    tone: "bone",
+    path: "M25 9 C25 5 31.5 5 31.5 9 L30.5 12 L26 12 Z",
+  },
+  { tone: "ink", path: "M26.3 8 h1.7 v1.7 h-1.7 Z M28.6 8 h1.7 v1.7 h-1.7 Z" },
+];
+
+const KOBOLD_FOREMAN: Sprite = [
+  ...KOBOLD_BODY,
+  {
+    tone: "ink",
+    path: "M9 11.5 C8.5 6 17.5 4.5 20.5 9.5 L20.5 10.5 L9.5 12.5 Z",
+  },
+  { tone: "blood", path: "M19 11.6 L21.8 11.9 L19.8 13.2 Z" },
+  { tone: "bone", path: "M13.5 6 L13.5 3 L15.5 3 L15.5 6 Z" },
+  {
+    tone: "blood",
+    path: "M14.5 2.8 C13.3 1.8 14.5 0 14.5 0 C15.8 1 15.7 2.2 14.5 2.8 Z",
+  },
+  { tone: "bone", path: "M4.5 29.5 L6 11 L7.5 11 L6 29.8 Z" },
+  { tone: "bone", path: "M1.5 6.5 L11 6.5 L11 11.5 L1.5 11.5 Z" },
+  { tone: "etch", path: "M4 6.5 L4 11.5 M8.5 6.5 L8.5 11.5" },
+];
+
 const TROLL: Sprite = [
   {
     tone: "bone",
@@ -128,6 +211,18 @@ const TROLL: Sprite = [
     path: "M8 12 C9 10 12 10 12.5 13 C11 14.5 9 14 8 12 Z M19.5 14 C21 12.5 24 13 24 15.5 C22 17 20.5 16 19.5 14 Z M10 21 C11 20 13 20.5 13 22 C12 23 10.5 22.5 10 21 Z",
   },
   { tone: "etch", path: "M14 13 L15 18 M17 13 L17.5 17 M16 23 L16 18" },
+];
+
+const TROLL_ELDER: Sprite = [
+  {
+    tone: "bone",
+    path: "M12.5 4.5 L7 0.5 L9 3.5 L3.5 2.5 L8.5 5.8 L4.5 7.5 L11.5 7 Z M19.5 4.5 L25 0.5 L23 3.5 L28.5 2.5 L23.5 5.8 L27.5 7.5 L20.5 7 Z",
+  },
+  ...TROLL,
+  {
+    tone: "blood",
+    path: "M12.5 9 L19.5 9 L19 13.5 L18 12 L17 15 L16 12.5 L15 15 L14 12 L13 13.5 Z",
+  },
 ];
 
 const DEN: Sprite = [
@@ -254,11 +349,11 @@ export const MONSTER_FIGURES: Record<MonsterKind, Figure> = {
   kobold: { sprite: KOBOLD, scale: 0.8 },
   goblin: { sprite: GOBLIN, scale: 0.9 },
   troll: { sprite: TROLL, scale: 1.2 },
-  "alpha wolf": { sprite: WOLF, scale: 1.35 },
-  "bandit chief": { sprite: BANDIT, scale: 1.3 },
-  "goblin chief": { sprite: GOBLIN, scale: 1.25 },
-  "kobold foreman": { sprite: KOBOLD, scale: 1.1 },
-  "troll elder": { sprite: TROLL, scale: 1.5 },
+  "alpha wolf": { sprite: ALPHA_WOLF, scale: 1.3 },
+  "bandit chief": { sprite: BANDIT_CHIEF, scale: 1.2 },
+  "goblin chief": { sprite: GOBLIN_CHIEF, scale: 1.15 },
+  "kobold foreman": { sprite: KOBOLD_FOREMAN, scale: 1 },
+  "troll elder": { sprite: TROLL_ELDER, scale: 1.4 },
 };
 
 export const SPAWNER_SPRITES: Record<SpawnerKind, Sprite> = {
