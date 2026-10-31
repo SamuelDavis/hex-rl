@@ -17,7 +17,7 @@ Contract for how game state, behaviour and content are organised in `src/game/`:
 | Entity | An id, a kind, a spawn `seq`, and any subset of components' fields. Plain data, never a class. | `Entity`, `With<K>`, `has` |
 | Archetype | Which components a kind of entity is built with. The only place content becomes entities. | `archetypes.ts` |
 | Game | Entities in spawn order, an occupancy index, chests, seen hexes, turn, events. | `Game`, `world.ts` |
-| System | Pure `(game) => game` over entities with given components; one concern, one module. | `systems/`, `UPKEEP` |
+| System | Pure function over entities with given components; one concern, one module. Per-entity ones are phases of each entity's turn (`TURN`); world-level ones run after (`UPKEEP`). | `systems/`, `TURN`, `UPKEEP` |
 | Agent | An entity that takes turns: a `seat` (a human's, given Intents) or a `mind` (chooses its own). | `Agent.controller` |
 | Intent / Deed / Rule / Plan | As in [action-pipeline.md](action-pipeline.md), for any entity with `agent`. | `actions/` |
 | Effect | Closed set of primitive state changes, one applier. Abilities and conditions compose them. | `effects.ts` |
@@ -25,7 +25,7 @@ Contract for how game state, behaviour and content are organised in `src/game/`:
 | Condition | Timed or permanent state on an entity: gates Deeds, applies Effects every so many turns. | `conditions.ts`, `content/conditions.ts` |
 | Faction | Allegiance; `relationOf` is the only hostility check. | `content/factions.ts` |
 | Event | Authoritative record of one consequence: `source`, `target`, `cause`. | `events.ts` |
-| Tick | One world turn: every active agent acts once, in spawn order, then upkeep. | `tick.ts` |
+| Tick | One world turn: every active entity takes its turn once, in spawn order, then upkeep. | `tick.ts` |
 | Active chunk | A chunk near a seat; only its entities are processed. | `systems/chunks.ts` |
 
 ## Components
@@ -57,16 +57,16 @@ Each component is an interface of flat fields in `components.ts`, named in the `
 
 ## Systems
 
-| System | Module | Does |
-|---|---|---|
-| agents | `systems/agents.ts` | the turn loop ([Ticks](#ticks)) |
-| minds | `systems/minds.ts` | a mind's perception (`mindOf`) and Plan (`planFor`): its move, preceded by a knack its state triggers |
-| conditions | `systems/conditions.ts` | each bearer's due `every` effects, credited to whoever inflicted them, then recovery |
-| chunks | `systems/chunks.ts` | the active set; materialises spawners of newly active chunks |
-| spawning | `systems/spawning.ts` | spawns members, revives healed wrecks, unleashes bosses |
-| vision | `systems/vision.ts` | the player's seen hexes |
+An entity's turn is `TURN` (`systems/turns.ts`), the single ordered list of per-entity phases; each acts only on entities with the components it needs:
 
-`UPKEEP` (`tick.ts`) is the single ordered list of per-tick systems after the agents: conditions, chunks + spawning, vision. Each stamps its events' `cause`.
+| Phase | Module | Does |
+|---|---|---|
+| suffering | `systems/conditions.ts` | its conditions suffered a turn longer; due `every` effects applied, credited to whoever inflicted them |
+| acting | `systems/turns.ts`, `systems/minds.ts` | an agent's Plan: a seat's given Intent, or a mind's perception (`mindOf`) and choice (`planFor`) |
+| spawning | `systems/spawning.ts` | a spawner spawns a member, revives once healed from a wreck, or unleashes its boss |
+| recovering | `systems/conditions.ts` | its timed conditions run down, and may be shaken off |
+
+`UPKEEP` (`tick.ts`) is the single ordered list of world-level systems after every turn: `chunks` (the active set; materialises spawners of newly active chunks), then `vision` (the player's seen hexes). Every phase and system stamps its events' `cause`.
 
 ## Chunks
 
@@ -75,22 +75,25 @@ The world is infinite and chunked on the terrain grid (`CHUNK` in `terrain.ts`),
 - **Active**: every chunk within `SIMULATION_RADIUS` (2: a 5×5 block) of a seat's. Entities here act, suffer conditions and spawn. `SIMULATION_RADIUS × CHUNK` spans more than `SIGHT`, so nothing a seat sees is frozen.
 - **Inactive**: everything else. Entities persist, unprocessed and frozen in time.
 - All state persists; if that grows too large, persistence becomes selective per kind.
-- Spawners are *derived* entities: identity (`spawner:<hexKey>`) and base components come from `Land` (seed, hex). `materialised` adds them the first time their chunk is active; from then on they are ordinary entities.
+- Spawners are terrain props: which exist, and where, is the terrain generator's (`spawnersAt` in `terrain.ts`: habitat, water, `SPAWNER_DENSITY`, distance from spawn), so density is tuned there, not by the active area. They become *derived* entities: identity (`spawner:<hexKey>`) and base components from `Land` (seed, hex); `materialised` adds them the first time their chunk is active; from then on they are ordinary entities.
 
 ## Ticks
 
 ```
 tick(game, intents: ReadonlyMap<EntityId, Intent>) → game
-  agents:  each active, standing agent in spawn order: a seat's Intent from `intents` (absent: pass), a mind's own
+  turns:   each active, standing entity in spawn order takes its TURN; a seat acts on its Intent from `intents` (absent: pass)
   upkeep:  UPKEEP, in order
   turn + 1
-act(game, intent) → game    // turn-based driver for the local seat: a free Deed or rejection resolves at once; a turn-spending one runs `tick`
+immediate(game, intent) → game | undefined   // the player's free Deed or rejection, at once; undefined if it would spend a turn
+act(game, intent) → game                     // turn-based: immediate, else the tick it spends
 ```
 
+What drives ticks (paused, turn-based, ticks per second, input buffer) is host code: [time.md](time.md).
+
 - **Order is spawn order.** `inserted` stamps a monotonic `seq`; `Game.entities` is an insertion-ordered `Map`. A seat joining is another insertion.
-- **The loop walks a cursor, not a snapshot.** `nextAgent` finds the first standing, active agent with a `seq` above the last one resolved, re-reading the current state each step. A slain entity is never reached; one spawned this tick has a `seq` above the tick's starting maximum and first acts next tick.
+- **The loop walks a cursor, not a snapshot.** `nextOf` finds the first standing, active entity with a `seq` above the last one whose turn ran, re-reading the current state each step. A slain entity is never reached; one spawned this tick has a `seq` above the tick's starting maximum and first takes a turn next tick.
 - **Each agent decides at its own slot**, from the state as it is then; Rules re-validate, so stale Intents are safe.
-- **A condition lasts from the next turn**: inflicted on turn `t` for `n` turns, it is current on turns `t+1 … t+n`, so it reaches the bearer's next `n` turns whoever acts first. Its `every` effects fall due on each `interval`-th turn suffered.
+- **Conditions count their bearer's turns.** Inflicted, a condition is registered on its target at once and first takes effect on the target's next turn, whenever in the loop that falls: its `every` effects at the start of each `interval`-th turn suffered, its gates during the turn, and its duration and shake-off at the turn's end.
 - **Multi-turn actions are conditions**: a channel gates other Deeds and applies its Effect when due; cancelling removes it. No action scheduler.
 - Randomness is `rngOf(seed, purpose).child(id)` keyed by turn, never by call order.
 
@@ -104,7 +107,7 @@ One table, `ABILITIES`, for the player's spells, potions and creatures' knacks. 
 
 ## Conditions
 
-Rows in `content/conditions.ts` typed by `ConditionType` (`conditions.ts`): `allows` / `forbids` gate Deeds, `shakeOff` grows the per-turn recovery chance, `every` applies effects. Inflicted ones (bleed, stun, paralysis) wear off; permanent ones (vigor, focus, mending: regeneration) never do.
+Rows in `content/conditions.ts` typed by `ConditionType` (`conditions.ts`): `allows` / `forbids` gate Deeds, `shakeOff` grows the per-turn recovery chance, `every` applies effects. Inflicted ones (bleed, stun, paralysis) wear off; permanent ones never do: vigor and focus regenerate the player, mending passively and slowly heals spawners, wrecked or not.
 
 - A gated Deed is checked after its Rule's own checks (so a paralysed bump still attacks) and costs the turn struggling (`struggled`).
 - `source` on a condition is who applied it: a bleed's damage, and a kill by it, are the bandit's.
@@ -128,7 +131,7 @@ src/game/
   progression.ts  levels, mastery, kill credit
   quests.ts       bounties
   chests.ts       ground chests
-  tick.ts         tick, act, newGame, UPKEEP
+  tick.ts         tick, immediate, act, newGame, UPKEEP
   actions/        Deeds, Rules, Plans (one module per Rule family), pipeline
   systems/        one module per system
   content/        abilities, conditions, creatures, factions: aesthetic terms
@@ -144,7 +147,8 @@ src/game/
 | Creature, NPC, spawner kind | Rows in `content/creatures.ts`; components in `archetypes.ts` | New entity type |
 | Faction | Row in `FACTIONS` | Comparing factions directly |
 | Attribute | Field in a component (e.g. `Stats`) and its archetypes; read where used | Reading it off a kind's table |
-| Per-tick world behaviour | Module in `systems/`, entry in `UPKEEP` | Logic in `tick` |
+| Per-entity behaviour each turn | Phase in `systems/`, entry in `TURN` | Logic in `turns` |
+| World-level behaviour each tick | Module in `systems/`, entry in `UPKEEP` | Logic in `tick` |
 | Action | `Deed` member and its Rule (mapped types force narration) | Special case in `settled` |
 | Multi-turn action | Condition gating Deeds, its effect `every` its duration | A scheduler |
 | Concern shared by several kinds | Component | Optional fields on an existing one |
@@ -156,7 +160,7 @@ Long-term goal: a peer-to-peer, host-authoritative, simplified MMO. Nothing is b
 - Terrain is never synced: every peer regenerates it from `(seed, coordinates)` (procgen's contract). Only entities and events cross the wire.
 - The host runs `tick` with each seat's Intents ([time.md](time.md)); peers receive the events they can perceive.
 - State is plain data (Maps need a codec) and the reducer pure and seeded, so the host can migrate by sending the state.
-- Still single-seat: `playerOf`, `isOver`, `vision` and `act` assume the `PLAYER` seat; making them per seat is the multiplayer change.
+- Still single-seat: `playerOf`, `isOver`, `vision`, `immediate` and `act` assume the `PLAYER` seat; making them per seat is the multiplayer change.
 
 ## Deferred
 

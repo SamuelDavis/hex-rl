@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { EXPLORE } from "./mode";
+import { BUFFER_TICKS, TURN_BASED, type Speed } from "./clock";
 import {
   conversantOf,
   LOG_LENGTH,
@@ -229,5 +230,58 @@ describe("interacting", () => {
       { kind: "move", direction: "nw" },
     );
     expect(conversantOf(away)).toBeUndefined();
+  });
+});
+
+describe("speed", () => {
+  const at = (speed: Speed) =>
+    run(sessionOf(gameWith([]), RANGE), { kind: "speed", speed });
+  const realTime = at({ kind: "real-time", ticksPerSecond: 2 });
+  const south: Message = { kind: "move", direction: "s" };
+
+  test("starts turn-based", () => {
+    expect(sessionOf(gameWith([]), RANGE).speed).toEqual(TURN_BASED);
+  });
+
+  test("paused, nothing fires, not even free actions", () => {
+    const paused = at({ kind: "paused" });
+    expect(run(paused, south, { kind: "prepare" }, { kind: "tick" })).toEqual(
+      paused,
+    );
+  });
+
+  test("in real time, turn-spending actions queue for the next tick", () => {
+    const queued = run(realTime, south);
+    expect(queued.queue).toEqual([south]);
+    expect(queued.game.turn).toBe(0);
+    const ticked = run(queued, { kind: "tick" });
+    expect(ticked.queue).toEqual([]);
+    expect(ticked.game.turn).toBe(1);
+    expect(playerOf(ticked.game).facing).toBe("s");
+  });
+
+  test("in real time, a tick with nothing queued passes the player's turn", () => {
+    const ticked = run(realTime, { kind: "tick" }, { kind: "tick" });
+    expect(ticked.game.turn).toBe(2);
+    expect(playerOf(ticked.game).at).toEqual(playerOf(realTime.game).at);
+  });
+
+  test("in real time, free actions and rejections resolve at once, unqueued", () => {
+    const quaffed = run(realTime, { kind: "use", ability: "mana" });
+    expect(quaffed.queue).toEqual([]);
+    expect(quaffed.game.events).toMatchObject([
+      { kind: "rejected", reason: "no-item" },
+    ]);
+  });
+
+  test("the queue holds a few actions, rejects more, and cancel drops the last", () => {
+    const full = run(realTime, ...Array<Message>(BUFFER_TICKS + 1).fill(south));
+    expect(full.queue).toHaveLength(BUFFER_TICKS);
+    expect(run(full, { kind: "cancel" }).queue).toHaveLength(BUFFER_TICKS - 1);
+  });
+
+  test("changing speed clears the queue", () => {
+    const queued = run(realTime, south);
+    expect(run(queued, { kind: "speed", speed: TURN_BASED }).queue).toEqual([]);
   });
 });

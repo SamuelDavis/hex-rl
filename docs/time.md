@@ -1,35 +1,35 @@
 # Time
 
-Contract for what drives ticks: clock modes, input buffers, multiplayer turn timers. Host code (`Session` now, the host peer later), outside `src/game/`, which only exposes `tick(world, intents)` and `act` ([architecture.md](architecture.md#ticks)).
+Contract for what drives ticks: speed, input buffers, multiplayer turn timers. Host code (`Session`, `src/Pages/Game/session.ts`, and `src/Pages/Game/clock.ts` now; the host peer later), outside `src/game/`, which only exposes `tick(game, intents)`, `immediate` and `act` ([architecture.md](architecture.md#ticks)).
 
-Status: decided, not built. Follows the architecture migration.
+Status: built for one seat; multiplayer turn timers are not.
 
-## Clock
+## Speed
 
-Players set the timing; the game never adjusts it.
+The player sets the speed (`Speed`, `SPEEDS`; the select beside the place name, persisted); the game never adjusts it.
 
-| Mode | Ticks fire | Free Deeds |
+| Speed | Ticks fire | Free Deeds |
 |---|---|---|
-| Paused | never | rejected: nothing fires |
-| Turn-based | `TURN_TIMER` after the first seat submits; seats without an Intent pass | at once |
-| Real-time | every 1/N s, N configurable; seats without an Intent pass | at once |
+| Paused | never | dropped: nothing fires |
+| Turn-based | when the player submits a turn-spending Intent (`act`) | at once |
+| N ticks/s | every 1/N s (`intervalOf`), whatever is queued; a seat with nothing queued passes | at once (`immediate`) |
 
-- Turn-based with one seat and a zero timer is today's behaviour: the tick fires on input.
-- `TURN_TIMER` and N are host settings, like the clock mode.
+- Multiplayer turn-based (not built): the first submission starts `TURN_TIMER`; when it ends every seat's head Intent is dispatched and the rest pass. `TURN_TIMER` is a host setting, like the speed.
 
 ## Input buffer
 
 Each seat queues turn-spending Intents; the host dispatches the head into `tick`'s Intent map, one per tick. [Input-Buffer]
 
 - Capacity `BUFFER_TICKS` (2). Queuing into a full buffer is rejected.
-- Escape dequeues the last Intent. The UI may show the queue.
-- Free Deeds skip the buffer and go straight to `act`; they never count toward capacity.
+- Cancel (Escape by default), outside aiming, drops the last queued Intent. The header shows how many are queued.
+- An Intent that would be rejected now is rejected at once, not queued; one that becomes invalid by its tick is rejected then.
+- Changing speed clears the queue.
+- Free Deeds skip the buffer and resolve at once (`immediate`); they never count toward capacity.
 - The buffer is host state, not world state: input, not consequence.
 
 ## Multiplayer
 
-- Peers send Intents to the host, which buffers them per seat. Clock and timer are the host's.
-- Turn-based: the first submission starts `TURN_TIMER`; when it ends every seat's head Intent is dispatched and the rest pass.
+- Peers send Intents to the host, which buffers them per seat. Speed and timer are the host's.
 
 ## Sources
 

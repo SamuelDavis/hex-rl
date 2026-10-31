@@ -72,6 +72,13 @@ import {
 } from "../../game/items";
 import { conversantOf, newSession, update, type Message } from "./session";
 import {
+  intervalOf,
+  SPEEDS,
+  speedNameOf,
+  TURN_BASED,
+  type Speed,
+} from "./clock";
+import {
   ABILITY_IDS,
   abilityOf,
   isSpell,
@@ -134,6 +141,9 @@ export default function Game() {
     decode: (json): Keymap => ({ ...DEFAULT_KEYMAP, ...JSON.parse(json) }),
   });
   const [getLoadout, setLoadout] = createSignal(STARTING_LOADOUT);
+  const [getSpeed, setSpeed] = persist(createSignal<Speed>(TURN_BASED), {
+    key: "speed",
+  });
   const [isRemapping, setRemapping] = createSignal(false);
   const dispatch = (message: Message) =>
     setSession((session) => update(session, message));
@@ -172,6 +182,15 @@ export default function Game() {
   });
 
   createEffect(on(getRange, (range) => dispatch({ kind: "view", range })));
+  createEffect(on(getSpeed, (speed) => dispatch({ kind: "speed", speed })));
+  const getInterval = createMemo(() => intervalOf(getSession().speed));
+  createEffect(
+    on(getInterval, (interval) => {
+      if (interval === undefined) return;
+      const timer = setInterval(() => dispatch({ kind: "tick" }), interval);
+      onCleanup(() => clearInterval(timer));
+    }),
+  );
 
   function bind(slot: number, ability: AbilityId | undefined) {
     setLoadout((loadout) => slotted(loadout, slot, ability));
@@ -188,6 +207,7 @@ export default function Game() {
   function start({ seed, at }: Start) {
     setLastStart({ seed, at });
     setSession(newSession(seed, getRange(), at));
+    dispatch({ kind: "speed", speed: getSpeed() });
     setLoadout(STARTING_LOADOUT);
     setStarting(false);
   }
@@ -270,13 +290,34 @@ export default function Game() {
     <article class="mx-auto max-w-lg">
       <header>
         <div>
-          <h1>{BIOME_NAMES[getTile().biome]}</h1>
+          <div class="flex items-baseline justify-between gap-(--pico-spacing)">
+            <h1>{BIOME_NAMES[getTile().biome]}</h1>
+            <select
+              aria-label="Speed"
+              class="w-auto"
+              value={speedNameOf(getSpeed())}
+              onChange={(event) =>
+                setSpeed(
+                  SPEEDS.find(
+                    (speed) => speedNameOf(speed) === event.currentTarget.value,
+                  ) ?? TURN_BASED,
+                )
+              }
+            >
+              <For each={SPEEDS}>
+                {(speed) => <option>{speedNameOf(speed)}</option>}
+              </For>
+            </select>
+          </div>
           <p data-cap="end">
             HP {Math.max(0, playerOf(getGame()).hp)}/{MAX_HP} · MP{" "}
             {playerOf(getGame()).mp}/{MAX_MP} · Level{" "}
             {levelOf(playerOf(getGame()))} (
             {playerOf(getGame()).xp % XP_PER_LEVEL}/{XP_PER_LEVEL} XP) · Gold{" "}
             {playerOf(getGame()).gold} · Turn {getGame().turn}
+            <Show when={getSession().queue.length}>
+              {(queued) => <> · Queued {queued()}</>}
+            </Show>
             <For each={conditionsOf(getGame())}>
               {([condition, turns]) => (
                 <>
@@ -1255,8 +1296,11 @@ function OtherPanel(props: {
         experience; each level learns or raises a spell in the Spells tab.
         Monsters grow stronger, and their tricks (summoning, bleeding, stunning,
         paralysis) worse, farther from where you set out. Climb one block at a
-        time; swim freely. Towns spawn a bailiff, a reeve and peasants, who
-        fight monsters; bump one, or target one beside you and press
+        time; swim freely. Choose the speed beside the place name: paused,
+        turn-based, or ticks per second; in real time, turn-spending actions
+        queue (up to two) for the next tick, and {key("cancel")} drops the last
+        one queued. Towns spawn a bailiff, a reeve and peasants, who fight
+        monsters; bump one, or target one beside you and press
         {key("interact")}, to interact: a reeve trades, a bailiff posts bounties
         on ever-farther lairs.
       </p>

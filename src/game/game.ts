@@ -1,5 +1,5 @@
 /** The game's public interface: the UI imports from here only. Architecture: docs/architecture.md. */
-export { act, newGame, tick } from "./tick";
+export { act, immediate, newGame, tick } from "./tick";
 export {
   creaturesOf,
   isOver,

@@ -27,20 +27,20 @@ const UPKEEP: readonly (readonly [SystemId, System])[] = [
   ["vision", vision],
 ];
 
-/** One world turn: every active entity takes its turn, then upkeep, then the turn advances. What drives ticks (input, a clock) is the caller's: docs/time.md. */
+/** One world turn: every active entity takes its turn, then upkeep, then the turn advances. Its events are this tick's alone. What drives ticks is the caller's: docs/time.md. */
 export const tick = (
   game: Game,
   intents: ReadonlyMap<EntityId, Intent>,
 ): Game => {
   const kept = UPKEEP.reduce(
     (state, [system, run]) => caused(state, { kind: "system", system }, run),
-    turns(game, intents),
+    turns({ ...game, events: [] }, intents),
   );
   return { ...kept, turn: kept.turn + 1 };
 };
 
-/** The player's Intent, turn-based: a free Deed or rejection resolves at once; a turn-spending one runs a tick. */
-export const act = (game: Game, intent: Intent): Game => {
+/** The player's Intent resolved at once if it can be: a free Deed, or a rejection. `undefined` when it would spend a turn, so must wait for a tick. */
+export const immediate = (game: Game, intent: Intent): Game | undefined => {
   const fresh = { ...game, events: [] };
   const player = playerOf(fresh);
   if (isOver(fresh))
@@ -55,8 +55,12 @@ export const act = (game: Game, intent: Intent): Game => {
     PLAYER,
     planOf(player, intent),
   );
-  return spendsTurn ? tick(fresh, new Map([[PLAYER, intent]])) : next;
+  return spendsTurn ? undefined : next;
 };
+
+/** Turn-based: the player's Intent resolves at once, or runs the tick it spends. */
+export const act = (game: Game, intent: Intent): Game =>
+  immediate(game, intent) ?? tick(game, new Map([[PLAYER, intent]]));
 
 /** The player starts at `start`, the spawn by default; danger is still measured from the spawn. */
 export const newGame = (land: Land, start: Hex = land.spawn): Game => {
