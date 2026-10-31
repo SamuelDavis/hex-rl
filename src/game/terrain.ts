@@ -333,12 +333,18 @@ export const createTerrain = (seed: number) => {
     const tile = wildTileAt(hexAt(p));
     return tile.water === undefined && !tile.tree;
   };
-  const spawnPoint = spawnNear({
-    step: 8,
-    maxRadius: 4000,
-    isSite: isSpawnable,
-  });
-  const spawn = hexAt(spawnPoint ?? { x: 0, y: 0 });
+  /** `hex` if dry and treeless, else the nearest such hex found; `hex` if none. */
+  const startNear = (hex: Hex): Hex => {
+    const from = centerOf(hex);
+    const site = spawnNear({
+      step: 8,
+      maxRadius: 4000,
+      isSite: isSpawnable,
+      from,
+    });
+    return hexAt(site ?? from);
+  };
+  const spawn = startNear({ q: 0, r: 0 });
 
   const sites = rngOf(seed, "spawners");
   const spawnersAt = stage({
@@ -434,6 +440,7 @@ export const createTerrain = (seed: number) => {
     settledAt,
     tileAt,
     spawn,
+    startNear,
     spawnersAt,
     spawnersIn,
   };

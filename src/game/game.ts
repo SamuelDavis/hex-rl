@@ -656,13 +656,14 @@ const populate = (game: Game): Game => {
     .reduce(spawnFrom, { ...game, creatures: kept });
 };
 
-export const newGame = (land: Land): Game =>
+/** The player starts at `start`, the spawn by default; danger is still measured from the spawn. */
+export const newGame = (land: Land, start: Hex = land.spawn): Game =>
   withSight(
     populate({
       land,
       player: {
         id: PLAYER,
-        at: land.spawn,
+        at: start,
         facing: "n",
         hp: MAX_HP,
         mp: MAX_MP,

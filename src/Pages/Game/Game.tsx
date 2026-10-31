@@ -46,7 +46,12 @@ import {
   type Creature,
   type Where,
 } from "../../game/game";
-import { directionToward, hexKey, type Direction } from "../../game/hex";
+import {
+  directionToward,
+  hexKey,
+  type Direction,
+  type Hex,
+} from "../../game/hex";
 import { bountyOf, narrationOf, placeOf, whoNameOf } from "./narration";
 import {
   capacityOf,
@@ -155,10 +160,15 @@ export default function Game() {
     setEditing(undefined);
   }
 
-  function restart() {
-    setSession(newSession(randomSeed(), getRange()));
+  const [isStarting, setStarting] = createSignal(false);
+
+  function start({ seed, at }: Start) {
+    setSession(newSession(seed, getRange(), at));
     setLoadout(STARTING_LOADOUT);
+    setStarting(false);
   }
+
+  const restart = () => setStarting(true);
 
   function onKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -166,6 +176,7 @@ export default function Game() {
       getEditing() ||
       isRemapping() ||
       getSession().isInventoryOpen ||
+      isStarting() ||
       getConversant()
     )
       return;
@@ -395,6 +406,9 @@ export default function Game() {
             </footer>
           </article>
         )}
+      </HTMLDialog>
+      <HTMLDialog open={isStarting()} onClose={() => setStarting(false)}>
+        <NewWorld start={start} cancel={() => setStarting(false)} />
       </HTMLDialog>
       <HTMLDialog open={isRemapping()} onClose={() => setRemapping(false)}>
         <KeymapEditor
@@ -940,6 +954,63 @@ function BountyPanel(props: { game: GameState }) {
         )}
       </Show>
     </>
+  );
+}
+
+interface Start {
+  readonly seed: number;
+  readonly at: Hex;
+}
+
+/** Chooses a seed (random by default) and a starting position (the origin by default). */
+function NewWorld(props: {
+  start: (start: Start) => void;
+  cancel: () => void;
+}) {
+  function submit(event: SubmitEvent & { currentTarget: HTMLFormElement }) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const numberOf = (name: string) => Math.trunc(Number(form.get(name)));
+    props.start({
+      seed: numberOf("seed"),
+      at: { q: numberOf("q"), r: numberOf("r") },
+    });
+  }
+
+  return (
+    <article>
+      <header>
+        <h3>New world</h3>
+      </header>
+      <form id="new-world" onSubmit={submit}>
+        <label>
+          Seed
+          <input type="number" name="seed" required value={randomSeed()} />
+        </label>
+        <fieldset role="group">
+          <label>
+            q
+            <input type="number" name="q" required value={0} />
+          </label>
+          <label>
+            r
+            <input type="number" name="r" required value={0} />
+          </label>
+        </fieldset>
+        <small>
+          Starts on the nearest dry, treeless hex to the position. Monsters
+          still grow stronger with distance from where the world begins.
+        </small>
+      </form>
+      <footer>
+        <button type="button" class="secondary" onClick={() => props.cancel()}>
+          Cancel
+        </button>
+        <button type="submit" form="new-world">
+          Start
+        </button>
+      </footer>
+    </article>
   );
 }
 

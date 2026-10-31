@@ -62,8 +62,15 @@ export const sessionOf = (game: Game, range: number): Session => ({
   log: game.events,
 });
 
-export const newSession = (seed: number, range: number): Session =>
-  sessionOf(newGame(createTerrain(seed)), range);
+/** Starts at the dry, treeless hex nearest `near`. */
+export const newSession = (
+  seed: number,
+  range: number,
+  near: Hex = { q: 0, r: 0 },
+): Session => {
+  const terrain = createTerrain(seed);
+  return sessionOf(newGame(terrain, terrain.startNear(near)), range);
+};
 
 export const targetedAt = ({ game, range, target }: Session): Hex | undefined =>
   target && targetInView(game, range, target)?.at;

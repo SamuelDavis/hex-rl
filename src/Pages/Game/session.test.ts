@@ -11,7 +11,7 @@ import {
   type Session,
 } from "./session";
 import { ADVENTURER, creature, east, gameWith, who } from "../../game/testing";
-import { hexKey } from "../../game/hex";
+import { hexDistance, hexKey } from "../../game/hex";
 import type { Game } from "../../game/game";
 
 const RANGE = 5;
@@ -29,6 +29,24 @@ describe("newSession", () => {
     expect(session.game.land.seed).toBe(7);
     expect(session.mode).toEqual(EXPLORE);
     expect(session.log).toEqual([{ kind: "began", actor: ADVENTURER }]);
+  });
+});
+
+describe("newSession at a position", () => {
+  test("starts on the hex asked for when it can be stood on, else the nearest that can", () => {
+    const at = newSession(7, RANGE, { q: -85, r: 20 }).game;
+    const tile = at.land.tileAt(at.player.at);
+    expect(tile.water).toBeUndefined();
+    expect(tile.tree).toBe(false);
+    expect(hexDistance(at.player.at, { q: -85, r: 20 })).toBeLessThan(8);
+    expect(at.land.spawn).toEqual(newSession(7, RANGE).game.land.spawn);
+    const exact = at.player.at;
+    expect(newSession(7, RANGE, exact).game.player.at).toEqual(exact);
+  });
+
+  test("starts at the spawn by default", () => {
+    const { game } = newSession(7, RANGE);
+    expect(game.player.at).toEqual(game.land.spawn);
   });
 });
 
