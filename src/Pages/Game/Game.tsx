@@ -23,7 +23,6 @@ import {
   type Keymap,
 } from "./controls";
 import {
-  decodeLoadout,
   messageOf,
   slotted,
   STARTING_LOADOUT,
@@ -112,10 +111,7 @@ export default function Game() {
     key: "keymap",
     decode: (json): Keymap => ({ ...DEFAULT_KEYMAP, ...JSON.parse(json) }),
   });
-  const [getLoadout, setLoadout] = persist(createSignal(STARTING_LOADOUT), {
-    key: "loadout",
-    decode: decodeLoadout,
-  });
+  const [getLoadout, setLoadout] = createSignal(STARTING_LOADOUT);
   const [isRemapping, setRemapping] = createSignal(false);
   const dispatch = (message: Message) =>
     setSession((session) => update(session, message));
@@ -157,6 +153,7 @@ export default function Game() {
 
   function restart() {
     setSession(newSession(randomSeed(), getRange()));
+    setLoadout(STARTING_LOADOUT);
   }
 
   function onKeyDown(event: KeyboardEvent) {

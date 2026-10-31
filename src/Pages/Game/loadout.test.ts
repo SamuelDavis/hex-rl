@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  decodeLoadout,
   messageOf,
   slotted,
   SLOT_COUNT,
@@ -20,20 +19,6 @@ describe("slotted", () => {
     const full = slotted(slotted(STARTING_LOADOUT, 1, "cleave"), 2, "heal");
     const bound = slotted(slotted(full, 0, "health"), 1, undefined);
     expect(bound.slice(0, 3)).toEqual(["health", undefined, "heal"]);
-  });
-});
-
-describe("decodeLoadout", () => {
-  test("round-trips through JSON", () => {
-    const loadout = slotted(STARTING_LOADOUT, 5, "mana");
-    expect(decodeLoadout(JSON.stringify(loadout))).toEqual(loadout);
-  });
-
-  test("drops unknown abilities and fits the slot count", () => {
-    expect(decodeLoadout('["cleave","meteor"]')).toEqual([
-      "cleave",
-      ...Array.from({ length: SLOT_COUNT - 1 }, () => undefined),
-    ]);
   });
 });
 

@@ -130,9 +130,6 @@ export type AbilityId = keyof typeof ABILITIES;
 
 export const ABILITY_IDS = Object.keys(ABILITIES) as readonly AbilityId[];
 
-export const isAbility = (value: unknown): value is AbilityId =>
-  typeof value === "string" && value in ABILITIES;
-
 export const abilityOf = (id: AbilityId): Ability => ABILITIES[id];
 
 export const MELEE_AREAS: ReadonlySet<Area> = new Set(["ahead", "flanks"]);
