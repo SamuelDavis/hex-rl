@@ -7,6 +7,8 @@ import {
   css,
   drawChevron,
   drawEllipse,
+  drawLabel,
+  levelSpotOf,
   HAIRLINE,
   PIXELS_PER_UNIT,
   polyline,
@@ -128,6 +130,13 @@ const drawToken = (
 };
 
 export const CLASSIC: CanvasTheme = {
+  level: (context, base, level) =>
+    drawLabel(context, levelSpotOf(base), String(level), {
+      font: `bold ${TOKEN_SIZE}px monospace`,
+      fill: css(WHITE),
+      halo: SHADOW,
+      width: 3,
+    }),
   fog: [220, 15, 12],
   marks: {
     watched: "hsl(0 90% 50% / 0.15)",

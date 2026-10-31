@@ -6,6 +6,7 @@ import {
   type Destroy,
   type Game,
   type GameEvent,
+  type Learn,
   type Prepare,
   type Transfer,
 } from "../../game/game";
@@ -35,6 +36,7 @@ export type Message =
   | Transfer
   | Prepare
   | Destroy
+  | Learn
   | { readonly kind: "view"; readonly range: number };
 
 export const sessionOf = (game: Game, range: number): Session => ({
@@ -89,6 +91,7 @@ export const update = (session: Session, message: Message): Session => {
     case "transfer":
     case "prepare":
     case "destroy":
+    case "learn":
       return performed(session, message);
     case "inventory":
       return { ...session, isInventoryOpen: true };

@@ -57,6 +57,11 @@ export interface CanvasTheme {
     heading: Vec2,
   ) => void;
   readonly unknown: (context: CanvasRenderingContext2D, base: Vec2) => void;
+  readonly level: (
+    context: CanvasRenderingContext2D,
+    base: Vec2,
+    level: number,
+  ) => void;
 }
 
 export const CANVAS_THEMES: Record<ThemeId, CanvasTheme> = {

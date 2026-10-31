@@ -36,7 +36,8 @@ Intent ─planOf(actor)→ Plan ─attempted→ Rule ─┬─ performed → Eve
 - A rejected Plan spends nothing, for any actor; it records one `rejected` Event naming the last Deed attempted and its reason. A monster decides once per world turn, so a rejected Plan leaves it idle that turn.
 - Every consequence is an Event naming its actor (`turned`, `stepped`, `rejected`, ...). The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
 - `use` pays its Ability's costs (MP, cooldown, item) itself; only it has costs beyond the turn.
-- Player-only for now: `use`, `transfer`, `prepare`, `destroy` act on the player's resources. Foes: the player attacks monsters and spawners; monsters attack only the player.
+- Player-only for now: `use`, `transfer`, `prepare`, `destroy`, `learn` act on the player's resources. Monster-only: `summon`, attempted first by a ready, hostile summoner's Plan, falling back to its move when `blocked`. Foes: the player attacks monsters and spawners; monsters attack only the player.
+- Afflictions are player state, not Deeds: stun rejects every Intent but `wait` before planning (`incapacityOf`); paralysis is a rejection inside `turn` and `step`, after their own checks, so a bump attack still lands.
 
 ## Extension points
 

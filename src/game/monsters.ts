@@ -75,6 +75,65 @@ export const MONSTERS = {
 
 export type MonsterKind = keyof typeof MONSTERS;
 
+export type Affliction = "bleed" | "stun" | "paralysis";
+
+/** `perLevel` scales potency (cubs summoned, turns afflicted) linearly with the caster's level, rounded down. */
+export type MonsterSpell =
+  | {
+      readonly kind: "summon";
+      readonly monster: MonsterKind;
+      readonly perLevel: number;
+      /** Turns after casting before it can be cast again. */
+      readonly cooldown: number;
+    }
+  | {
+      readonly kind: "afflict";
+      readonly affliction: Affliction;
+      readonly perLevel: number;
+      /** Turns after the affliction wears off before it can be inflicted again. */
+      readonly cooldown: number;
+    };
+
+const SUMMON_CUBS: MonsterSpell = {
+  kind: "summon",
+  monster: "cub",
+  perLevel: 1,
+  cooldown: 15,
+};
+const BLEED: MonsterSpell = {
+  kind: "afflict",
+  affliction: "bleed",
+  perLevel: 1,
+  cooldown: 3,
+};
+const STUN: MonsterSpell = {
+  kind: "afflict",
+  affliction: "stun",
+  perLevel: 0.5,
+  cooldown: 4,
+};
+const PARALYZE: MonsterSpell = {
+  kind: "afflict",
+  affliction: "paralysis",
+  perLevel: 1,
+  cooldown: 4,
+};
+
+/** Summons are cast while hostile; afflictions ride on a landed attack. */
+export const MONSTER_SPELLS: Partial<Record<MonsterKind, MonsterSpell>> = {
+  wolf: SUMMON_CUBS,
+  "alpha wolf": SUMMON_CUBS,
+  bandit: BLEED,
+  "bandit chief": BLEED,
+  goblin: PARALYZE,
+  "goblin chief": PARALYZE,
+  troll: STUN,
+  "troll elder": STUN,
+};
+
+export const potencyOf = ({ perLevel }: MonsterSpell, level: number): number =>
+  Math.floor(perLevel * level);
+
 export interface SpawnerType {
   readonly name: string;
   readonly pool: readonly (readonly [MonsterKind, number])[];

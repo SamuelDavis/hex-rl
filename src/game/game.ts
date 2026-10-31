@@ -15,9 +15,12 @@ import {
 } from "./hex";
 import { IDLE, sighted, tetherOf, unsighted, type Mind } from "./mind";
 import {
+  MONSTER_SPELLS,
   MONSTERS,
+  potencyOf,
   SPAWNERS,
   spawnerHpOf,
+  type Affliction,
   type MonsterKind,
   type SpawnerKind,
 } from "./monsters";
@@ -25,12 +28,14 @@ import { canNotice, SIGHT, visibleFrom } from "./sight";
 import {
   abilityOf,
   areaOf,
+  isSpell,
   MELEE_AREAS,
   PLAYER_DAMAGE,
   type AbilityId,
   type Effect,
+  type SpellId,
 } from "./abilities";
-import type { Spawner, Tile } from "./terrain";
+import { dangerOf, type Spawner, type Tile } from "./terrain";
 import {
   capacityOf,
   fits,
@@ -55,6 +60,7 @@ const WANDER_CHANCE = 0.3;
 const HP_REGEN_INTERVAL = 10;
 const MP_REGEN_INTERVAL = 2;
 const PATH_BUDGET = 200;
+export const XP_PER_LEVEL = 10;
 
 export interface Land {
   readonly seed: number;
@@ -73,6 +79,11 @@ export interface Player {
   readonly gold: number;
   readonly pack: readonly Item[];
   readonly equipment: Equipment;
+  readonly xp: number;
+  /** Level of each spell learned; unlearned spells are absent. */
+  readonly spells: ReadonlyMap<SpellId, number>;
+  /** The turn each affliction suffered wears off. */
+  readonly afflictions: ReadonlyMap<Affliction, number>;
 }
 
 export const PLAYER = "player";
@@ -94,6 +105,10 @@ export interface Monster {
   readonly facing: Direction;
   readonly hp: number;
   readonly mind: Mind;
+  /** Scales damage, spell potency and experience granted linearly. */
+  readonly level: number;
+  /** The turn its spell, if any, is ready again. */
+  readonly readyAt: number;
 }
 
 export interface SpawnerState {
@@ -172,7 +187,26 @@ export interface Destroy {
   readonly kind: "destroy";
 }
 
-type Deed = Turn | Step | Attack | Wait | Use | Transfer | Prepare | Destroy;
+export interface Learn {
+  readonly kind: "learn";
+  readonly spell: SpellId;
+}
+
+export interface Summon {
+  readonly kind: "summon";
+}
+
+type Deed =
+  | Turn
+  | Step
+  | Attack
+  | Wait
+  | Use
+  | Transfer
+  | Prepare
+  | Destroy
+  | Learn
+  | Summon;
 
 export type Intent = Move | Deed;
 
@@ -214,7 +248,12 @@ export type Rejection =
   | "misfit"
   | "no-item"
   | "full"
-  | "no-chest";
+  | "no-chest"
+  | "unlearned"
+  | "no-unlocks"
+  | "stunned"
+  | "paralyzed"
+  | "unable";
 
 export type GameEvent =
   | { readonly kind: "began" }
@@ -252,9 +291,52 @@ export type GameEvent =
   | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
   | { readonly kind: "emerged"; readonly monster: MonsterKind }
   | { readonly kind: "struck"; readonly monster: MonsterKind }
+  | { readonly kind: "leveled"; readonly level: number }
+  | {
+      readonly kind: "learned";
+      readonly spell: SpellId;
+      readonly level: number;
+    }
+  | {
+      readonly kind: "summoned";
+      readonly monster: MonsterKind;
+      readonly summoned: MonsterKind;
+      readonly count: number;
+    }
+  | {
+      readonly kind: "afflicted";
+      readonly monster: MonsterKind;
+      readonly affliction: Affliction;
+      readonly turns: number;
+    }
+  | { readonly kind: "bled" }
   | { readonly kind: "died" };
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
+
+export const levelOf = ({ xp }: Player): number =>
+  1 + Math.floor(xp / XP_PER_LEVEL);
+
+export const spellLevelOf = ({ spells }: Player, spell: SpellId): number =>
+  spells.get(spell) ?? 0;
+
+/** Levels gained but not yet spent learning a spell. */
+export const unlocksOf = (player: Player): number =>
+  levelOf(player) -
+  1 -
+  [...player.spells.values()].reduce((sum, level) => sum + level, 0);
+
+/** Effect multiplier: a spell's level; potions are always 1. */
+const masteryOf = (player: Player, id: AbilityId): number =>
+  isSpell(id) ? spellLevelOf(player, id) : 1;
+
+export const afflictionOf = (
+  { player, turn }: Game,
+  affliction: Affliction,
+): number => Math.max(0, (player.afflictions.get(affliction) ?? 0) - turn);
+
+const isAfflicted = (game: Game, actor: ActorId, affliction: Affliction) =>
+  actor === PLAYER && afflictionOf(game, affliction) > 0;
 
 export const cooldownOf = (
   { player, turn }: Game,
@@ -363,6 +445,8 @@ const spawnedFrom = (
   facing: rngOf(land.seed, "spawns").pick(HEADINGS, at.q, at.r, turn, 2),
   hp: MONSTERS[kind].hp,
   mind: IDLE,
+  level: dangerOf(spawner.at, land.spawn),
+  readyAt: 0,
 });
 
 const unleashBoss = (game: Game, spawner: Spawner): Game => {
@@ -443,6 +527,9 @@ export const newGame = (land: Land): Game =>
         gold: 0,
         pack: [],
         equipment: {},
+        xp: 0,
+        spells: new Map(),
+        afflictions: new Map(),
       },
       monsters: [],
       spawners: new Map(),
@@ -602,16 +689,26 @@ const attackMonster = (game: Game, target: Monster, damage: number): Game => {
       { kind: "hitMonster", monster: target.kind },
     );
   return dropLoot(
-    recorded(
-      {
-        ...game,
-        monsters: game.monsters.filter((m) => m !== target),
-        kills: game.kills + 1,
-      },
-      { kind: "killed", monster: target.kind },
+    experienced(
+      recorded(
+        {
+          ...game,
+          monsters: game.monsters.filter((m) => m !== target),
+          kills: game.kills + 1,
+        },
+        { kind: "killed", monster: target.kind },
+      ),
+      MONSTERS[target.kind].hp * target.level,
     ),
     target,
   );
+};
+
+const experienced = (game: Game, xp: number): Game => {
+  const before = levelOf(game.player);
+  const next = withPlayer(game, { xp: game.player.xp + xp });
+  const level = levelOf(next.player);
+  return level > before ? recorded(next, { kind: "leveled", level }) : next;
 };
 
 const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
@@ -635,14 +732,41 @@ const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
   });
 };
 
-const struck = (game: Game, monster: Monster): Game => {
-  const hp = game.player.hp - MONSTERS[monster.kind].damage;
+const hurt = (game: Game, damage: number): Game => {
+  const hp = game.player.hp - damage;
+  const next = withPlayer(game, { hp });
+  return hp > 0 ? next : recorded(next, { kind: "died" });
+};
+
+const afflicted = (game: Game, monster: Monster): Game => {
+  const spell = MONSTER_SPELLS[monster.kind];
+  if (spell?.kind !== "afflict" || isOver(game) || monster.readyAt > game.turn)
+    return game;
+  const turns = potencyOf(spell, monster.level);
+  if (turns === 0) return game;
+  const { affliction, cooldown } = spell;
+  const { afflictions } = game.player;
+  const until = Math.max(afflictions.get(affliction) ?? 0, game.turn + turns);
   return recorded(
-    withPlayer(game, { hp }),
-    { kind: "struck", monster: monster.kind },
-    ...(hp > 0 ? [] : [{ kind: "died" } as const]),
+    updated(
+      withPlayer(game, {
+        afflictions: new Map([...afflictions, [affliction, until]]),
+      }),
+      monster.id,
+      { readyAt: game.turn + turns + cooldown },
+    ),
+    { kind: "afflicted", monster: monster.kind, affliction, turns },
   );
 };
+
+const struck = (game: Game, monster: Monster): Game =>
+  afflicted(
+    hurt(
+      recorded(game, { kind: "struck", monster: monster.kind }),
+      MONSTERS[monster.kind].damage * monster.level,
+    ),
+    monster,
+  );
 
 const hit = (game: Game, at: Hex, damage: number): Game => {
   const target = monsterAt(game, at);
@@ -655,7 +779,12 @@ const hit = (game: Game, at: Hex, damage: number): Game => {
 const isInReach = ({ land }: Game, from: Hex, at: Hex): boolean =>
   canStep(land.tileAt, from, at);
 
-const applied = (game: Game, effect: Effect, at: Hex | undefined): Game => {
+const applied = (
+  game: Game,
+  effect: Effect,
+  at: Hex | undefined,
+  mastery: number,
+): Game => {
   const { player } = game;
   switch (effect.kind) {
     case "face":
@@ -666,11 +795,12 @@ const applied = (game: Game, effect: Effect, at: Hex | undefined): Game => {
           (hex) =>
             !MELEE_AREAS.has(effect.area) || isInReach(game, player.at, hex),
         )
-        .reduce((state, hex) => hit(state, hex, effect.amount), game);
+        .reduce((state, hex) => hit(state, hex, effect.amount * mastery), game);
     case "restore": {
       const max = effect.stat === "hp" ? MAX_HP : MAX_MP;
+      const amount = effect.amount * mastery;
       return withPlayer(game, {
-        [effect.stat]: Math.min(max, player[effect.stat] + effect.amount),
+        [effect.stat]: Math.min(max, player[effect.stat] + amount),
       });
     }
   }
@@ -716,6 +846,7 @@ export const unreadinessOf = (
   id: AbilityId,
 ): Rejection | undefined => {
   const { mp, consumes } = abilityOf(id);
+  if (masteryOf(game.player, id) === 0) return "unlearned";
   if (cooldownOf(game, id) > 0) return "not-ready";
   if (game.player.mp < mp) return "no-mana";
   if (consumes && !supplyOf(game, id)) return "no-item";
@@ -741,13 +872,64 @@ const use: Rule<Use> = (game, action) => {
     unreadinessOf(game, action.ability) ?? aimProblemOf(game, action);
   if (problem) return refused(problem);
   const { effects, spendsTurn } = abilityOf(action.ability);
+  const mastery = masteryOf(game.player, action.ability);
   const used = recorded(spent(game, action.ability), {
     kind: "used",
     ability: action.ability,
   });
   return performed(
-    effects.reduce((state, effect) => applied(state, effect, action.at), used),
+    effects.reduce(
+      (state, effect) => applied(state, effect, action.at, mastery),
+      used,
+    ),
     spendsTurn,
+  );
+};
+
+const learn: Rule<Learn> = (game, { spell }) => {
+  const { player } = game;
+  if (unlocksOf(player) === 0) return refused("no-unlocks");
+  const level = spellLevelOf(player, spell) + 1;
+  return performed(
+    recorded(
+      withPlayer(game, { spells: new Map([...player.spells, [spell, level]]) }),
+      { kind: "learned", spell, level },
+    ),
+    false,
+  );
+};
+
+const summon: Rule<Summon> = (game, _, actor) => {
+  if (actor === PLAYER) return refused("unable");
+  const caster = monsterOf(game, actor);
+  const spell = MONSTER_SPELLS[caster.kind];
+  if (spell?.kind !== "summon") return refused("unable");
+  if (caster.readyAt > game.turn) return refused("not-ready");
+  const sites = neighborsOf(caster.at)
+    .filter(
+      (next) =>
+        canStep(game.land.tileAt, caster.at, next) && !isBlocked(game, next),
+    )
+    .slice(0, potencyOf(spell, caster.level));
+  if (sites.length === 0) return refused("blocked");
+  const summoned = sites.map((at, i) => ({
+    ...spawnedFrom(game, caster.home, spell.monster, at),
+    id: `${caster.id}/${game.turn}/${i}`,
+    level: caster.level,
+    mind: caster.mind,
+  }));
+  return performed(
+    recorded(
+      updated({ ...game, monsters: [...game.monsters, ...summoned] }, actor, {
+        readyAt: game.turn + spell.cooldown,
+      }),
+      {
+        kind: "summoned",
+        monster: caster.kind,
+        summoned: spell.monster,
+        count: summoned.length,
+      },
+    ),
   );
 };
 
@@ -885,11 +1067,23 @@ const choiceOf = (game: Game, monster: Monster): Intent => {
     : toward(monster, destinationOf(game, monster));
 };
 
+const isSummoner = ({ kind, mind, readyAt }: Monster, { turn }: Game) =>
+  MONSTER_SPELLS[kind]?.kind === "summon" &&
+  mind.state === "hostile" &&
+  readyAt <= turn;
+
+const monsterPlanOf = (game: Game, monster: Monster): Plan => {
+  const plan = planOf(game, monster.id, choiceOf(game, monster));
+  return isSummoner(monster, game)
+    ? { attempt: { kind: "summon" }, otherwise: { blocked: plan } }
+    : plan;
+};
+
 const monsterTurn = (game: Game, monster: Monster): Game => {
   if (isOver(game)) return game;
   const aware = { ...monster, mind: mindOf(game, monster) };
   const minded = updated(game, aware.id, { mind: aware.mind });
-  return settled(minded, aware.id, choiceOf(minded, aware)).game;
+  return settled(minded, aware.id, monsterPlanOf(minded, aware)).game;
 };
 
 const monstersTurn = (game: Game): Game =>
@@ -918,14 +1112,22 @@ const regenerate = (game: Game): Game => {
   };
 };
 
+const bleed = (game: Game): Game =>
+  isOver(game) || afflictionOf(game, "bleed") === 0
+    ? game
+    : hurt(recorded(game, { kind: "bled" }), 1);
+
 const endTurn = (acted: Game): Game =>
   withSight(
-    populate(regenerate(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
+    populate(
+      regenerate(bleed(monstersTurn({ ...acted, turn: acted.turn + 1 }))),
+    ),
   );
 
 const turn: Rule<Turn> = (game, { direction }, actor) => {
   if (bodyOf(game, actor).facing === direction)
     return refused("already-facing");
+  if (isAfflicted(game, actor, "paralysis")) return refused("paralyzed");
   return performed(
     recorded(withBody(game, actor, { facing: direction }), {
       kind: "turned",
@@ -941,6 +1143,7 @@ const step: Rule<Step> = (game, { direction }, actor) => {
   const to = add(at, DIRECTIONS[direction]);
   if (!canStep(game.land.tileAt, at, to)) return refused("blocked");
   if (isBlocked(game, to)) return refused("occupied");
+  if (isAfflicted(game, actor, "paralysis")) return refused("paralyzed");
   return performed(
     recorded(withBody(game, actor, { at: to }), {
       kind: "stepped",
@@ -980,6 +1183,8 @@ const RULES: {
   transfer,
   prepare: (game) => performed(recorded(game, { kind: "prepared" })),
   destroy,
+  learn,
+  summon,
 };
 
 interface Settlement {
@@ -1024,8 +1229,8 @@ const attempted = (
   return next ? attempted(game, actor, next) : { deed: attempt, outcome };
 };
 
-const settled = (game: Game, actor: ActorId, intent: Intent): Settlement => {
-  const { deed, outcome } = attempted(game, actor, planOf(game, actor, intent));
+const settled = (game: Game, actor: ActorId, plan: Plan): Settlement => {
+  const { deed, outcome } = attempted(game, actor, plan);
   if (outcome.kind === "performed") return outcome;
   return {
     game: rejected(game, actor, deed, outcome.reason),
@@ -1034,11 +1239,22 @@ const settled = (game: Game, actor: ActorId, intent: Intent): Settlement => {
 };
 
 const resolve = (game: Game, intent: Intent): Game => {
-  const { game: next, spendsTurn } = settled(game, PLAYER, intent);
+  const plan = planOf(game, PLAYER, intent);
+  const { game: next, spendsTurn } = settled(game, PLAYER, plan);
   return spendsTurn ? endTurn(next) : next;
 };
 
-export const act = (game: Game, intent: Intent): Game =>
-  isOver(game)
-    ? rejected({ ...game, events: [] }, PLAYER, intent, "over")
-    : resolve({ ...game, events: [] }, intent);
+const incapacityOf = (game: Game, intent: Intent): Rejection | undefined => {
+  if (isOver(game)) return "over";
+  if (intent.kind !== "wait" && isAfflicted(game, PLAYER, "stun"))
+    return "stunned";
+  return undefined;
+};
+
+export const act = (game: Game, intent: Intent): Game => {
+  const fresh = { ...game, events: [] };
+  const incapacity = incapacityOf(fresh, intent);
+  return incapacity
+    ? rejected(fresh, PLAYER, intent, incapacity)
+    : resolve(fresh, intent);
+};

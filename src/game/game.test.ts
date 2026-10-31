@@ -12,6 +12,9 @@ import {
   newGame,
   HUNT_RADIUS,
   SPAWNER_HEAL_INTERVAL,
+  levelOf,
+  unlocksOf,
+  XP_PER_LEVEL,
   type Intent,
   type Game,
   type GameEvent,
@@ -35,7 +38,13 @@ import {
   sameHex,
   type Hex,
 } from "./hex";
-import { MONSTERS, SPAWNERS, spawnerHpOf, type SpawnerKind } from "./monsters";
+import {
+  MONSTER_SPELLS,
+  MONSTERS,
+  SPAWNERS,
+  spawnerHpOf,
+  type SpawnerKind,
+} from "./monsters";
 import {
   ABILITIES,
   CLEAVE_SPLASH,
@@ -45,7 +54,7 @@ import {
   HEALTH_POTION_HP,
   PLAYER_DAMAGE,
 } from "./abilities";
-import type { Spawner } from "./terrain";
+import { dangerOf, type Spawner } from "./terrain";
 import { lootOf, type Chest, type GearKind, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
 import {
@@ -144,19 +153,19 @@ describe("newGame", () => {
 });
 
 describe("spawners", () => {
-  const den = { kind: "den", at: { q: 6, r: 0 } } as const;
-  const { pool, cap, interval } = SPAWNERS.den;
+  const mine = { kind: "mine", at: { q: 6, r: 0 } } as const;
+  const { pool, cap, interval } = SPAWNERS.mine;
   const out = { "0,0": land(30) };
 
-  const history = historyOf(newGame(landOf(out, [den])));
+  const history = historyOf(newGame(landOf(out, [mine])));
   const spawns = spawnsOf(history);
 
   test("spawn monsters from their pool beside themselves", () => {
     expect(spawns.length).toBeGreaterThan(0);
     for (const { monster } of spawns) {
-      expect(monster.home).toEqual(den);
+      expect(monster.home).toEqual(mine);
       expect(pool.map(([kind]) => kind)).toContain(monster.kind);
-      expect(hexDistance(monster.at, den.at)).toBe(1);
+      expect(hexDistance(monster.at, mine.at)).toBe(1);
     }
   });
 
@@ -166,7 +175,7 @@ describe("spawners", () => {
     const hostile = { ...monster(at), mind: hostileAt(at, blocker.at) };
     const world = landOf(out, [blocker]);
     for (const { monsters } of history)
-      for (const { at } of monsters) expect(at).not.toEqual(den.at);
+      for (const { at } of monsters) expect(at).not.toEqual(mine.at);
     for (const { monsters } of historyOf(gameWith([hostile], world), 20))
       for (const { at } of monsters) expect(at).not.toEqual(blocker.at);
   });
@@ -174,33 +183,33 @@ describe("spawners", () => {
   test("spawn nothing while hemmed in", () => {
     const walled = Object.fromEntries(
       Object.values(DIRECTIONS).map((d) => [
-        hexKey({ q: den.at.q + d.q, r: den.at.r + d.r }),
+        hexKey({ q: mine.at.q + d.q, r: mine.at.r + d.r }),
         land(30),
       ]),
     );
-    const hemmed = newGame(landOf({ ...out, ...walled }, [den]));
+    const hemmed = newGame(landOf({ ...out, ...walled }, [mine]));
     expect(spawnsOf(historyOf(hemmed))).toEqual([]);
   });
 
   test("hold back their boss until there is room for it", () => {
-    const site = add(den.at, DIRECTIONS.n);
+    const site = add(mine.at, DIRECTIONS.n);
     const walled = Object.fromEntries(
-      [den.at, site]
+      [mine.at, site]
         .flatMap((hex) => Object.values(DIRECTIONS).map((d) => add(hex, d)))
-        .filter((hex) => !sameHex(hex, site) && !sameHex(hex, den.at))
+        .filter((hex) => !sameHex(hex, site) && !sameHex(hex, mine.at))
         .map((hex) => [hexKey(hex), land(30)]),
     );
     const wrecked = withState(
-      gameWith([], landOf({ ...out, ...walled }, [den])),
-      den,
+      gameWith([], landOf({ ...out, ...walled }, [mine])),
+      mine,
       { hp: 0, isWrecked: true, isBossDue: true },
     );
     const trapped = {
       ...wrecked,
-      monsters: [monster(site, "goblin", "nw", den)],
+      monsters: [monster(site, "goblin", "nw", mine)],
     };
     const bossOf = ({ monsters }: Game) =>
-      monsters.find(({ kind }) => kind === SPAWNERS.den.boss);
+      monsters.find(({ kind }) => kind === SPAWNERS.mine.boss);
     const held = historyOf(trapped, 10);
     expect(held.filter(bossOf)).toEqual([]);
     const freed = act({ ...held.at(-1)!, monsters: [] }, WAIT);
@@ -232,11 +241,11 @@ describe("spawners", () => {
   });
 
   test("block the player, who wrecks them by striking off their hit points", () => {
-    const adjacent = { kind: "den", at: east } as const;
+    const adjacent = { kind: "mine", at: east } as const;
     const idle = withState(gameWith([], landOf(out, [adjacent])), adjacent, {
       readyAt: Infinity,
     });
-    const hits = Math.ceil(spawnerHpOf("den") / PLAYER_DAMAGE);
+    const hits = Math.ceil(spawnerHpOf("mine") / PLAYER_DAMAGE);
     const games = historyOf(idle, hits, step("se"));
     expect(games.at(-1)!.player.at).toEqual(origin);
     expect(isWrecked(games.at(-2)!, adjacent)).toBe(false);
@@ -244,15 +253,15 @@ describe("spawners", () => {
   });
 
   test("unleash their hostile boss when wrecked", () => {
-    const adjacent = { kind: "den", at: east } as const;
+    const adjacent = { kind: "mine", at: east } as const;
     const idle = withState(gameWith([], landOf(out, [adjacent])), adjacent, {
       readyAt: Infinity,
     });
-    const hits = Math.ceil(spawnerHpOf("den") / PLAYER_DAMAGE);
+    const hits = Math.ceil(spawnerHpOf("mine") / PLAYER_DAMAGE);
     const games = historyOf(idle, hits, step("se"));
     expect(games.at(-2)!.monsters).toEqual([]);
     expect(games.at(-1)!.monsters).toMatchObject([
-      { kind: SPAWNERS.den.boss, home: adjacent, mind: { state: "hostile" } },
+      { kind: SPAWNERS.mine.boss, home: adjacent, mind: { state: "hostile" } },
     ]);
     expect(hexDistance(games.at(-1)!.monsters[0]!.at, adjacent.at)).toBe(1);
   });
@@ -270,21 +279,21 @@ describe("spawners", () => {
   });
 
   test("heal once wrecked, then spawn at once and restart their timer", () => {
-    const wrecked = withState(newGame(landOf(out, [den])), den, {
+    const wrecked = withState(newGame(landOf(out, [mine])), mine, {
       hp: 0,
       isWrecked: true,
     });
-    const healedAt = spawnerHpOf("den") * SPAWNER_HEAL_INTERVAL;
+    const healedAt = spawnerHpOf("mine") * SPAWNER_HEAL_INTERVAL;
     const games = historyOf(wrecked);
-    expect(isWrecked(games[healedAt - 1]!, den)).toBe(true);
-    expect(isWrecked(games[healedAt]!, den)).toBe(false);
+    expect(isWrecked(games[healedAt - 1]!, mine)).toBe(true);
+    expect(isWrecked(games[healedAt]!, mine)).toBe(false);
     const turns = spawnsOf(games).map(({ turn }) => turn);
     expect(turns[0]).toBe(healedAt);
     expect(turns[1]! - healedAt).toBeGreaterThanOrEqual(interval);
   });
 
   test("stay dormant beyond the active radius", () => {
-    const far = { kind: "den", at: { q: ACTIVE_RADIUS + 1, r: 0 } } as const;
+    const far = { kind: "mine", at: { q: ACTIVE_RADIUS + 1, r: 0 } } as const;
     expect(spawnsOf(historyOf(newGame(landOf(out, [far]))))).toEqual([]);
   });
 });
@@ -940,5 +949,178 @@ describe("prepare", () => {
     expect(prepared.turn).toBe(game.turn + 1);
     expect(prepared.player).toEqual(game.player);
     expect(prepared.events).toEqual([{ kind: "prepared" }]);
+  });
+});
+
+describe("levels", () => {
+  const withXp = (game: Game, xp: number): Game => ({
+    ...game,
+    player: { ...game.player, xp },
+  });
+  const learning = (spell: "cleave" | "heal"): Intent => ({
+    kind: "learn",
+    spell,
+  });
+
+  test("the player starts at level 1 knowing no spells", () => {
+    const { player } = newGame(landOf());
+    expect(levelOf(player)).toBe(1);
+    expect(player.spells.size).toBe(0);
+    expect(unlocksOf(player)).toBe(0);
+    const heal: Intent = { kind: "use", ability: "heal" };
+    expect(act(newGame(landOf()), heal).events).toEqual([
+      rejection(heal, "unlearned"),
+    ]);
+  });
+
+  test("level rises linearly with experience", () => {
+    const { player } = newGame(landOf());
+    expect(
+      [0, XP_PER_LEVEL - 1, XP_PER_LEVEL, 3 * XP_PER_LEVEL].map((xp) =>
+        levelOf({ ...player, xp }),
+      ),
+    ).toEqual([1, 1, 2, 4]);
+  });
+
+  test("kills grant experience scaled by the monster's level", () => {
+    const weak = { ...monster(east, "cub", "nw"), level: XP_PER_LEVEL };
+    const next = act(gameWith([weak]), step("se"));
+    expect(next.player.xp).toBe(MONSTERS.cub.hp * XP_PER_LEVEL);
+    expect(next.events).toContainEqual({ kind: "leveled", level: 2 });
+  });
+
+  test("each unspent level learns a spell, or raises one, without spending a turn", () => {
+    const game = withXp(newGame(landOf()), 2 * XP_PER_LEVEL);
+    const once = act(game, learning("cleave"));
+    expect(once.turn).toBe(0);
+    expect(once.events).toEqual([
+      { kind: "learned", spell: "cleave", level: 1 },
+    ]);
+    const twice = act(once, learning("cleave"));
+    expect(twice.player.spells.get("cleave")).toBe(2);
+    expect(unlocksOf(twice.player)).toBe(0);
+    expect(act(twice, learning("heal")).events).toEqual([
+      rejection(learning("heal"), "no-unlocks"),
+    ]);
+  });
+
+  test("spell effects scale linearly with spell level", () => {
+    const game = gameWith([monster(east, "troll", "nw")]);
+    const adept = {
+      ...game,
+      player: { ...game.player, spells: new Map([["cleave", 3] as const]) },
+    };
+    const next = act(adept, { kind: "use", ability: "cleave" });
+    expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - 3 * PLAYER_DAMAGE);
+  });
+});
+
+describe("monster levels", () => {
+  const mine = { kind: "mine", at: { q: 6, r: 0 } } as const;
+  const out = { "0,0": land(30) };
+  const spawnedLevels = (spawn: Hex) => {
+    const world = landOf(out, [mine]);
+    const game = { ...newGame(world), land: { ...world, spawn } };
+    return spawnsOf(historyOf(game, 40)).map(({ monster }) => monster.level);
+  };
+
+  test("rise with the spawner's distance from the spawn", () => {
+    const far = { q: -200, r: 0 };
+    expect(new Set(spawnedLevels(origin))).toEqual(new Set([1]));
+    expect(new Set(spawnedLevels(far))).toEqual(
+      new Set([dangerOf(mine.at, far)]),
+    );
+    expect(dangerOf(mine.at, far)).toBeGreaterThan(1);
+  });
+
+  test("scale monster damage linearly", () => {
+    const kobold = { ...monster(east, "kobold", "nw"), level: 3 };
+    expect(act(gameWith([kobold]), WAIT).player.hp).toBe(
+      MAX_HP - 3 * MONSTERS.kobold.damage,
+    );
+  });
+});
+
+describe("monster spells", () => {
+  const leveled = (kind: Parameters<typeof monster>[1], level: number) => ({
+    ...monster(east, kind, "nw"),
+    level,
+  });
+  const alone = (game: Game): Game => ({ ...game, monsters: [] });
+
+  test("bandits inflict a turn of bleeding per level", () => {
+    const hit = act(gameWith([leveled("bandit", 2)]), WAIT);
+    const hitHp = MAX_HP - 2 * MONSTERS.bandit.damage;
+    expect(hit.events).toContainEqual({
+      kind: "afflicted",
+      monster: "bandit",
+      affliction: "bleed",
+      turns: 2,
+    });
+    expect(historyOf(alone(hit), 2).map(({ player }) => player.hp)).toEqual([
+      hitHp - 1,
+      hitHp - 2,
+      hitHp - 2,
+    ]);
+  });
+
+  test("trolls stun for a turn per two levels, allowing only waiting", () => {
+    expect(
+      act(gameWith([leveled("troll", 1)]), WAIT).player.afflictions.size,
+    ).toBe(0);
+    const stunned = alone(act(gameWith([leveled("troll", 2)]), WAIT));
+    expect(act(stunned, step("n")).events).toEqual([
+      rejection(step("n"), "stunned"),
+    ]);
+    const waited = act(stunned, WAIT);
+    expect(waited.turn).toBe(stunned.turn + 1);
+    expect(act(waited, step("n")).turn).toBe(waited.turn + 1);
+  });
+
+  test("goblins paralyze for a turn per level: no turning or stepping, but attacking", () => {
+    const paralyzed = act(gameWith([leveled("goblin", 1)]), WAIT);
+    expect(act(paralyzed, step("n")).events).toEqual([
+      rejection({ kind: "turn", direction: "n" }, "paralyzed"),
+    ]);
+    expect(act(paralyzed, step("se")).events).toContainEqual({
+      kind: "hitMonster",
+      monster: "goblin",
+    });
+  });
+
+  test("afflictions wait out their cooldown before recurring", () => {
+    const spell = MONSTER_SPELLS.goblin!;
+    const games = historyOf(
+      gameWith([leveled("goblin", 1)]),
+      2 + spell.cooldown,
+    );
+    const inflicted = games.filter(({ events }) =>
+      events.some(({ kind }) => kind === "afflicted"),
+    );
+    expect(inflicted.map(({ turn }) => turn)).toEqual([1, 2 + spell.cooldown]);
+  });
+
+  test("hostile wolves summon a cub per level beside themselves", () => {
+    const at = { q: 3, r: 0 };
+    const wolf = {
+      ...monster(at, "wolf", "nw"),
+      level: 2,
+      mind: hostileAt(at, origin),
+    };
+    const next = act(gameWith([wolf]), WAIT);
+    const cubs = next.monsters.filter(({ kind }) => kind === "cub");
+    expect(cubs).toHaveLength(2);
+    for (const cub of cubs) {
+      expect(cub.level).toBe(2);
+      expect(hexDistance(cub.at, at)).toBe(1);
+    }
+    expect(next.events).toContainEqual({
+      kind: "summoned",
+      monster: "wolf",
+      summoned: "cub",
+      count: 2,
+    });
+    const again = act(next, WAIT);
+    expect(again.monsters.filter(({ kind }) => kind === "cub")).toHaveLength(2);
   });
 });

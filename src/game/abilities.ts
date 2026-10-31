@@ -62,7 +62,7 @@ const potion = (
   summary: `Restore ${amount} ${stat.toUpperCase()}.`,
 });
 
-export const ABILITIES = {
+export const SPELLS = {
   cleave: {
     mp: 3,
     cooldown: 1,
@@ -112,9 +112,19 @@ export const ABILITIES = {
     ],
     summary: "Face the adjacent target and attack it.",
   },
+} as const satisfies Record<string, Ability>;
+
+export const ABILITIES = {
+  ...SPELLS,
   health: potion("health", "hp", HEALTH_POTION_HP),
   mana: potion("mana", "mp", MANA_POTION_MP),
 } as const satisfies Record<string, Ability>;
+
+export type SpellId = keyof typeof SPELLS;
+
+export const SPELL_IDS = Object.keys(SPELLS) as readonly SpellId[];
+
+export const isSpell = (id: AbilityId): id is SpellId => id in SPELLS;
 
 export type AbilityId = keyof typeof ABILITIES;
 

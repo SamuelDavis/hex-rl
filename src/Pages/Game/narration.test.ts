@@ -56,3 +56,22 @@ test("monsters are named by kind, and steps and turns by direction", () => {
     }),
   ).toBe("The troll cannot attack: no target.");
 });
+
+test("summons and afflictions are counted", () => {
+  expect(
+    narrationOf({
+      kind: "summoned",
+      monster: "wolf",
+      summoned: "cub",
+      count: 2,
+    }),
+  ).toBe("The wolf summons 2 cubs.");
+  expect(
+    narrationOf({
+      kind: "afflicted",
+      monster: "troll",
+      affliction: "stun",
+      turns: 1,
+    }),
+  ).toBe("The adventurer is stunned for 1 turn.");
+});

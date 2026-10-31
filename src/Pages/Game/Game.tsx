@@ -33,14 +33,19 @@ import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
 import { CANVAS_THEMES } from "./canvasTheme";
 import { useAppState } from "../../AppState";
 import {
+  afflictionOf,
   cooldownOf,
   GOLD,
   isWrecked,
   isOver,
+  levelOf,
   MAX_HP,
   MAX_MP,
+  spellLevelOf,
+  unlocksOf,
   visibleOf,
   unreadinessOf,
+  XP_PER_LEVEL,
   type Game as GameState,
   type GameEvent,
   type Where,
@@ -62,8 +67,11 @@ import {
   ABILITY_IDS,
   abilityOf,
   areaOf,
+  isSpell,
+  SPELL_IDS,
   type AbilityId,
 } from "../../game/abilities";
+import type { Affliction } from "../../game/monsters";
 import { sightOf, targetInView } from "./target";
 import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 
@@ -78,8 +86,14 @@ const ARROWS: Record<Direction, string> = {
   se: "↘︎",
 };
 
-const TABS = ["Play", "Slots", "Pack", "Log", "Other"] as const;
+const TABS = ["Play", "Slots", "Pack", "Spells", "Other"] as const;
 type Tab = (typeof TABS)[number];
+
+const AFFLICTION_NAMES: Record<Affliction, string> = {
+  bleed: "Bleeding",
+  stun: "Stunned",
+  paralysis: "Paralyzed",
+};
 
 const BIOME_NAMES = Object.fromEntries(
   Object.entries(Biome).map(([name, biome]) => [biome, name]),
@@ -215,8 +229,17 @@ export default function Game() {
           <h1>{BIOME_NAMES[getTile().biome]}</h1>
           <p data-cap="end">
             HP {Math.max(0, getGame().player.hp)}/{MAX_HP} · MP{" "}
-            {getGame().player.mp}/{MAX_MP} · Gold {getGame().player.gold} · Turn{" "}
-            {getGame().turn}
+            {getGame().player.mp}/{MAX_MP} · Level {levelOf(getGame().player)} (
+            {getGame().player.xp % XP_PER_LEVEL}/{XP_PER_LEVEL} XP) · Gold{" "}
+            {getGame().player.gold} · Turn {getGame().turn}
+            <For each={afflictionsOf(getGame())}>
+              {([affliction, turns]) => (
+                <>
+                  {" "}
+                  · {AFFLICTION_NAMES[affliction]} {turns}
+                </>
+              )}
+            </For>
           </p>
         </div>
         <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
@@ -238,10 +261,14 @@ export default function Game() {
             {(tab) => (
               <button
                 type="button"
+                class="relative"
                 aria-current={getTab() === tab}
                 onClick={() => setTab(tab)}
               >
                 {tab}
+                <Show when={tab === "Spells" && unlocksOf(getGame().player)}>
+                  {(unlocks) => <Badge>{unlocks()}</Badge>}
+                </Show>
               </button>
             )}
           </For>
@@ -267,12 +294,13 @@ export default function Game() {
           <Match when={getTab() === "Pack"}>
             <InventoryPanel game={getGame()} dispatch={dispatch} />
           </Match>
-          <Match when={getTab() === "Log"}>
-            <LogPanel log={getSession().log} />
+          <Match when={getTab() === "Spells"}>
+            <SpellsPanel game={getGame()} dispatch={dispatch} />
           </Match>
           <Match when={getTab() === "Other"}>
             <OtherPanel
               game={getGame()}
+              log={getSession().log}
               keymap={getKeymap()}
               remap={() => setRemapping(true)}
               restart={restart}
@@ -283,6 +311,7 @@ export default function Game() {
       <HTMLDialog open={getEditing()} onClose={() => setEditing(undefined)}>
         {(editing) => (
           <AbilityPicker
+            game={getGame()}
             slot={editing().slot}
             bound={getLoadout()[editing().slot]}
             bind={(ability) => bind(editing().slot, ability)}
@@ -389,11 +418,7 @@ function PlayPanel(props: {
               Cancel
             </PadButton>
           </Show>
-          <PadButton
-            control="target"
-            keymap={props.keymap}
-            press={props.press}
-          >
+          <PadButton control="target" keymap={props.keymap} press={props.press}>
             Target
           </PadButton>
         </div>
@@ -401,6 +426,11 @@ function PlayPanel(props: {
     </Show>
   );
 }
+
+const afflictionsOf = (game: GameState) =>
+  [...game.player.afflictions.keys()]
+    .map((affliction) => [affliction, afflictionOf(game, affliction)] as const)
+    .filter(([, turns]) => turns > 0);
 
 const stockOf = (game: GameState, potion: PotionKind) =>
   game.player.pack.filter(
@@ -420,8 +450,7 @@ function SpellSlots(props: {
           const consumes = ability && abilityOf(ability).consumes;
           const getCooldown = () =>
             ability ? cooldownOf(props.game, ability) : 0;
-          const getStock = () =>
-            consumes ? stockOf(props.game, consumes) : 1;
+          const getStock = () => (consumes ? stockOf(props.game, consumes) : 1);
           const getHotkey = () => hotkeyOf(props.keymap, `slot-${slot() + 1}`);
           return (
             <button
@@ -442,6 +471,13 @@ function SpellSlots(props: {
               </Show>
               <Show when={consumes}>
                 <span class="absolute right-1 bottom-0.5">×{getStock()}</span>
+              </Show>
+              <Show when={ability && isSpell(ability) && ability}>
+                {(spell) => (
+                  <span class="absolute right-1 bottom-0.5">
+                    {spellLevelOf(props.game.player, spell())}
+                  </span>
+                )}
               </Show>
             </button>
           );
@@ -487,7 +523,11 @@ const costOf = (ability: AbilityId) => {
   return spendsTurn ? `${mp} MP · ${cooldown} turn cooldown` : "free action";
 };
 
+const isKnown = (game: GameState, ability: AbilityId) =>
+  !isSpell(ability) || spellLevelOf(game.player, ability) > 0;
+
 function AbilityPicker(props: {
+  game: GameState;
   slot: number;
   bound: AbilityId | undefined;
   bind: (ability: AbilityId | undefined) => void;
@@ -507,7 +547,7 @@ function AbilityPicker(props: {
       <header>
         <h3>Slot {props.slot + 1}</h3>
       </header>
-      <For each={ABILITY_IDS}>
+      <For each={ABILITY_IDS.filter((ability) => isKnown(props.game, ability))}>
         {(ability) =>
           option(
             ability,
@@ -530,6 +570,48 @@ function AbilityPicker(props: {
         </button>
       </footer>
     </article>
+  );
+}
+
+function SpellsPanel(props: {
+  game: GameState;
+  dispatch: (message: Message) => void;
+}) {
+  const getUnlocks = () => unlocksOf(props.game.player);
+  return (
+    <>
+      <p>
+        <small>
+          <Show
+            when={getUnlocks() > 0}
+            fallback="Gain a level to learn or raise a spell."
+          >
+            Choose {getUnlocks()} more: each level learns a spell or raises one,
+            scaling its effect. Bind learned spells in the Slots tab.
+          </Show>
+        </small>
+      </p>
+      <For each={SPELL_IDS}>
+        {(spell) => {
+          const getLevel = () => spellLevelOf(props.game.player, spell);
+          return (
+            <button
+              type="button"
+              class="relative block w-full text-left outline"
+              classList={{ "opacity-40 grayscale": getLevel() === 0 }}
+              onClick={() => props.dispatch({ kind: "learn", spell })}
+            >
+              <strong>{spell}</strong> · {costOf(spell)}
+              <br />
+              <small>{abilityOf(spell).summary}</small>
+              <Show when={getLevel() > 0}>
+                <Badge>{getLevel()}</Badge>
+              </Show>
+            </button>
+          );
+        }}
+      </For>
+    </>
   );
 }
 
@@ -689,6 +771,14 @@ function InventoryPanel(props: {
 
 const hotkeyOf = (keymap: Keymap, id: ControlId) => keyLabelOf(keymap[id]);
 
+function Badge(props: { children: number }) {
+  return (
+    <span class="absolute -top-1.5 -right-1.5 min-w-5 rounded-full bg-(--pico-primary-background) px-1 text-center text-xs leading-5 text-(--pico-primary-inverse)">
+      {props.children}
+    </span>
+  );
+}
+
 function Hotkey(props: { children: string }) {
   return <span class="absolute top-0.5 left-1 text-xs">{props.children}</span>;
 }
@@ -774,6 +864,7 @@ function LogPanel(props: { log: readonly GameEvent[] }) {
 
 function OtherPanel(props: {
   game: GameState;
+  log: readonly GameEvent[];
   keymap: Keymap;
   remap: () => void;
   restart: () => void;
@@ -782,6 +873,7 @@ function OtherPanel(props: {
   const getTile = () => props.game.land.tileAt(props.game.player.at);
   return (
     <>
+      <LogPanel log={props.log} />
       <p>
         Face a direction, then step that way: tap toward it, use the Play
         buttons, or press {key("move-nw")} {key("move-n")} {key("move-ne")}{" "}
@@ -796,7 +888,10 @@ function OtherPanel(props: {
         equip gear and move loot between your pack and the ground (each move
         spends a turn). Aimed spells move their reticle with the movement keys;
         cast with {key("confirm")} or the slot's key again, or cancel with{" "}
-        {key("cancel")}. Climb one block at a time; swim freely.
+        {key("cancel")}. Slaying monsters earns experience; each level learns or
+        raises a spell in the Spells tab. Monsters grow stronger, and their
+        tricks (summoning, bleeding, stunning, paralysis) worse, farther from
+        where you set out. Climb one block at a time; swim freely.
       </p>
       <button type="button" onClick={() => props.remap()}>
         Controls

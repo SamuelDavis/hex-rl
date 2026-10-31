@@ -10,7 +10,7 @@ import {
   type Where,
 } from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
-import { SPAWNERS } from "../../game/monsters";
+import { SPAWNERS, type Affliction } from "../../game/monsters";
 
 const REASONS: Record<Rejection, string> = {
   blocked: "the way is blocked",
@@ -28,6 +28,11 @@ const REASONS: Record<Rejection, string> = {
   "no-item": "there is none",
   full: "the pack is full",
   "no-chest": "there is no chest here",
+  unlearned: "not learned",
+  "no-unlocks": "no level to spend",
+  stunned: "stunned",
+  paralyzed: "paralyzed",
+  unable: "unable",
 };
 
 const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
@@ -39,6 +44,8 @@ const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
   transfer: "move that",
   prepare: "prepare",
   destroy: "destroy",
+  learn: "learn",
+  summon: "summon",
 };
 
 const usingOf = (ability: AbilityId, verbs: readonly [string, string]) =>
@@ -64,6 +71,15 @@ const DIRECTION_NAMES: Record<Direction, string> = {
   s: "south",
   se: "south-east",
 };
+
+const AFFLICTION_VERBS: Record<Affliction, string> = {
+  bleed: "bleeds",
+  stun: "is stunned",
+  paralysis: "is paralyzed",
+};
+
+const counted = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 const cargoNameOf = (cargo: Cargo) =>
   cargo.kind === "gold" ? `${cargo.amount} gold` : `the ${nameOf(cargo)}`;
@@ -115,6 +131,16 @@ export const narrationOf = (event: GameEvent): string => {
       return `The ${event.monster} emerges!`;
     case "struck":
       return `The ${event.monster} hits ${PLAYER_NAME.toLowerCase()}.`;
+    case "leveled":
+      return `${PLAYER_NAME} reaches level ${event.level}.`;
+    case "learned":
+      return `${PLAYER_NAME} learns ${event.spell} (level ${event.level}).`;
+    case "summoned":
+      return `The ${event.monster} summons ${counted(event.count, event.summoned)}.`;
+    case "afflicted":
+      return `${PLAYER_NAME} ${AFFLICTION_VERBS[event.affliction]} for ${counted(event.turns, "turn")}.`;
+    case "bled":
+      return `${PLAYER_NAME} bleeds.`;
     case "died":
       return `${PLAYER_NAME} dies.`;
   }

@@ -34,6 +34,40 @@ export const drawEllipse = (
   context.ellipse(x, y, radius, radius * TILT, 0, 0, 2 * Math.PI);
 };
 
+export const drawLabel = (
+  context: CanvasRenderingContext2D,
+  { x, y }: Vec2,
+  text: string,
+  {
+    font,
+    fill,
+    halo,
+    width,
+  }: {
+    readonly font: string;
+    readonly fill: string;
+    readonly halo: string;
+    readonly width: number;
+  },
+) => {
+  context.font = font;
+  context.textAlign = "center";
+  context.textBaseline = "alphabetic";
+  context.lineJoin = "round";
+  context.lineWidth = width;
+  context.strokeStyle = halo;
+  context.fillStyle = fill;
+  context.strokeText(text, x, y);
+  context.fillText(text, x, y);
+  context.lineWidth = HAIRLINE;
+};
+
+/** Where a token's level label sits: below and right of its footprint. */
+export const levelSpotOf = ({ x, y }: Vec2): Vec2 => ({
+  x: x + TOKEN_SIZE,
+  y: y + TOKEN_SIZE * TILT,
+});
+
 export const drawChevron = (
   context: CanvasRenderingContext2D,
   center: Vec2,

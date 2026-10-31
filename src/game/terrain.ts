@@ -84,6 +84,10 @@ const SPAWNER_DENSITY = 0.003;
 const DANGER_RING = 40;
 export const WET_REACH = 2;
 
+/** 1 near spawn, rising by one per `DANGER_RING` hexes outward; also the level of monsters spawned there. */
+export const dangerOf = (at: Hex, spawn: Hex): number =>
+  1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
+
 const HABITAT: Record<
   SpawnerKind,
   {
@@ -328,8 +332,11 @@ export const createTerrain = (seed: number) => {
           !sites.chance(SPAWNER_DENSITY, at.q, at.r)
         )
           return [];
-        const danger = 1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
-        const weights = habitatWeightsAt(tile.biome, isWet(at), danger);
+        const weights = habitatWeightsAt(
+          tile.biome,
+          isWet(at),
+          dangerOf(at, spawn),
+        );
         if (weights.length === 0) return [];
         return [{ kind: sites.weighted(weights, at.q, at.r, 1), at }];
       });

@@ -8,6 +8,7 @@ import {
 import { IDLE } from "./mind";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { MONSTERS } from "./monsters";
+import { SPELL_IDS } from "./abilities";
 import { Biome, type Spawner, type Tile } from "./terrain";
 
 export const land = (ground: number, tree = false): Tile => ({
@@ -43,11 +44,19 @@ export const monster = (
   facing,
   hp: MONSTERS[kind].hp,
   mind: IDLE,
+  level: 1,
+  readyAt: 0,
 });
 
+const EVERY_SPELL = new Map(SPELL_IDS.map((spell) => [spell, 1]));
+
+/** A player facing south-east who knows every spell at level 1. */
 export const facingEast = (world = landOf()): Game => {
   const game = newGame(world);
-  return { ...game, player: { ...game.player, facing: "se" } };
+  return {
+    ...game,
+    player: { ...game.player, facing: "se", spells: EVERY_SPELL },
+  };
 };
 
 export const gameWith = (monsters: Monster[], world = landOf()): Game => ({

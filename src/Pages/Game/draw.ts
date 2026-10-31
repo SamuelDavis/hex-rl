@@ -232,7 +232,7 @@ export const drawScene = (
       drawReticle(context, base, marks.targeted);
     if (aim && sameHex(hex, aim.at)) drawReticle(context, base, marks.aimed);
     const monster = monsterAt.get(hexKey(hex));
-    if (monster)
+    if (monster) {
       theme.monster(
         context,
         base,
@@ -240,7 +240,8 @@ export const drawScene = (
         monster.mind.state,
         headingOf(monster.facing),
       );
-    else if (target?.kind === "remembered" && sameHex(hex, target.at))
+      theme.level(context, base, monster.level);
+    } else if (target?.kind === "remembered" && sameHex(hex, target.at))
       theme.unknown(context, base);
     if (sameHex(hex, player.at))
       theme.player(context, base, headingOf(player.facing));

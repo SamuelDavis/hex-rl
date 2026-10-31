@@ -6,6 +6,8 @@ import {
   css,
   drawChevron,
   drawEllipse,
+  drawLabel,
+  levelSpotOf,
   HAIRLINE,
   MARK_WIDTH,
   PIXELS_PER_UNIT,
@@ -249,15 +251,18 @@ export const WOODCUT: CanvasTheme = {
     drawFigure(context, MONSTER_FIGURES[kind], base, heading, RINGS[state]),
   unknown: (context, base) => {
     drawFootprint(context, base, TOKEN_SIZE);
-    context.font = `bold ${FIGURE_SIZE * 0.8}px serif`;
-    context.textAlign = "center";
-    context.textBaseline = "alphabetic";
-    context.lineJoin = "round";
-    context.lineWidth = OUTLINE * 1.5;
-    context.strokeStyle = css(PALETTE.ink);
-    context.fillStyle = css(remembered(PALETTE.bone));
-    context.strokeText("?", base.x, base.y);
-    context.fillText("?", base.x, base.y);
-    context.lineWidth = HAIRLINE;
+    drawLabel(context, base, "?", {
+      font: `bold ${FIGURE_SIZE * 0.8}px serif`,
+      fill: css(remembered(PALETTE.bone)),
+      halo: css(PALETTE.ink),
+      width: OUTLINE * 1.5,
+    });
   },
+  level: (context, base, level) =>
+    drawLabel(context, levelSpotOf(base), String(level), {
+      font: `bold ${FIGURE_SIZE * 0.4}px serif`,
+      fill: css(PALETTE.bone),
+      halo: css(PALETTE.ink),
+      width: OUTLINE,
+    }),
 };

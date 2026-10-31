@@ -9,12 +9,7 @@ export type Loadout = readonly (AbilityId | undefined)[];
 const fitted = (abilities: readonly (AbilityId | undefined)[]): Loadout =>
   Array.from({ length: SLOT_COUNT }, (_, slot) => abilities[slot]);
 
-export const STARTING_LOADOUT: Loadout = fitted([
-  "cleave",
-  "fireball",
-  "heal",
-  "strike",
-]);
+export const STARTING_LOADOUT: Loadout = fitted([]);
 
 export const slotted = (
   loadout: Loadout,
