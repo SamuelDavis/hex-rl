@@ -165,6 +165,16 @@ export default function Game() {
       : { kind: "remembered" as const, at: target.lastSeen };
   });
 
+  const getStatus = () =>
+    [
+      ...(getSession().queue.length
+        ? [`Queued ${getSession().queue.length}`]
+        : []),
+      ...conditionsOf(getGame()).map(
+        ([condition, turns]) => `${CONDITION_NAMES[condition]} ${turns}`,
+      ),
+    ].join(" · ");
+
   const getAimMark = createMemo(() => {
     const { mode, game } = getSession();
     if (mode.kind !== "aim") return undefined;
@@ -299,38 +309,16 @@ export default function Game() {
           </ul>
           <ul>
             <li>
+              Level {levelOf(playerOf(getGame()))} · Gold{" "}
+              {playerOf(getGame()).gold}
+            </li>
+          </ul>
+          <ul>
+            <li>
               <Menu unlocks={unlocksOf(playerOf(getGame()))} open={open} />
             </li>
           </ul>
         </nav>
-        <p data-cap="end">
-          Level {levelOf(playerOf(getGame()))} · Gold {playerOf(getGame()).gold}{" "}
-          · Turn {getGame().turn}
-          <Show when={getSession().queue.length}>
-            {(queued) => <> · Queued {queued()}</>}
-          </Show>
-          <For each={conditionsOf(getGame())}>
-            {([condition, turns]) => (
-              <>
-                {" "}
-                · {CONDITION_NAMES[condition]} {turns}
-              </>
-            )}
-          </For>
-        </p>
-        <Show when={playerOf(getGame()).bounty}>
-          {(bounty) => (
-            <p data-cap="end">
-              <small>
-                Bounty:{" "}
-                {bounty().isSlain
-                  ? "slain; return to a bailiff"
-                  : bountyOf(bounty().kind, bounty().at)}{" "}
-                · you are at {placeOf(playerOf(getGame()).at)}
-              </small>
-            </p>
-          )}
-        </Show>
         <div class="grid grid-cols-3 gap-(--pico-spacing)">
           <Meter
             label="HP"
@@ -350,6 +338,24 @@ export default function Game() {
             max={XP_PER_LEVEL}
           />
         </div>
+        <Show when={getStatus()}>
+          <p>
+            <small>{getStatus()}</small>
+          </p>
+        </Show>
+        <Show when={playerOf(getGame()).bounty}>
+          {(bounty) => (
+            <p data-cap="end">
+              <small>
+                Bounty:{" "}
+                {bounty().isSlain
+                  ? "slain; return to a bailiff"
+                  : bountyOf(bounty().kind, bounty().at)}{" "}
+                · you are at {placeOf(playerOf(getGame()).at)}
+              </small>
+            </p>
+          )}
+        </Show>
       </header>
       <canvas
         ref={setCanvas}
@@ -1214,11 +1220,15 @@ function Meter(props: {
   class?: string;
 }) {
   return (
-    <div>
-      <small data-cap="start">
+    <div class="flex items-center gap-(--pico-spacing)">
+      <small class="whitespace-nowrap">
         {props.label} {props.value}/{props.max}
       </small>
-      <progress class={props.class} value={props.value} max={props.max} />
+      <progress
+        class={`m-0 min-w-0 flex-1 ${props.class ?? ""}`}
+        value={props.value}
+        max={props.max}
+      />
     </div>
   );
 }
@@ -1405,6 +1415,8 @@ function OtherPanel(props: {
           <dd>{props.game.land.seed}</dd>
           <dt>Monsters awake</dt>
           <dd>{creaturesOf(props.game).length}</dd>
+          <dt>Turn</dt>
+          <dd>{props.game.turn}</dd>
           <dt>Monsters slain</dt>
           <dd>{playerOf(props.game).kills}</dd>
         </dl>
