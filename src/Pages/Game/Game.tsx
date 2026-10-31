@@ -104,6 +104,15 @@ const BIOME_NAMES = Object.fromEntries(
 
 const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
+/** How far from the origin a random starting position may be, in hexes. */
+const RANDOM_REACH = 1000;
+
+const randomPosition = (): Hex => {
+  const coordinate = () =>
+    Math.floor(Math.random() * (2 * RANDOM_REACH + 1)) - RANDOM_REACH;
+  return { q: coordinate(), r: coordinate() };
+};
+
 export default function Game() {
   const { getTheme } = useAppState();
   const [getSession, setSession] = createSignal(newSession(randomSeed(), 0));
@@ -978,7 +987,7 @@ function NewWorld(props: {
   cancel: () => void;
 }) {
   const [getSeed, setSeed] = createSignal(props.initial?.seed ?? randomSeed());
-  const at = props.initial?.at ?? { q: 0, r: 0 };
+  const [getAt, setAt] = createSignal(props.initial?.at ?? { q: 0, r: 0 });
 
   function submit(event: SubmitEvent & { currentTarget: HTMLFormElement }) {
     event.preventDefault();
@@ -1014,16 +1023,37 @@ function NewWorld(props: {
             Random
           </button>
         </fieldset>
-        <div class="grid grid-cols-2 gap-(--pico-spacing)">
-          <label>
-            q
-            <input type="number" name="q" required value={at.q} />
-          </label>
-          <label>
-            r
-            <input type="number" name="r" required value={at.r} />
-          </label>
-        </div>
+        <label for="new-world-q">Position (q, r)</label>
+        <fieldset role="group">
+          <input
+            id="new-world-q"
+            type="number"
+            name="q"
+            aria-label="q"
+            required
+            value={getAt().q}
+            onInput={(event) =>
+              setAt({ ...getAt(), q: Number(event.currentTarget.value) })
+            }
+          />
+          <input
+            type="number"
+            name="r"
+            aria-label="r"
+            required
+            value={getAt().r}
+            onInput={(event) =>
+              setAt({ ...getAt(), r: Number(event.currentTarget.value) })
+            }
+          />
+          <button
+            type="button"
+            class="secondary"
+            onClick={() => setAt(randomPosition())}
+          >
+            Random
+          </button>
+        </fieldset>
         <small>
           Starts on the nearest dry, treeless hex to the position. Monsters
           still grow stronger with distance from where the world begins.

@@ -29,6 +29,7 @@ layer(icons);
 
     > :is(button, [role="button"]) {
       margin: 0;
+      width: auto;
     }
   }
 
