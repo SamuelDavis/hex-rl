@@ -166,14 +166,9 @@ export default function Game() {
   });
 
   const getStatus = () =>
-    [
-      ...(getSession().queue.length
-        ? [`Queued ${getSession().queue.length}`]
-        : []),
-      ...conditionsOf(getGame()).map(
-        ([condition, turns]) => `${CONDITION_NAMES[condition]} ${turns}`,
-      ),
-    ].join(" · ");
+    conditionsOf(getGame())
+      .map(([condition, turns]) => `${CONDITION_NAMES[condition]} ${turns}`)
+      .join(" · ");
 
   const getAimMark = createMemo(() => {
     const { mode, game } = getSession();
@@ -306,12 +301,13 @@ export default function Game() {
             <li>
               <h1 class="mb-0">{BIOME_NAMES[getTile().biome]}</h1>
             </li>
-          </ul>
-          <ul>
             <li>
               Level {levelOf(playerOf(getGame()))} · Gold{" "}
               {playerOf(getGame()).gold}
             </li>
+            <Show when={getSession().queue.length}>
+              {(queued) => <li>Queued {queued()}</li>}
+            </Show>
           </ul>
           <ul>
             <li>
