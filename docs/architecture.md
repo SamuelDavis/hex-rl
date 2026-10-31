@@ -27,8 +27,8 @@ Status: target design. Migration phases at the end; until a phase lands, code ma
 | Stat | Number derived by one function from base, equipment and condition modifiers. | `statOf` |
 | Event | Authoritative record of one consequence, with source, target and cause. | `GameEvent` |
 | Tick | One world turn: every active agent acts once, in spawn order. | `tick` |
-| Seat | A human's place in the world: controls one entity, owns an input buffer. | `Seat` |
-| Chunk load level | Active, border or unloaded, from distance to the nearest seat. | `chunks` system |
+| Seat | A human's place in the world: controls one entity. | `Seat` |
+| Active chunk | Chunk near a seat; only its entities are processed. | `chunks` system |
 
 ## Components
 
@@ -74,19 +74,13 @@ const has = <K extends keyof Components>(e: Entity, ...k: K[]): e is With<K>;
 
 ### Chunks
 
-The world is infinite and chunked on the terrain grid (`CHUNK` in `terrain.ts`). Only chunks near a seat are processed; this is a simplification of Minecraft's ticket and load-level scheme. [Minecraft-Chunk]
+The world is infinite and chunked on the terrain grid (`CHUNK` in `terrain.ts`). Simplified from Minecraft's load levels [Minecraft-Chunk] to two, since memory is not a constraint:
 
-| Load level | Where | Entities |
-|---|---|---|
-| Active | each seat's chunk and every chunk within `SIMULATION_RADIUS` (1: a 3×3 block) | act, tick conditions, spawn |
-| Border | one ring beyond the active chunks | exist, can be seen and hit; frozen |
-| Unloaded | beyond | not in the world; derived entities keep their delta |
-
-- A chunk's level is the best any seat gives it, so overlapping seats share chunks. `SIMULATION_RADIUS × CHUNK > SIGHT`, so nothing a seat sees is frozen.
-- An entity is processed only if its chunk is active; one wandering into a border chunk is suspended until the chunk becomes active again.
-- Spawners are *derived* entities: identity (`spawner:<hexKey>`) and base components come from `Land` (seed, hex). Only their divergence from the derived state persists, keyed by hex (today's `SpawnerState`, generalised to a component delta).
-- The `chunks` system recomputes levels from seat positions, materialises derived entities in newly loaded chunks (derived + delta) and dematerialises those in unloaded ones (persisting the delta; creatures are dropped, as today).
-- Frozen and unloaded entities are frozen in time: nothing passes for them.
+- **Active**: each seat's chunk and every chunk within `SIMULATION_RADIUS` (1: a 3×3 block); the union over all seats. Entities here are processed. `SIMULATION_RADIUS × CHUNK > SIGHT`, so nothing a seat sees or reaches is inactive.
+- **Inactive**: everything else. Entities persist, unprocessed and frozen in time; an entity wandering out of the active area is suspended until its chunk is active again.
+- All state persists. If that grows too large, persistence becomes selective per archetype (towns always persist); nothing else changes.
+- Spawners are *derived* entities: identity (`spawner:<hexKey>`) and base components come from `Land` (seed, hex). The `chunks` system materialises them the first time their chunk becomes active; from then on they are ordinary persisted entities.
+- `World` indexes entities by chunk, so systems query the active set without scanning the world.
 
 ## Systems
 
@@ -94,8 +88,8 @@ One module per system in `src/game/systems/`; `TICK` (`src/game/tick.ts`) is the
 
 | System | Reads | Does |
 |---|---|---|
-| chunks | position (seats) | load levels; materialise / dematerialise |
-| agents | agent, mind | the turn loop ([Ticks](#ticks)): each agent's Intent, from its seat's buffer or its Mind, through the action pipeline |
+| chunks | position (seats) | active set; materialise derived entities |
+| agents | agent, mind | the turn loop ([Ticks](#ticks)): each agent's Intent, given for seats, chosen by Minds, through the action pipeline |
 | conditions | conditions | per-tick Effects, expiry, shake-off, expiry Effects |
 | sight | position (seats) | visible and seen hexes per seat |
 
@@ -103,40 +97,22 @@ Regeneration, spawn timers and cooldowns are conditions or `readyAt` values, not
 
 ## Ticks
 
-A tick is one world turn. There is no "player phase": every agent, human or not, takes its turn in one continuous loop, as in an MMO.
+A tick is one world turn. There is no "player phase": every active agent, human or not, takes its turn in one continuous loop, as in an MMO. The game is agnostic of what drives time: it exposes two entry points and never decides when they run.
 
 ```
-tick(world) → world
-  agents:  for each active agent in spawn order: dequeue its seat's Intent (none: pass) or ask its Mind; resolve it
+tick(world, intents: ReadonlyMap<EntityId, Intent>) → world
+  agents:  for each active agent in spawn order: a seat's Intent from `intents` (absent: pass), else its Mind's; resolve it
   upkeep:  remaining TICK systems
+act(world, entity, intent) → world      // free Deeds only (spendsTurn: false); never advances time
 ```
 
 - **Order is spawn order.** `World` stamps each entity with a monotonic `seq` on insertion; `World.entities` is an insertion-ordered `Map`. A seat joining is just another insertion.
-- **The loop walks a cursor, not a snapshot.** `agentsOf(world, after: seq)` yields the next live agent with a greater `seq` than the last one resolved, re-reading the *current* world each step. A slain entity is never reached; one spawned this tick has a `seq` above the tick's starting maximum and first acts next tick. Mutation during the loop cannot break it.
+- **The loop walks a cursor, not a snapshot.** `agentsOf(world, after: seq)` yields the next live, active agent with a greater `seq` than the last one resolved, re-reading the *current* world each step. A slain entity is never reached; one spawned this tick has a `seq` above the tick's starting maximum and first acts next tick. Mutation during the loop cannot break it.
 - **Each agent decides at its own slot**, from the world as it is then. Seat Intents were chosen earlier by a human; Rules re-validate at resolution (a foe that moved away makes `attack` reject), so stale Intents are safe.
+- **A pass is not a Deed**: no Event; conditions still tick.
 - **Multi-turn actions are conditions**: channelling applies a condition that gates other Deeds and applies the Effect on expiry; cancelling removes it (an Event reaction, e.g. on being hit). No action scheduler.
 - Randomness is `rngOf(seed, purpose).child(entityId)` keyed by tick, never by call order, so loop order changes no roll but its own.
-
-### Clock
-
-The clock belongs to the host (`Session` now, the host peer later), never to the game: the game only exposes `tick` and `act`.
-
-| Mode | Ticks fire | Free Deeds |
-|---|---|---|
-| Paused | never | rejected |
-| Turn-based | when a seat queues a turn-spending Intent | at once |
-| Real-time, N ticks/s | every 1/N s, whatever is queued | at once |
-
-Turn-based is today's behaviour. With several seats, turn-based waits for every seat to queue.
-
-### Input buffer
-
-Each seat has a short queue of turn-spending Intents, dispatched one per tick at the seat's slot. [Input-Buffer]
-
-- Capacity `BUFFER_TICKS` (2). Queuing into a full buffer replaces its last Intent, so the latest input wins without piling up stale ones.
-- Free Deeds (`spendsTurn: false`: potions, inventory moves) skip the buffer and resolve at once via `act(world, entity, intent)`, between ticks; they never count toward capacity.
-- A seat with an empty buffer passes its slot: no Deed, no Event. Conditions still tick for it.
-- The buffer is host state, not world state: it is input, not consequence.
+- Whoever drives time (clock, input buffers, multiplayer turn timers) is host code outside `src/game/`: [time.md](time.md).
 
 ## Effects
 
@@ -227,7 +203,7 @@ src/game/
 Long-term goal: a peer-to-peer, host-authoritative, simplified MMO. The design keeps it open; nothing is built for it now.
 
 - Terrain is never synced: every peer regenerates it from `(seed, coordinates)`, which is what procgen guarantees. Only entities, deltas and Events cross the wire.
-- The host peer owns the clock, the buffers and the world, and runs `tick` and `act`. Other peers send Intents (into their seat's buffer) and receive the Events they can perceive.
+- The host peer owns the world and the time driver ([time.md](time.md)), and runs `tick` and `act`. Other peers send Intents (into their seat's buffer) and receive the Events they can perceive.
 - State is plain data (Maps serialised by a codec) and the reducer pure and seeded, so the host can migrate to another peer by sending the world.
 - Seats, not a player: sight, chunk loading and `isOver` are per seat.
 
@@ -240,7 +216,7 @@ Each phase keeps tests green and is one commit or more.
 3. Effects and conditions: afflictions → `CONDITIONS` rows; player regeneration → condition; `CREATURE_SPELLS` → `ABILITIES`.
 4. Factions table and `relationOf`.
 5. Spawners as derived entities with health, conditions, spawn ability and `onDepleted`; `chunks` system with load levels.
-6. `tick` as the spawn-ordered agent loop; seat input buffer; `Session` clock (paused, turn-based, N ticks/s).
+6. `tick` as the spawn-ordered agent loop, seats' Intents given as a map; the player's Intent becomes one entry. Time drivers follow separately ([time.md](time.md)).
 7. `Stats` and `statOf`.
 8. Split `game.ts` into the layout; update [action-pipeline.md](action-pipeline.md), [monster-ai.md](monster-ai.md), [towns.md](towns.md) and the README.
 
@@ -252,7 +228,7 @@ Each phase keeps tests green and is one commit or more.
 - **Game Programming Patterns, Type Object**: archetypes and condition types as data rows. [GPP-TypeObject]
 
 - **Minecraft**: chunk tickets and load levels propagating outward from players; entities suspended outside the simulation distance. Simplified to three levels. [Minecraft-Chunk]
-- **MMO servers**: input acted on at the next tick, per-player input buffers keyed by tick; low tick rates for slow games. Source of the seat buffer and clock modes. [Input-Buffer]
+- **MMO servers**: every actor in one loop; input acted on at the next tick. Source of the spawn-ordered loop and the Intent map. [Input-Buffer]
 
 Other sources as in [action-pipeline.md](action-pipeline.md#sources).
 
