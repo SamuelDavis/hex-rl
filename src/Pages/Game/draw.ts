@@ -81,7 +81,7 @@ export interface Scene {
   readonly visible: ReadonlySet<string>;
   readonly target: TargetMark | undefined;
   readonly aim: AimMark | undefined;
-  /** The lair of the player's outstanding bounty, if any. */
+  /** The lair of the player's outstanding bounty, if any; marked over everything, fog included. */
   readonly bounty: Hex | undefined;
   readonly seen: ReadonlySet<string>;
   readonly width: number;
@@ -230,7 +230,6 @@ export const drawScene = (
       theme.spawner(context, base, spawner.kind, tile.biome, (color) =>
         lit(isWrecked(spawner) ? ashen(color) : color),
       );
-    if (bounty && sameHex(hex, bounty)) theme.bounty(context, base);
     if (isVisible && chests.has(hexKey(hex))) theme.chest(context, base);
     if (target && sameHex(hex, target.at))
       drawReticle(context, base, marks.targeted);
@@ -252,6 +251,8 @@ export const drawScene = (
     if (sameHex(hex, player.at))
       theme.player(context, base, headingOf(player.facing));
   }
+  if (bounty)
+    theme.bounty(context, project(centerOf(bounty), surfaceOf(tileAt(bounty))));
 };
 
 const headingOf = (direction: Direction): Vec2 => {

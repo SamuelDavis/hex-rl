@@ -34,5 +34,5 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 
 - `interact` is a remappable control that acts at once on the target, like a creature-aimed spell (strike); with no adjacent target it is rejected.
 - Whoever the player tries to interact with, by bump or button, becomes the target, even if uninterested (`addresseeOf`, `src/Pages/Game/session.ts`).
-- The outstanding bounty's lair is marked on the map (`CanvasTheme.bounty`).
+- The outstanding bounty's lair is marked on the map above the fog of war (`CanvasTheme.bounty`).
 - `Session.conversant` opens the creature's dialog (trade or bounty) while it stays adjacent (`conversantOf`); dismissing or stepping closes it.
