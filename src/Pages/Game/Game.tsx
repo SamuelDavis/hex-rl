@@ -898,7 +898,7 @@ function TradePanel(props: {
         </ul>
       </section>
       <section>
-        <h4>Wares</h4>
+        <h4>Wares · {props.trader.purse} gold</h4>
         <ul class="max-h-[33vh] overflow-y-auto">
           <For each={props.trader.wares}>
             {(item) => (

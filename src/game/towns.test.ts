@@ -171,6 +171,12 @@ describe("interact", () => {
     ).toMatchObject({ kind: "interacted" });
   });
 
+  test("without a target, interacting is rejected", () => {
+    expect(act(gameWith([]), { kind: "interact" }).events).toMatchObject([
+      { reason: "no-target" },
+    ]);
+  });
+
   test("monsters can't be interacted with", () => {
     const game = gameWith([creature(east)]);
     expect(act(game, { kind: "interact", at: east }).events).toMatchObject([
@@ -190,6 +196,7 @@ describe("trade", () => {
   const reeve = {
     ...townsfolk(east, "reeve"),
     wares: [ware],
+    purse: offerOf(sold),
     readyAt: Infinity,
   };
   const trader = reeve.id;
@@ -206,6 +213,7 @@ describe("trade", () => {
     expect(next.player.gold).toBe(offerOf(sold));
     expect(next.player.pack).toEqual([]);
     expect(traderIn(next).wares).toEqual([ware, sold]);
+    expect(traderIn(next).purse).toBe(0);
     expect(next.events).toContainEqual({
       kind: "sold",
       item: sold,
@@ -222,6 +230,14 @@ describe("trade", () => {
     expect(next.player.gold).toBe(0);
     expect(next.player.pack).toEqual([sold, ware]);
     expect(traderIn(next).wares).toEqual([]);
+    expect(traderIn(next).purse).toBe(offerOf(sold) + priceOf(ware));
+  });
+
+  test("the reeve can't buy beyond its purse", () => {
+    const broke = { ...shop(0), creatures: [{ ...reeve, purse: 0 }] };
+    const next = act(broke, { kind: "trade", trader, item: sold.id });
+    expect(next.turn).toBe(broke.turn);
+    expect(next.events).toMatchObject([{ reason: "no-gold" }]);
   });
 
   test("rejects too little gold, a missing item and a distant trader, spending nothing", () => {
@@ -255,6 +271,7 @@ describe("restock", () => {
     const [, stocked] = games;
     const reeve = stocked!.creatures[0]!;
     expect(reeve.wares).toHaveLength(spell.stock);
+    expect(reeve.purse).toBe(spell.purse);
     expect(stocked!.events).toContainEqual({
       kind: "restocked",
       creature: "reeve",
@@ -262,6 +279,14 @@ describe("restock", () => {
     const [min, max] = spell.cooldown;
     expect(reeve.readyAt - stocked!.turn + 1).toBeGreaterThanOrEqual(min);
     expect(reeve.readyAt - stocked!.turn + 1).toBeLessThanOrEqual(max);
+  });
+
+  test("restocks a spent purse even with full wares", () => {
+    const wares = Array.from({ length: spell.stock }, (_, i) => potion(`${i}`));
+    const broke = { ...townsfolk(far, "reeve"), wares };
+    const next = act(gameWith([broke]), WAIT);
+    expect(next.creatures[0]!.purse).toBe(spell.purse);
+    expect(next.creatures[0]!.wares).toEqual(wares);
   });
 
   test("only tops up what was sold, and only once ready", () => {

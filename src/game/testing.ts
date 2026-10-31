@@ -47,6 +47,7 @@ export const creature = (
   level: 1,
   readyAt: 0,
   wares: [],
+  purse: 0,
 });
 
 const EVERY_SPELL = new Map(SPELL_IDS.map((spell) => [spell, 1]));

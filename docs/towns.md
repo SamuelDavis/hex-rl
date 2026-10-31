@@ -11,7 +11,7 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 | Town | Town spawner: spawns the first `roster` kind with fewer than its count alive, so a slain bailiff returns first, then the reeve, then peasants. Not attackable. | `Town` |
 | Townsfolk | Monsters from a town (`bailiff`, `reeve`, `peasant`). Same Minds, leash and rules as wild monsters. | `CREATURES` |
 | Service | What interacting with a kind does: `trade` (reeve) or `bounty` (bailiff). No service: `uninterested`. | `SERVICES` |
-| Wares | A trader's items, on the creature; lost when it is forgotten. | `Creature.wares` |
+| Wares, purse | A trader's items and gold, on the creature; lost when it is forgotten. | `Creature.wares`, `Creature.purse` |
 | Bounty | Player state: a lair whose boss to slay, its level, whether slain. | `Bounty`, `Player.bounty` |
 
 ## Rules
@@ -20,8 +20,8 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 - Idle townsfolk beside the player wait (`isAttending`), so trading isn't interrupted by wandering.
 - The player's damage (bump, spells) only hurts foes.
 - `interact` (player-only, adjacent, facing irrelevant) spends a turn only when the creature has a Service. The player's `move` policy is `courteous`: `bold`, but an `attack` rejected as `friendly` falls back to `interact`.
-- `trade` (player-only, adjacent reeve): a pack item sells for `offerOf` and joins the wares; a ware buys for `priceOf` if gold and pack room suffice. Each spends a turn. The reeve has unlimited gold.
-- `restock` (monster-only, `CREATURE_SPELLS.reeve`): while idle and ready, tops wares up to `stock` with fresh `waresOf`, then cools down for a random turn count in `cooldown`. Attempted first in the reeve's Plan, falling back to its move when `full`.
+- `trade` (player-only, adjacent reeve): a pack item sells for `offerOf`, paid from the reeve's purse, and joins the wares; a ware buys for `priceOf`, into the purse, if gold and pack room suffice. Each spends a turn.
+- `restock` (monster-only, `CREATURE_SPELLS.reeve`): while idle and ready, tops wares up to `stock` with fresh `waresOf` and its purse up to `purse`, then cools down for a random turn count in `cooldown`. Attempted first in the reeve's Plan, falling back to its move when `full`.
 - Bounties: interacting with any bailiff pays a slain bounty (`BOUNTY_GOLD_PER_LEVEL` × its level, recorded as `bountyLevel`), then, if none is outstanding, posts the nearest lair to the bailiff whose `dangerOf` exceeds `bountyLevel` (searched in widening `BOUNTY_SEARCH` rings). Only the player slaying that lair's boss fulfils it.
 
 ## UI

@@ -101,9 +101,10 @@ export type Affliction = "bleed" | "stun" | "paralysis";
 /** `perLevel` scales potency (cubs summoned, turns afflicted) linearly with the caster's level, rounded down. */
 export type CreatureSpell =
   | {
-      /** Refills wares to `stock` items while idle. */
+      /** Refills wares to `stock` items and its purse to `purse` gold while idle. */
       readonly kind: "restock";
       readonly stock: number;
+      readonly purse: number;
       /** Turns after restocking before it can restock again, drawn from this range. */
       readonly cooldown: readonly [min: number, max: number];
     }
@@ -157,7 +158,7 @@ export const CREATURE_SPELLS: Partial<Record<CreatureKind, CreatureSpell>> = {
   "goblin chief": PARALYZE,
   troll: STUN,
   "troll elder": STUN,
-  reeve: { kind: "restock", stock: 6, cooldown: [100, 200] },
+  reeve: { kind: "restock", stock: 6, purse: 60, cooldown: [100, 200] },
 };
 
 export type Service = "trade" | "bounty";

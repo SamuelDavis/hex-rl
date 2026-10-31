@@ -132,6 +132,8 @@ export interface Creature extends Actor {
   readonly readyAt: number;
   /** What it sells, if a trader. */
   readonly wares: readonly Item[];
+  /** Gold it can pay for wares, if a trader. */
+  readonly purse: number;
 }
 
 export interface SpawnerState {
@@ -534,6 +536,7 @@ const spawnedFrom = (
   level: dangerOf(spawner.at, land.spawn),
   readyAt: 0,
   wares: [],
+  purse: 0,
 });
 
 const unleashBoss = (game: Game, spawner: Spawner): Game => {
@@ -1104,14 +1107,15 @@ const restock: Rule<Restock> = (game, _, actor) => {
   if (spell?.kind !== "restock") return refused("unable");
   const { land, turn } = game;
   if (trader.readyAt > turn) return refused("not-ready");
-  const missing = spell.stock - trader.wares.length;
-  if (missing <= 0) return refused("full");
+  const missing = Math.max(0, spell.stock - trader.wares.length);
+  if (missing === 0 && trader.purse >= spell.purse) return refused("full");
   const [min, max] = spell.cooldown;
   const cooldown = rngOf(land.seed, "restock").child(actor).int(min, max, turn);
   return performed(
     recorded(
       updated(game, actor, {
         wares: [...trader.wares, ...waresOf(land.seed, actor, turn, missing)],
+        purse: Math.max(trader.purse, spell.purse),
         readyAt: turn + cooldown,
       }),
       { kind: "restocked", creature: trader.kind },
@@ -1474,19 +1478,22 @@ const traderOf = (game: Game, id: Creature["id"]): Creature | undefined =>
     (creature) => creature.id === id && SERVICES[creature.kind] === "trade",
   );
 
-const sell = (game: Game, trader: Creature, item: Item): Game => {
+const sell = (game: Game, trader: Creature, item: Item): Outcome => {
   const price = offerOf(item);
+  if (trader.purse < price) return refused("no-gold");
   const { pack, gold } = game.player;
-  return recorded(
-    updated(
-      withPlayer(game, {
-        pack: pack.filter((held) => held !== item),
-        gold: gold + price,
-      }),
-      trader.id,
-      { wares: [...trader.wares, item] },
+  return performed(
+    recorded(
+      updated(
+        withPlayer(game, {
+          pack: pack.filter((held) => held !== item),
+          gold: gold + price,
+        }),
+        trader.id,
+        { wares: [...trader.wares, item], purse: trader.purse - price },
+      ),
+      { kind: "sold", item, price },
     ),
-    { kind: "sold", item, price },
   );
 };
 
@@ -1501,7 +1508,10 @@ const buy = (game: Game, trader: Creature, item: Item): Outcome => {
       updated(
         withPlayer(game, { pack: [...pack, item], gold: gold - price }),
         trader.id,
-        { wares: trader.wares.filter((ware) => ware !== item) },
+        {
+          wares: trader.wares.filter((ware) => ware !== item),
+          purse: trader.purse + price,
+        },
       ),
       { kind: "bought", item, price },
     ),
@@ -1516,7 +1526,7 @@ const trade: Rule<Trade> = (game, action, actor) => {
   if (problem) return refused(problem);
   const isIt = ({ id }: Item) => id === action.item;
   const sold = game.player.pack.find(isIt);
-  if (sold) return performed(sell(game, trader, sold));
+  if (sold) return sell(game, trader, sold);
   const bought = trader.wares.find(isIt);
   return bought ? buy(game, trader, bought) : refused("no-item");
 };
