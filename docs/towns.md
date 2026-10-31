@@ -8,7 +8,7 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 |---|---|---|
 | Faction | Side an entity fights for; `relationOf` says who are foes. The player is `town`; a creature takes its home spawner's. | `allegiance` component, `FACTIONS`, `relationOf` |
 | Lair | Wild spawner: weighted `pool` up to `cap`, `boss` when wrecked. | `Lair` |
-| Town | Town spawner: spawns the first `roster` kind with fewer than its count alive, so a slain bailiff returns first, then the reeve, then peasants. Not attackable. | `Town` |
+| Town | Town spawner: spawns the first `roster` kind with fewer than its count alive, so a slain bailiff returns first, then the reeve, then peasants. Its `boss` is a bailiff, unleashed when wild monsters wreck it; the player can't attack it. | `Town` |
 | Townsfolk | Monsters from a town (`bailiff`, `reeve`, `peasant`). Same Minds, leash and rules as wild monsters. | `CREATURES` |
 | Service | What interacting with a kind does: `trade` (reeve) or `bounty` (bailiff). No service: `uninterested`. | `SERVICES` |
 | Wares, purse | A trader's items and gold. | `wares`, `purse` components |
@@ -22,7 +22,7 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 
 ## Rules
 
-- Minds notice the nearest foe (`mindOf`): any hostile entity with hit points, spawners included, but foes that can fight back (with `stats`) before spawners. So townsfolk and wild monsters hunt each other and, with no fighter in sight, each other's spawners; nobody attacks its own faction's. Townsfolk never target the player. A wrecked spawner without a boss (a town) just heals and spawns again. Kills by townsfolk grant the player nothing.
+- Minds notice the nearest foe (`mindOf`): any hostile entity with hit points, spawners included, but foes that can fight back (with `stats`) before spawners. So townsfolk and wild monsters hunt each other and, with no fighter in sight, each other's spawners; nobody attacks its own faction's. Townsfolk never target the player. A wrecked town unleashes its boss, a bailiff, like any wrecked spawner. Kills by townsfolk grant the player nothing.
 - Idle townsfolk beside the player wait (`isAttending`), so trading isn't interrupted by wandering.
 - The player's damage (bump, spells) only hurts foes.
 - `interact` (player-only, adjacent, facing irrelevant) spends a turn only when the creature has a Service. The player's `move` policy is `courteous`: `bold`, but an `attack` rejected as `friendly` falls back to `interact`.

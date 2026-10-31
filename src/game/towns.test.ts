@@ -133,15 +133,16 @@ describe("factions", () => {
       ).toMatchObject({ state: "hostile", lastSeen: peasant.at });
     });
 
-    test("a spawner without a boss, wrecked, spawns again once healed", () => {
+    test("a wrecked town unleashes its bailiff, its boss", () => {
       const wrecked = updated(near(camp, []), spawnerIdOf(camp.at), {
         hp: 0,
         isWrecked: true,
         isBossDue: true,
         spawnsAt: 0,
       });
-      const games = historyOf(wrecked, 400);
-      expect(creaturesOf(games.at(-1)!).length).toBeGreaterThan(0);
+      expect(creaturesOf(act(wrecked, WAIT))).toMatchObject([
+        { kind: "bailiff" },
+      ]);
     });
   });
 

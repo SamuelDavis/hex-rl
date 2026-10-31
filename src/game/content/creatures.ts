@@ -122,18 +122,19 @@ export const SERVICES: Partial<Record<CreatureKind, Service>> = {
   reeve: "trade",
 };
 
+/** Wrecked, every spawner unleashes its `boss`. */
 interface Spawning {
   readonly name: string;
+  readonly boss: CreatureKind;
   readonly leash: number;
   readonly interval: number;
   readonly chance: number;
 }
 
-/** Spawns weighted draws from `pool` up to `cap`; wrecked, it unleashes `boss`. */
+/** Spawns weighted draws from `pool` up to `cap`. */
 export interface Lair extends Spawning {
   readonly faction: Extract<FactionId, "wild">;
   readonly pool: readonly (readonly [CreatureKind, number])[];
-  readonly boss: CreatureKind;
   readonly cap: number;
 }
 
@@ -205,6 +206,7 @@ export const SPAWNERS = {
   town: {
     faction: "town",
     name: "town",
+    boss: "bailiff",
     roster: [
       ["bailiff", 1],
       ["reeve", 1],
@@ -220,10 +222,7 @@ export type SpawnerKind = keyof typeof SPAWNERS;
 
 export const spawnerOf = (kind: SpawnerKind): SpawnerType => SPAWNERS[kind];
 
-export const bossOf = (kind: SpawnerKind): CreatureKind | undefined => {
-  const type = spawnerOf(kind);
-  return type.faction === "wild" ? type.boss : undefined;
-};
+export const bossOf = (kind: SpawnerKind): CreatureKind => spawnerOf(kind).boss;
 
 export const membersOf = (kind: SpawnerKind): readonly CreatureKind[] => {
   const type = spawnerOf(kind);
