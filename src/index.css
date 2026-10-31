@@ -1,2 +1,113 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+
+@layer theme {
+  :root {
+    --ink: #1b1411;
+    --soot: #16110e;
+    --char: #1f1813;
+    --ember: #261d17;
+    --ash: #33281f;
+    --peat: #43362b;
+    --umber: #6e5c47;
+    --clay: #a08e72;
+    --straw: #cdbb94;
+    --bone: #ead9b0;
+    --paper: #ece0c3;
+    --vellum: #f4ead4;
+    --blood: #a8322a;
+    --gore: #c23e31;
+    --flame: #e0644f;
+    --scab: #7e241d;
+    --font-woodcut: "IM Fell English", Georgia, serif;
+
+    --pico-font-family: var(--font-woodcut);
+    --pico-border-radius: 0.125rem;
+    --pico-background-color: light-dark(var(--paper), var(--soot));
+    --pico-color: light-dark(var(--ink), var(--bone));
+    --pico-text-selection-color: light-dark(
+      rgb(168 50 42 / 0.2),
+      rgb(224 100 79 / 0.25)
+    );
+    --pico-muted-color: light-dark(var(--umber), var(--clay));
+    --pico-muted-border-color: light-dark(var(--straw), var(--ash));
+    --pico-primary: light-dark(var(--blood), var(--flame));
+    --pico-primary-background: light-dark(var(--blood), var(--gore));
+    --pico-primary-underline: light-dark(
+      rgb(168 50 42 / 0.5),
+      rgb(224 100 79 / 0.5)
+    );
+    --pico-primary-hover: light-dark(var(--scab), var(--bone));
+    --pico-primary-hover-background: light-dark(var(--scab), var(--blood));
+    --pico-primary-focus: light-dark(
+      rgb(168 50 42 / 0.35),
+      rgb(224 100 79 / 0.35)
+    );
+    --pico-primary-inverse: var(--vellum);
+    --pico-secondary: var(--umber);
+    --pico-secondary-background: light-dark(var(--umber), var(--peat));
+    --pico-secondary-underline: rgb(110 92 71 / 0.5);
+    --pico-secondary-hover: light-dark(var(--peat), var(--clay));
+    --pico-secondary-hover-background: light-dark(var(--peat), var(--umber));
+    --pico-secondary-focus: rgb(110 92 71 / 0.3);
+    --pico-secondary-inverse: var(--vellum);
+    --pico-contrast: light-dark(var(--ink), var(--bone));
+    --pico-contrast-background: light-dark(var(--ink), var(--bone));
+    --pico-contrast-hover: light-dark(var(--ember), var(--vellum));
+    --pico-contrast-hover-background: light-dark(var(--ember), var(--vellum));
+    --pico-contrast-inverse: light-dark(var(--paper), var(--ink));
+    --pico-h1-color: var(--pico-color);
+    --pico-h2-color: var(--pico-color);
+    --pico-h3-color: var(--pico-color);
+    --pico-h4-color: var(--pico-color);
+    --pico-h5-color: var(--pico-muted-color);
+    --pico-h6-color: var(--pico-muted-color);
+    --pico-mark-background-color: light-dark(
+      rgb(194 62 49 / 0.25),
+      rgb(194 62 49 / 0.45)
+    );
+    --pico-mark-color: var(--pico-color);
+    --pico-ins-color: light-dark(#4f6b3a, #8fa86a);
+    --pico-del-color: var(--pico-primary);
+    --pico-code-background-color: light-dark(var(--straw), var(--ember));
+    --pico-code-color: light-dark(var(--peat), var(--clay));
+    --pico-card-background-color: light-dark(var(--vellum), var(--char));
+    --pico-card-border-color: light-dark(var(--straw), var(--ash));
+    --pico-card-sectioning-background-color: light-dark(
+      var(--bone),
+      var(--ember)
+    );
+    --pico-card-box-shadow: 0.25rem 0.25rem 0 light-dark(var(--ink), #000);
+    --pico-form-element-background-color: light-dark(
+      var(--vellum),
+      var(--char)
+    );
+    --pico-form-element-selected-background-color: light-dark(
+      var(--straw),
+      var(--ash)
+    );
+    --pico-form-element-border-color: light-dark(var(--clay), var(--peat));
+    --pico-form-element-color: var(--pico-color);
+    --pico-form-element-placeholder-color: var(--pico-muted-color);
+    --pico-form-element-active-background-color: var(
+      --pico-form-element-background-color
+    );
+    --pico-switch-background-color: light-dark(var(--clay), var(--peat));
+    --pico-switch-color: var(--vellum);
+    --pico-range-border-color: light-dark(var(--straw), var(--ash));
+    --pico-range-active-border-color: light-dark(var(--clay), var(--peat));
+    --pico-progress-background-color: light-dark(var(--straw), var(--ash));
+    --pico-modal-overlay-background-color: rgb(22 17 14 / 0.75);
+    --pico-tooltip-background-color: var(--pico-contrast-background);
+    --pico-tooltip-color: var(--pico-contrast-inverse);
+  }
+
+  :is(h1, h2, h3, h4, h5, h6, legend, summary, th) {
+    font-family: "IM Fell English SC", var(--font-woodcut);
+    letter-spacing: 0.02em;
+  }
+
+  article {
+    border: var(--pico-border-width) solid var(--pico-card-border-color);
+  }
+}

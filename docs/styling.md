@@ -16,6 +16,8 @@ Order is declared in `src/pico.css`.
 - `pointer: coarse` raises controls to Apple's 44pt touch-target minimum.
 - Pico pads `[role="group"]` buttons `2rem` inline, so groups of four or more overflow phone widths; the `theme` layer makes them inherit the theme's form spacing.
 - Pico's dialog-footer `margin-bottom: 0` loses to its own `[type=button]` margin on specificity; the `theme` layer restores it.
+- The app's folk-horror woodcut palette (ink, bone and blood on paper; IM Fell English, loaded in `index.html`) overrides `--pico-*` in `src/index.css`'s `theme` layer. Colors are `light-dark()` pairs, so one declaration serves Pico's light, dark and `data-theme` cases; Lightning CSS polyfills it from Pico's `color-scheme` rules.
+- The canvas palette (`src/Pages/Game/draw.ts`) mirrors these inks but ignores the color scheme: unexplored ground is ink, as an uncarved block prints.
 
 ## `data-icon`
 

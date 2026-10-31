@@ -217,7 +217,7 @@ export default function Game() {
         </div>
         <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
         <progress
-          class="[--pico-progress-color:hsl(215_85%_55%)]"
+          class="[--pico-progress-color:hsl(205_30%_50%)]"
           value={getGame().player.mp}
           max={MAX_MP}
         />
