@@ -4,10 +4,12 @@
 @layer theme {
   :root {
     --mana-color: hsl(215 85% 55%);
+    --xp-color: hsl(45 90% 50%);
   }
 
   [data-app-theme="woodcut"] {
     --mana-color: hsl(205 30% 50%);
+    --xp-color: hsl(40 45% 55%);
     --ink: #1b1411;
     --soot: #16110e;
     --char: #1f1813;

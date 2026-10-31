@@ -22,12 +22,7 @@ import {
   type Input,
   type Keymap,
 } from "./controls";
-import {
-  messageOf,
-  slotted,
-  STARTING_LOADOUT,
-  type Loadout,
-} from "./loadout";
+import { messageOf, slotted, STARTING_LOADOUT, type Loadout } from "./loadout";
 import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
 import { CANVAS_THEMES } from "./canvasTheme";
 import { useAppState } from "../../AppState";
@@ -239,12 +234,19 @@ export default function Game() {
             </For>
           </p>
         </div>
-        <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
-        <progress
-          class="[--pico-progress-color:var(--mana-color)]"
-          value={getGame().player.mp}
-          max={MAX_MP}
-        />
+        <div class="grid grid-cols-3 gap-(--pico-spacing)">
+          <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
+          <progress
+            class="[--pico-progress-color:var(--mana-color)]"
+            value={getGame().player.mp}
+            max={MAX_MP}
+          />
+          <progress
+            class="[--pico-progress-color:var(--xp-color)]"
+            value={getGame().player.xp % XP_PER_LEVEL}
+            max={XP_PER_LEVEL}
+          />
+        </div>
       </header>
       <canvas
         ref={setCanvas}
@@ -264,7 +266,7 @@ export default function Game() {
               >
                 {tab}
                 <Show when={tab === "Spells" && unlocksOf(getGame().player)}>
-                  {(unlocks) => <Badge>{unlocks()}</Badge>}
+                  {(unlocks) => <Count>{unlocks()}</Count>}
                 </Show>
               </button>
             )}
@@ -429,10 +431,15 @@ const afflictionsOf = (game: GameState) =>
     .map((affliction) => [affliction, afflictionOf(game, affliction)] as const)
     .filter(([, turns]) => turns > 0);
 
-const stockOf = (game: GameState, potion: PotionKind) =>
+const stockOf = (game: GameState, potion: PotionKind | undefined) =>
   game.player.pack.filter(
     (item) => item.kind === "potion" && item.potion === potion,
   ).length;
+
+const tallyOf = (game: GameState, ability: AbilityId) =>
+  isSpell(ability)
+    ? String(spellLevelOf(game.player, ability))
+    : `×${stockOf(game, abilityOf(ability).consumes)}`;
 
 function SpellSlots(props: {
   game: GameState;
@@ -444,16 +451,14 @@ function SpellSlots(props: {
     <div class="mb-(--pico-spacing) grid grid-cols-6 gap-(--pico-spacing)">
       <For each={props.loadout}>
         {(ability, slot) => {
-          const consumes = ability && abilityOf(ability).consumes;
           const getCooldown = () =>
             ability ? cooldownOf(props.game, ability) : 0;
-          const getStock = () => (consumes ? stockOf(props.game, consumes) : 1);
           const getHotkey = () => hotkeyOf(props.keymap, `slot-${slot() + 1}`);
           return (
             <button
               type="button"
               tabIndex={-1}
-              class="relative m-0 aspect-square p-0 text-xs"
+              class="relative m-0 flex aspect-square flex-col items-center justify-center p-0 text-xs"
               classList={{
                 "opacity-40 grayscale":
                   ability !== undefined &&
@@ -463,17 +468,22 @@ function SpellSlots(props: {
               onClick={() => props.press({ kind: "slot", slot: slot() })}
             >
               <Hotkey>{getHotkey()}</Hotkey>
-              <Show when={getCooldown() > 0} fallback={ability ?? "—"}>
-                <span class="text-2xl">{getCooldown()}</span>
-              </Show>
-              <Show when={consumes}>
-                <span class="absolute right-1 bottom-0.5">×{getStock()}</span>
-              </Show>
-              <Show when={ability && isSpell(ability) && ability}>
-                {(spell) => (
-                  <span class="absolute right-1 bottom-0.5">
-                    {spellLevelOf(props.game.player, spell())}
-                  </span>
+              <Show when={ability} fallback="—">
+                {(bound) => (
+                  <>
+                    <Show
+                      when={getCooldown() > 0}
+                      fallback={<AbilityIcon ability={bound()} />}
+                    >
+                      <span class="text-2xl">{getCooldown()}</span>
+                    </Show>
+                    <span class="absolute inset-x-0 bottom-0.5 text-center">
+                      {bound()}
+                    </span>
+                    <span class="absolute top-0.5 right-1">
+                      {tallyOf(props.game, bound())}
+                    </span>
+                  </>
                 )}
               </Show>
             </button>
@@ -594,16 +604,20 @@ function SpellsPanel(props: {
           return (
             <button
               type="button"
-              class="relative block w-full text-left outline"
-              classList={{ "opacity-40 grayscale": getLevel() === 0 }}
+              class="flex w-full items-center gap-(--pico-spacing) text-left outline"
+              classList={{ "opacity-40 grayscale": getUnlocks() === 0 }}
               onClick={() => props.dispatch({ kind: "learn", spell })}
             >
-              <strong>{spell}</strong> · {costOf(spell)}
-              <br />
-              <small>{abilityOf(spell).summary}</small>
-              <Show when={getLevel() > 0}>
-                <Badge>{getLevel()}</Badge>
-              </Show>
+              <AbilityIcon ability={spell} />
+              <span class="grow">
+                <strong>{spell}</strong> · {costOf(spell)}
+                <br />
+                <small>{abilityOf(spell).summary}</small>
+              </span>
+              <strong class="whitespace-nowrap">
+                Level {getLevel()}
+                <Show when={getUnlocks() > 0}> → {getLevel() + 1}</Show>
+              </strong>
             </button>
           );
         }}
@@ -768,11 +782,22 @@ function InventoryPanel(props: {
 
 const hotkeyOf = (keymap: Keymap, id: ControlId) => keyLabelOf(keymap[id]);
 
-function Badge(props: { children: number }) {
+const ABILITY_ICONS: Record<AbilityId, string> = {
+  cleave: "swords",
+  fireball: "local_fire_department",
+  heal: "healing",
+  strike: "bolt",
+  health: "medication_liquid",
+  mana: "science",
+};
+
+function AbilityIcon(props: { ability: AbilityId }) {
+  return <HTMLIcon type={ABILITY_ICONS[props.ability]} class="text-2xl" />;
+}
+
+function Count(props: { children: number }) {
   return (
-    <span class="absolute -top-1.5 -right-1.5 min-w-5 rounded-full bg-(--pico-primary-background) px-1 text-center text-xs leading-5 text-(--pico-primary-inverse)">
-      {props.children}
-    </span>
+    <span class="absolute right-1 bottom-0.5 text-xs">{props.children}</span>
   );
 }
 
