@@ -4,10 +4,8 @@ import { playerAt } from "./archetypes";
 import { PLAYER, type EntityId } from "./components";
 import type { SystemId } from "./events";
 import type { Hex } from "./hex";
-import { agents } from "./systems/agents";
+import { turns } from "./systems/turns";
 import { materialised } from "./systems/chunks";
-import { conditions } from "./systems/conditions";
-import { spawning } from "./systems/spawning";
 import { vision } from "./systems/vision";
 import {
   caused,
@@ -23,21 +21,20 @@ import {
 
 type System = (game: Game) => Game;
 
-/** Upkeep after every agent has acted, in order. The single list of per-tick systems. */
+/** World-level upkeep after every entity has taken its turn, in order. Per-entity behaviour is `TURN` (`systems/turns.ts`). */
 const UPKEEP: readonly (readonly [SystemId, System])[] = [
-  ["conditions", conditions],
-  ["spawning", (game) => spawning(materialised(game))],
+  ["chunks", materialised],
   ["vision", vision],
 ];
 
-/** One world turn: every active agent acts, then upkeep, then the turn advances. What drives ticks (input, a clock) is the caller's: docs/time.md. */
+/** One world turn: every active entity takes its turn, then upkeep, then the turn advances. What drives ticks (input, a clock) is the caller's: docs/time.md. */
 export const tick = (
   game: Game,
   intents: ReadonlyMap<EntityId, Intent>,
 ): Game => {
   const kept = UPKEEP.reduce(
     (state, [system, run]) => caused(state, { kind: "system", system }, run),
-    agents(game, intents),
+    turns(game, intents),
   );
   return { ...kept, turn: kept.turn + 1 };
 };
@@ -68,5 +65,5 @@ export const newGame = (land: Land, start: Hex = land.spawn): Game => {
     kind: "began",
     source: whoIs(placed, playerOf(placed)),
   });
-  return vision(spawning(materialised(began)));
+  return vision(materialised(began));
 };

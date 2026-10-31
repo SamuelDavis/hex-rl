@@ -75,6 +75,7 @@ import {
   who,
   withCreatures,
   withPlayer,
+  playerStateOf,
 } from "./testing";
 
 const rejection = (action: Intent, reason: Rejection): GameEvent => ({
@@ -1021,7 +1022,7 @@ describe("prepare", () => {
     const game = facingEast();
     const prepared = act(game, { kind: "prepare" });
     expect(prepared.turn).toBe(game.turn + 1);
-    expect(playerOf(prepared)).toEqual(playerOf(game));
+    expect(playerStateOf(prepared)).toEqual(playerStateOf(game));
     expect(eventsOf(prepared)).toEqual([
       { kind: "prepared", source: ADVENTURER },
     ]);
@@ -1176,6 +1177,23 @@ describe("monster abilities", () => {
     for (const bleed of bleeds)
       expect(bleed).toMatchObject({ source: who(bandit) });
     expect(playerOf(after.at(-1)!).conditions.has("bleed")).toBe(false);
+  });
+
+  test("a condition is registered when inflicted and first takes effect on its target's next turn", () => {
+    const bledBy = (game: Game) =>
+      game.events.some(
+        (event) =>
+          event.kind === "hurt" &&
+          event.cause?.kind === "condition" &&
+          event.cause.condition === "bleed",
+      );
+    const inflicting = firstConditioned("bandit", 2);
+    expect(playerOf(inflicting).conditions.get("bleed")).toMatchObject({
+      suffered: 0,
+      remaining: 2,
+    });
+    expect(bledBy(inflicting)).toBe(false);
+    expect(bledBy(act(alone(inflicting), WAIT))).toBe(true);
   });
 
   test("stun allows only waiting; anything else is a turn lost struggling", () => {

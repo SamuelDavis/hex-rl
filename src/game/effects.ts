@@ -201,13 +201,7 @@ const conditioned = (
   if (!target || !has(target, "conditions", "health") || target.hp <= 0)
     return game;
   const lasting = scaled(turns, mastery);
-  const conditions = inflicted(
-    target.conditions,
-    condition,
-    game.turn,
-    lasting,
-    source,
-  );
+  const conditions = inflicted(target.conditions, condition, lasting, source);
   return recorded(updated(game, target.id, { conditions }), {
     kind: "conditioned",
     source,

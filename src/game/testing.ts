@@ -9,6 +9,7 @@ import { newGame } from "./tick";
 import { Biome, type Spawner, type Tile } from "./terrain";
 import {
   creaturesOf,
+  playerOf,
   inserted,
   removed,
   updated,
@@ -78,6 +79,12 @@ export const ADVENTURER: Who = { id: PLAYER, kind: PLAYER, faction: "town" };
 export const who = (creature: Creature, biome: Biome = Biome.Plains): Who => ({
   ...whoIs({ land: landOf() } as Game, creature),
   biome,
+});
+
+/** The player's state but its conditions, which run on with every turn it takes. */
+export const playerStateOf = (game: Game) => ({
+  ...playerOf(game),
+  conditions: undefined,
 });
 
 /** Events without their causes, for comparing what happened. */

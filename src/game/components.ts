@@ -42,11 +42,12 @@ export interface Mana {
 }
 
 export interface ConditionState {
-  readonly since: number;
-  /** The turn it wears off at the latest; permanent when absent. */
-  readonly until?: number;
   /** Who applied it, credited with what it does. */
   readonly source: Who;
+  /** The bearer's turns it has been suffered. */
+  readonly suffered: number;
+  /** The bearer's turns it lasts at most; permanent when absent. */
+  readonly remaining?: number;
 }
 
 export interface Conditions {

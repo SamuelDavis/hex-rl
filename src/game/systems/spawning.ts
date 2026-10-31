@@ -1,6 +1,6 @@
 import { rngOf, type Rng } from "procgen";
 import { creatureOf, facingAt, spawnerIdOf } from "../archetypes";
-import type { With } from "../components";
+import type { EntityId, With } from "../components";
 import {
   bossOf,
   spawnerOf,
@@ -21,7 +21,6 @@ import {
   withOf,
   type Game,
 } from "../world";
-import { activeOf, isActive } from "./chunks";
 
 type SpawnerEntity = With<"spawning" | "position" | "health" | "allegiance">;
 
@@ -135,13 +134,15 @@ const spawnFrom = (game: Game, spawner: SpawnerEntity): Game => {
   );
 };
 
-/** Each active spawner may spawn. */
-export const spawning = (game: Game): Game => {
-  const active = activeOf(game);
-  return entitiesWith(game, "spawning", "position", "health", "allegiance")
-    .filter(({ at }) => isActive(active, at))
-    .reduce((state, { id }) => {
-      const spawner = state.entities.get(id) as SpawnerEntity;
-      return spawnFrom(state, spawner);
-    }, game);
+/** A spawner's turn: it may spawn, or unleash its boss. */
+export const spawning = (game: Game, id: EntityId): Game => {
+  const spawner = withOf(
+    game,
+    id,
+    "spawning",
+    "position",
+    "health",
+    "allegiance",
+  );
+  return spawner ? spawnFrom(game, spawner) : game;
 };

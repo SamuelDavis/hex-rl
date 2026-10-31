@@ -43,17 +43,12 @@ const outcomeOf = <D extends Deed>(
   actor: Entity,
 ): Outcome => {
   const outcome = (RULES[deed.kind] as Rule<D>)(game, deed, actor);
-  if (outcome.kind === "rejected" || !gatedBy(game, actor, deed))
-    return outcome;
+  if (outcome.kind === "rejected" || !gatedBy(actor, deed)) return outcome;
   return refused("gated");
 };
 
-const gatedBy = (
-  game: Game,
-  actor: Entity,
-  deed: Deed,
-): ConditionId | undefined =>
-  actor.conditions && gateOf(actor.conditions, deed.kind, game.turn);
+const gatedBy = (actor: Entity, deed: Deed): ConditionId | undefined =>
+  actor.conditions && gateOf(actor.conditions, deed.kind);
 
 /** Step the way faced, else turn that way, else `bump` whoever is in the way. */
 const moving = (direction: Direction, bump: Plan): Plan => ({
@@ -142,7 +137,7 @@ export const settled = (game: Game, id: EntityId, plan: Plan): Settlement => {
       spendsTurn: outcome.spendsTurn,
     };
   const condition =
-    outcome.reason === "gated" ? gatedBy(game, actor, deed) : undefined;
+    outcome.reason === "gated" ? gatedBy(actor, deed) : undefined;
   const settlement = condition
     ? struggled(game, actor, condition)
     : rejected(game, actor, deed, outcome.reason);

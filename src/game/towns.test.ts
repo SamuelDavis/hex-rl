@@ -29,6 +29,7 @@ import {
   who,
   withCreatures,
   withPlayer,
+  playerStateOf,
 } from "./testing";
 
 const TOWN: Spawner = { kind: "town", at: { q: -3, r: 0 } };
@@ -360,7 +361,7 @@ describe("bounties", () => {
   });
 
   test("asking again before the boss is slain changes nothing", () => {
-    expect(playerOf(talk(posted))).toEqual(playerOf(posted));
+    expect(playerStateOf(talk(posted))).toEqual(playerStateOf(posted));
   });
 
   test("only the player slaying that lair's boss fulfils it", () => {

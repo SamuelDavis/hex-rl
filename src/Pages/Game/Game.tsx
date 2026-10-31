@@ -551,7 +551,7 @@ function PlayPanel(props: {
 const conditionsOf = (game: GameState) => {
   const { conditions } = playerOf(game);
   return [...conditions.keys()]
-    .map((id) => [id, remainingOf(conditions, id, game.turn)] as const)
+    .map((id) => [id, remainingOf(conditions, id)] as const)
     .filter(([, turns]) => turns > 0 && Number.isFinite(turns));
 };
 
