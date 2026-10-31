@@ -1,6 +1,6 @@
 import { rngOf, type Rng } from "procgen";
 import { creatureOf, facingAt, spawnerIdOf } from "../archetypes";
-import type { EntityId, With } from "../components";
+import { has, type With } from "../components";
 import {
   bossOf,
   spawnerOf,
@@ -21,6 +21,7 @@ import {
   withOf,
   type Game,
 } from "../world";
+import { performed, refused, type Rule, type Spawn } from "./deeds";
 
 type SpawnerEntity = With<"spawning" | "position" | "health" | "allegiance">;
 
@@ -60,9 +61,9 @@ const spawned = (game: Game, home: Spawner, kind: CreatureKind, at: Hex) =>
     level: dangerOf(home.at, game.land.spawn),
   });
 
-/** The nearest hostile agent to `from`, for a boss to rush. */
+/** The nearest hostile fighter, for a boss to rush. */
 const quarryOf = (game: Game, spawner: SpawnerEntity) =>
-  entitiesWith(game, "agent", "position", "allegiance", "health")
+  entitiesWith(game, "agent", "stats", "position", "allegiance", "health")
     .filter(
       ({ faction, hp }) =>
         hp > 0 && relationOf(faction, spawner.faction) === "hostile",
@@ -108,41 +109,31 @@ const recruitOf = (
   )?.[0];
 };
 
-/** Spawns one member when its timer and chance allow, or at once on healing from a wreck. */
-const spawnFrom = (game: Game, spawner: SpawnerEntity): Game => {
-  if (spawner.isBossDue) return unleashBoss(game, spawner);
-  const home = spawnerOfEntity(spawner);
+/** Spawns one member when its timer and chance allow, at once on healing from a wreck, or its boss when due. */
+export const spawn: Rule<Spawn> = (game, _, actor) => {
+  if (!has(actor, "spawning", "position", "health", "allegiance"))
+    return refused("unable");
+  if (actor.isBossDue) {
+    const unleashed = unleashBoss(game, actor);
+    return unleashed === game ? refused("blocked") : performed(unleashed);
+  }
+  if (isUnhealed(actor)) return refused("not-ready");
+  const home = spawnerOfEntity(actor);
   const { at } = home;
   const { interval, chance } = spawnerOf(home.kind);
   const rng = rngOf(game.land.seed, "spawns");
   const site = spawnSiteOf(game, at);
+  if (!site) return refused("blocked");
   const recruit = recruitOf(game, home, rng);
-  if (isUnhealed(spawner) || !site || !recruit) return game;
-  const isRevived = spawner.isWrecked;
-  if (
-    !isRevived &&
-    (game.turn < spawner.spawnsAt || !rng.chance(chance, at.q, at.r, game.turn))
-  )
-    return game;
-  return updated(
-    inserted(game, spawned(game, home, recruit, site)),
-    spawner.id,
-    {
+  if (!recruit) return refused("full");
+  const isDue =
+    actor.isWrecked ||
+    (game.turn >= actor.spawnsAt && rng.chance(chance, at.q, at.r, game.turn));
+  if (!isDue) return refused("not-ready");
+  return performed(
+    updated(inserted(game, spawned(game, home, recruit, site)), actor.id, {
       spawnsAt: game.turn + interval,
       isWrecked: false,
-    },
+    }),
   );
-};
-
-/** A spawner's turn: it may spawn, or unleash its boss. */
-export const spawning = (game: Game, id: EntityId): Game => {
-  const spawner = withOf(
-    game,
-    id,
-    "spawning",
-    "position",
-    "health",
-    "allegiance",
-  );
-  return spawner ? spawnFrom(game, spawner) : game;
 };

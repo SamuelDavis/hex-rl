@@ -16,11 +16,13 @@ import {
 } from "../hex";
 import { sighted, tetherOf, unsighted, type Mind } from "../mind";
 import { canNotice, SIGHT } from "../sight";
+import { has, type Entity } from "../components";
 import {
   entitiesWith,
   isBeside,
   isBlocked,
   isInReach,
+  updated,
   type Creature,
   type Game,
 } from "../world";
@@ -95,9 +97,16 @@ const wander = (
   return rng.weighted(options, game.turn, 1);
 };
 
-/** Standing agents hostile to `creature`. */
+/** Standing fighters hostile to `creature`. */
 const foesOf = (game: Game, creature: Creature) =>
-  entitiesWith(game, "agent", "position", "health", "allegiance").filter(
+  entitiesWith(
+    game,
+    "agent",
+    "stats",
+    "position",
+    "health",
+    "allegiance",
+  ).filter(
     ({ faction, hp, id }) =>
       id !== creature.id &&
       hp > 0 &&
@@ -105,7 +114,7 @@ const foesOf = (game: Game, creature: Creature) =>
   );
 
 /** Notices the nearest foe it can, else loses track. */
-export const mindOf = (game: Game, creature: Creature): Mind => {
+const mindOf = (game: Game, creature: Creature): Mind => {
   const { at, facing, mind } = creature;
   const distanceOf = (foe: { readonly at: Hex }) => hexDistance(foe.at, at);
   const quarry = foesOf(game, creature)
@@ -177,7 +186,7 @@ const choiceOf = (game: Game, creature: Creature): Intent => {
 };
 
 /** Its first ability triggered by its state, attempted before its move, which it falls back to. */
-export const planFor = (game: Game, creature: Creature): Plan => {
+const creaturePlanOf = (game: Game, creature: Creature): Plan => {
   const plan = planOf(creature, choiceOf(game, creature));
   const { state } = creature.mind;
   const triggered =
@@ -189,4 +198,30 @@ export const planFor = (game: Game, creature: Creature): Plan => {
         otherwise: { blocked: plan, full: plan },
       }
     : plan;
+};
+
+const WAIT: Plan = { attempt: { kind: "wait" } };
+
+/** Spawn when it can, else wait. */
+const SPAWNING: Plan = {
+  attempt: { kind: "spawn" },
+  otherwise: { blocked: WAIT, full: WAIT, "not-ready": WAIT },
+};
+
+/** A mind-controlled entity's turn: a creature's Mind updated from what it notices, then its Plan; a spawner's spawning. */
+export const minded = (
+  game: Game,
+  entity: Entity,
+): { readonly game: Game; readonly plan: Plan } => {
+  if (has(entity, "mind")) {
+    const creature = entity as Creature;
+    const mind = mindOf(game, creature);
+    const noticed = updated(game, entity.id, { mind });
+    return {
+      game: noticed,
+      plan: creaturePlanOf(noticed, { ...creature, mind }),
+    };
+  }
+  if (has(entity, "spawning")) return { game, plan: SPAWNING };
+  return { game, plan: WAIT };
 };

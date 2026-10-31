@@ -41,6 +41,6 @@ export {
   XP_PER_LEVEL,
 } from "./progression";
 export { BOUNTY_GOLD_PER_LEVEL } from "./quests";
-export { isWrecked } from "./systems/spawning";
+export { isWrecked } from "./actions/spawning";
 export { visibleOf } from "./systems/vision";
 export { HUNT_RADIUS } from "./systems/minds";

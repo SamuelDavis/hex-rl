@@ -71,13 +71,7 @@ import {
   type PotionKind,
 } from "../../game/items";
 import { conversantOf, newSession, update, type Message } from "./session";
-import {
-  intervalOf,
-  SPEEDS,
-  speedNameOf,
-  TURN_BASED,
-  type Speed,
-} from "./clock";
+import { intervalOf, TURN_BASED, type Speed } from "./clock";
 import {
   ABILITY_IDS,
   abilityOf,
@@ -109,9 +103,8 @@ const CONDITION_NAMES: Record<ConditionId, string> = {
   bleed: "Bleeding",
   stun: "Stunned",
   paralysis: "Paralyzed",
-  vigor: "Vigorous",
-  focus: "Focused",
-  mending: "Mending",
+  regeneration: "Regenerating",
+  "mana regeneration": "Regenerating mana",
 };
 
 const BIOME_NAMES = Object.fromEntries(
@@ -143,6 +136,7 @@ export default function Game() {
   const [getLoadout, setLoadout] = createSignal(STARTING_LOADOUT);
   const [getSpeed, setSpeed] = persist(createSignal<Speed>(TURN_BASED), {
     key: "speed",
+    decode: (json): Speed => ({ ...TURN_BASED, ...JSON.parse(json) }),
   });
   const [isRemapping, setRemapping] = createSignal(false);
   const dispatch = (message: Message) =>
@@ -292,22 +286,32 @@ export default function Game() {
         <div>
           <div class="flex items-baseline justify-between gap-(--pico-spacing)">
             <h1>{BIOME_NAMES[getTile().biome]}</h1>
-            <select
-              aria-label="Speed"
-              class="w-auto"
-              value={speedNameOf(getSpeed())}
-              onChange={(event) =>
-                setSpeed(
-                  SPEEDS.find(
-                    (speed) => speedNameOf(speed) === event.currentTarget.value,
-                  ) ?? TURN_BASED,
-                )
-              }
-            >
-              <For each={SPEEDS}>
-                {(speed) => <option>{speedNameOf(speed)}</option>}
-              </For>
-            </select>
+            <fieldset role="group" class="mb-0 w-auto">
+              <input
+                type="number"
+                aria-label="Ticks per second (0: turn-based)"
+                title="Ticks per second (0: turn-based)"
+                class="w-20"
+                min="0"
+                step="any"
+                value={getSpeed().ticksPerSecond}
+                onChange={(event) => {
+                  const ticksPerSecond = event.currentTarget.valueAsNumber;
+                  if (Number.isFinite(ticksPerSecond) && ticksPerSecond >= 0)
+                    setSpeed({ ...getSpeed(), ticksPerSecond });
+                }}
+              />
+              <button
+                type="button"
+                aria-pressed={getSpeed().isPaused}
+                aria-label={getSpeed().isPaused ? "Resume" : "Pause"}
+                onClick={() =>
+                  setSpeed({ ...getSpeed(), isPaused: !getSpeed().isPaused })
+                }
+              >
+                <HTMLIcon type={getSpeed().isPaused ? "play_arrow" : "pause"} />
+              </button>
+            </fieldset>
           </div>
           <p data-cap="end">
             HP {Math.max(0, playerOf(getGame()).hp)}/{MAX_HP} · MP{" "}
@@ -1296,11 +1300,12 @@ function OtherPanel(props: {
         experience; each level learns or raises a spell in the Spells tab.
         Monsters grow stronger, and their tricks (summoning, bleeding, stunning,
         paralysis) worse, farther from where you set out. Climb one block at a
-        time; swim freely. Choose the speed beside the place name: paused,
-        turn-based, or ticks per second; in real time, turn-spending actions
-        queue (up to two) for the next tick, and {key("cancel")} drops the last
-        one queued. Towns spawn a bailiff, a reeve and peasants, who fight
-        monsters; bump one, or target one beside you and press
+        time; swim freely. Set the speed beside the place name in ticks per
+        second (0 is turn-based: a tick on each action that spends one), or
+        pause; in real time, turn-spending actions queue (up to two) for the
+        next tick, and {key("cancel")} drops the last one queued. Towns spawn a
+        bailiff, a reeve and peasants, who fight monsters; bump one, or target
+        one beside you and press
         {key("interact")}, to interact: a reeve trades, a bailiff posts bounties
         on ever-farther lairs.
       </p>

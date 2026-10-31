@@ -2,11 +2,10 @@ import type { Intent } from "../actions/deeds";
 import { planOf, settled } from "../actions/pipeline";
 import { has, type Entity, type EntityId } from "../components";
 import { isStanding } from "../health";
-import { caused, updated, withOf, type Creature, type Game } from "../world";
+import { withOf, type Game } from "../world";
 import { activeOf, isActive, type Active } from "./chunks";
 import { recovering, suffering } from "./conditions";
-import { mindOf, planFor } from "./minds";
-import { spawning } from "./spawning";
+import { minded } from "./minds";
 
 type Intents = ReadonlyMap<EntityId, Intent>;
 
@@ -16,23 +15,16 @@ type Phase = (game: Game, id: EntityId, intents: Intents) => Game;
 const acting: Phase = (game, id, intents) => {
   const agent = withOf(game, id, "agent", "health");
   if (!agent || !isStanding(agent)) return game;
-  if (has(agent, "mind")) {
-    const creature = agent as Creature;
-    const mind = mindOf(game, creature);
-    const minded = updated(game, id, { mind });
-    return settled(minded, id, planFor(minded, { ...creature, mind })).game;
+  if (agent.controller === "seat") {
+    const intent = intents.get(id);
+    return intent ? settled(game, id, planOf(agent, intent)).game : game;
   }
-  const intent = intents.get(id);
-  return intent ? settled(game, id, planOf(agent, intent)).game : game;
+  const choice = minded(game, agent);
+  return settled(choice.game, id, choice.plan).game;
 };
 
-const spawningPhase: Phase = (game, id) =>
-  caused(game, { kind: "system", system: "spawning" }, (state) =>
-    spawning(state, id),
-  );
-
 /** An entity's turn, in order: the single list of per-entity behaviour. */
-const TURN: readonly Phase[] = [suffering, acting, spawningPhase, recovering];
+const TURN: readonly Phase[] = [suffering, acting, recovering];
 
 const isTakingTurns = (entity: Entity, active: Active): boolean =>
   has(entity, "position") &&

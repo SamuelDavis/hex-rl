@@ -1,34 +1,19 @@
-/** What drives ticks (docs/time.md): never, the player's turn-spending input, or a timer at `ticksPerSecond`. */
-export type Speed =
-  | { readonly kind: "paused" }
-  | { readonly kind: "turn-based" }
-  | { readonly kind: "real-time"; readonly ticksPerSecond: number };
+/** What drives ticks (docs/time.md), set by the player alone: paused, nothing fires; 0 ticks per second is turn-based, a tick on each turn-spending action; more is real time. */
+export interface Speed {
+  readonly ticksPerSecond: number;
+  readonly isPaused: boolean;
+}
 
-export const TURN_BASED: Speed = { kind: "turn-based" };
-
-export const SPEEDS: readonly Speed[] = [
-  { kind: "paused" },
-  TURN_BASED,
-  ...[1, 2, 3, 4, 6, 8].map((ticksPerSecond): Speed => ({
-    kind: "real-time",
-    ticksPerSecond,
-  })),
-];
+export const TURN_BASED: Speed = { ticksPerSecond: 0, isPaused: false };
 
 /** Turn-spending Intents a seat may queue ahead of real-time ticks. */
 export const BUFFER_TICKS = 2;
 
-export const speedNameOf = (speed: Speed): string => {
-  switch (speed.kind) {
-    case "paused":
-      return "Paused";
-    case "turn-based":
-      return "Turn-based";
-    case "real-time":
-      return `${speed.ticksPerSecond} tick${speed.ticksPerSecond === 1 ? "" : "s"}/s`;
-  }
-};
+export const isTurnBased = ({ ticksPerSecond }: Speed): boolean =>
+  ticksPerSecond === 0;
 
 /** Milliseconds between ticks, if a timer drives them. */
 export const intervalOf = (speed: Speed): number | undefined =>
-  speed.kind === "real-time" ? 1000 / speed.ticksPerSecond : undefined;
+  speed.isPaused || isTurnBased(speed)
+    ? undefined
+    : 1000 / speed.ticksPerSecond;

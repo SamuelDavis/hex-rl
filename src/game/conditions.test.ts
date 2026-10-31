@@ -51,10 +51,14 @@ describe("conditions", () => {
   });
 
   test("permanent ones last forever and are never extended or lost", () => {
-    const vigorous = permanent(source, "vigor");
-    expect(remainingOf(vigorous, "vigor")).toBe(Infinity);
-    expect(inflicted(vigorous, "vigor", 3, source)).toBe(vigorous);
-    expect(recovered(begun(vigorous).conditions, () => true).lost).toEqual([]);
+    const regenerating = permanent(source, "regeneration");
+    expect(remainingOf(regenerating, "regeneration")).toBe(Infinity);
+    expect(inflicted(regenerating, "regeneration", 3, source)).toBe(
+      regenerating,
+    );
+    expect(recovered(begun(regenerating).conditions, () => true).lost).toEqual(
+      [],
+    );
   });
 
   test("gate Deeds by what they allow and forbid", () => {
@@ -66,7 +70,7 @@ describe("conditions", () => {
   });
 
   test("fall due at the start of every `interval`-th turn suffered", () => {
-    const { interval } = CONDITIONS.vigor.every;
+    const { interval } = CONDITIONS.regeneration.every;
     const dueTurns = (conditions: Suffered, turns: number) =>
       Array.from({ length: turns }).reduce<{
         conditions: Suffered;
@@ -81,7 +85,7 @@ describe("conditions", () => {
         },
         { conditions, due: [] },
       ).due;
-    expect(dueTurns(permanent(source, "vigor"), 3 * interval)).toEqual([
+    expect(dueTurns(permanent(source, "regeneration"), 3 * interval)).toEqual([
       interval,
       2 * interval,
       3 * interval,

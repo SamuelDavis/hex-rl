@@ -18,7 +18,7 @@ Contract for how game state, behaviour and content are organised in `src/game/`:
 | Archetype | Which components a kind of entity is built with. The only place content becomes entities. | `archetypes.ts` |
 | Game | Entities in spawn order, an occupancy index, chests, seen hexes, turn, events. | `Game`, `world.ts` |
 | System | Pure function over entities with given components; one concern, one module. Per-entity ones are phases of each entity's turn (`TURN`); world-level ones run after (`UPKEEP`). | `systems/`, `TURN`, `UPKEEP` |
-| Agent | An entity that takes turns: a `seat` (a human's, given Intents) or a `mind` (chooses its own). | `Agent.controller` |
+| Agent | An entity that chooses Intents: a `seat` (a human's, given them) or a `mind` (chooses its own by its components: a creature's Mind, a spawner's spawning). | `Agent.controller` |
 | Intent / Deed / Rule / Plan | As in [action-pipeline.md](action-pipeline.md), for any entity with `agent`. | `actions/` |
 | Effect | Closed set of primitive state changes, one applier. Abilities and conditions compose them. | `effects.ts` |
 | Ability | Data row: costs, cooldown, aim, effects, and for creatures' knacks a `trigger`. | `content/abilities.ts` |
@@ -39,7 +39,7 @@ Each component is an interface of flat fields in `components.ts`, named in the `
 | mana | `mp`, `maxMp` | player |
 | conditions | `conditions` | player, creatures, spawners |
 | allegiance | `faction` | player, creatures, spawners |
-| agent | `controller` (`seat` / `mind`) | player, creatures |
+| agent | `controller` (`seat` / `mind`) | player, creatures, spawners |
 | mind | `mind` (`mind.ts` state machine) | creatures |
 | membership | `home` (spawner) | creatures |
 | caster | `abilities` (known, with level), `readyAt` | player, creatures |
@@ -62,8 +62,7 @@ An entity's turn is `TURN` (`systems/turns.ts`), the single ordered list of per-
 | Phase | Module | Does |
 |---|---|---|
 | suffering | `systems/conditions.ts` | its conditions suffered a turn longer; due `every` effects applied, credited to whoever inflicted them |
-| acting | `systems/turns.ts`, `systems/minds.ts` | an agent's Plan: a seat's given Intent, or a mind's perception (`mindOf`) and choice (`planFor`) |
-| spawning | `systems/spawning.ts` | a spawner spawns a member, revives once healed from a wreck, or unleashes its boss |
+| acting | `systems/turns.ts`, `systems/minds.ts` | an agent's Plan: a seat's given Intent, or a mind's choice (`minded`): a creature's perception and move, a spawner's `spawn` (`actions/spawning.ts`, falling back to `wait`) |
 | recovering | `systems/conditions.ts` | its timed conditions run down, and may be shaken off |
 
 `UPKEEP` (`tick.ts`) is the single ordered list of world-level systems after every turn: `chunks` (the active set; materialises spawners of newly active chunks), then `vision` (the player's seen hexes). Every phase and system stamps its events' `cause`.
@@ -93,7 +92,8 @@ What drives ticks (paused, turn-based, ticks per second, input buffer) is host c
 - **Order is spawn order.** `inserted` stamps a monotonic `seq`; `Game.entities` is an insertion-ordered `Map`. A seat joining is another insertion.
 - **The loop walks a cursor, not a snapshot.** `nextOf` finds the first standing, active entity with a `seq` above the last one whose turn ran, re-reading the current state each step. A slain entity is never reached; one spawned this tick has a `seq` above the tick's starting maximum and first takes a turn next tick.
 - **Each agent decides at its own slot**, from the state as it is then; Rules re-validate, so stale Intents are safe.
-- **Conditions count their bearer's turns.** Inflicted, a condition is registered on its target at once and first takes effect on the target's next turn, whenever in the loop that falls: its `every` effects at the start of each `interval`-th turn suffered, its gates during the turn, and its duration and shake-off at the turn's end.
+- **Every tick, every active entity takes exactly one turn**, so an entity's turns and the world's ticks are the same count; only an entity frozen in an inactive chunk takes none.
+- **Conditions take effect on their target's next turn.** Inflicted, a condition is registered on its target at once; its target's next turn may come later in the same tick (if it follows the inflicter in spawn order) or in the next. From then on: its `every` effects at the start of each `interval`-th turn suffered, its gates during the turn, its duration and shake-off at the turn's end.
 - **Multi-turn actions are conditions**: a channel gates other Deeds and applies its Effect when due; cancelling removes it. No action scheduler.
 - Randomness is `rngOf(seed, purpose).child(id)` keyed by turn, never by call order.
 
@@ -107,7 +107,7 @@ One table, `ABILITIES`, for the player's spells, potions and creatures' knacks. 
 
 ## Conditions
 
-Rows in `content/conditions.ts` typed by `ConditionType` (`conditions.ts`): `allows` / `forbids` gate Deeds, `shakeOff` grows the per-turn recovery chance, `every` applies effects. Inflicted ones (bleed, stun, paralysis) wear off; permanent ones never do: vigor and focus regenerate the player, mending passively and slowly heals spawners, wrecked or not.
+Rows in `content/conditions.ts` typed by `ConditionType` (`conditions.ts`): `allows` / `forbids` gate Deeds, `shakeOff` grows the per-turn recovery chance, `every` applies effects. Inflicted ones (bleed, stun, paralysis) wear off; permanent ones never do: `regeneration` restores a hit point every 10 turns (the player, and spawners, a passive, slow heal, wrecked or not), `mana regeneration` a mana point every 2.
 
 - A gated Deed is checked after its Rule's own checks (so a paralysed bump still attacks) and costs the turn struggling (`struggled`).
 - `source` on a condition is who applied it: a bleed's damage, and a kill by it, are the bandit's.
@@ -166,7 +166,7 @@ Long-term goal: a peer-to-peer, host-authoritative, simplified MMO. Nothing is b
 
 - Quests are a `questing` component, not conditions with data and reactions: no second quest exists to justify the generality.
 - Stats are base values only; condition and equipment modifiers wait for the first one.
-- Spawning is a system, not an Ability: lair rosters, caps, boss and revival don't reduce to the summon effect yet.
+- Spawning is its own Deed, not an Ability: lair rosters, caps, boss and revival don't reduce to the summon effect yet.
 
 ## Prior art
 

@@ -58,7 +58,7 @@ export interface Allegiance {
   readonly faction: FactionId;
 }
 
-/** Takes turns; a `seat` is a human's, given Intents, a `mind` chooses its own. */
+/** Chooses Intents each turn: a `seat` is a human's, given them; a `mind` chooses its own by its other components (`systems/minds.ts`). */
 export interface Agent {
   readonly controller: "seat" | "mind";
 }

@@ -236,15 +236,19 @@ describe("interacting", () => {
 describe("speed", () => {
   const at = (speed: Speed) =>
     run(sessionOf(gameWith([]), RANGE), { kind: "speed", speed });
-  const realTime = at({ kind: "real-time", ticksPerSecond: 2 });
+  const realTime = at({ ticksPerSecond: 2, isPaused: false });
   const south: Message = { kind: "move", direction: "s" };
 
-  test("starts turn-based", () => {
-    expect(sessionOf(gameWith([]), RANGE).speed).toEqual(TURN_BASED);
+  test("starts turn-based: 0 ticks per second, a tick on each turn-spending action", () => {
+    const session = sessionOf(gameWith([]), RANGE);
+    expect(session.speed).toEqual(TURN_BASED);
+    const moved = run(session, south, { kind: "tick" });
+    expect(moved.game.turn).toBe(1);
+    expect(moved.queue).toEqual([]);
   });
 
-  test("paused, nothing fires, not even free actions", () => {
-    const paused = at({ kind: "paused" });
+  test("paused, nothing fires, not even free actions or ticks", () => {
+    const paused = at({ ticksPerSecond: 2, isPaused: true });
     expect(run(paused, south, { kind: "prepare" }, { kind: "tick" })).toEqual(
       paused,
     );

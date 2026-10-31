@@ -6,13 +6,13 @@ Status: built for one seat; multiplayer turn timers are not.
 
 ## Speed
 
-The player sets the speed (`Speed`, `SPEEDS`; the select beside the place name, persisted); the game never adjusts it.
+Only the player sets the timing (`Speed`: ticks per second and a pause toggle, beside the place name, persisted); nothing else starts, stops or slows ticks, dialogs included.
 
 | Speed | Ticks fire | Free Deeds |
 |---|---|---|
 | Paused | never | dropped: nothing fires |
-| Turn-based | when the player submits a turn-spending Intent (`act`) | at once |
-| N ticks/s | every 1/N s (`intervalOf`), whatever is queued; a seat with nothing queued passes | at once (`immediate`) |
+| 0 ticks/s: turn-based | when the player submits a turn-spending Intent (`act`) | at once |
+| N > 0 ticks/s | every 1/N s (`intervalOf`), whatever is queued; a seat with nothing queued passes | at once (`immediate`) |
 
 - Multiplayer turn-based (not built): the first submission starts `TURN_TIMER`; when it ends every seat's head Intent is dispatched and the rest pass. `TURN_TIMER` is a host setting, like the speed.
 

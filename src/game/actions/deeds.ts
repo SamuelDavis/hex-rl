@@ -72,6 +72,11 @@ export interface Trade {
   readonly item: string;
 }
 
+/** A spawner brings forth a member, or its boss. */
+export interface Spawn {
+  readonly kind: "spawn";
+}
+
 export type Deed =
   | Turn
   | Step
@@ -84,7 +89,8 @@ export type Deed =
   | Destroy
   | Learn
   | Interact
-  | Trade;
+  | Trade
+  | Spawn;
 
 export type DeedKind = Deed["kind"];
 

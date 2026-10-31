@@ -27,7 +27,13 @@ import {
   type Target,
 } from "./target";
 import { createTerrain } from "../../game/terrain";
-import { BUFFER_TICKS, TURN_BASED, type Speed } from "./clock";
+import {
+  BUFFER_TICKS,
+  intervalOf,
+  isTurnBased,
+  TURN_BASED,
+  type Speed,
+} from "./clock";
 
 export const LOG_LENGTH = 50;
 
@@ -137,24 +143,18 @@ const advanced = (session: Session, game: Game): Session => {
 /** The player's Intent: dropped while paused; resolved at once turn-based; in real time, free Deeds and rejections at once, others queued for a tick if the queue has room. */
 const performed = (session: Session, intent: Intent): Session => {
   const { game, speed, queue } = session;
-  switch (speed.kind) {
-    case "paused":
-      return session;
-    case "turn-based":
-      return advanced(session, act(game, intent));
-    case "real-time": {
-      const now = immediate(game, intent);
-      if (now) return advanced(session, now);
-      return queue.length < BUFFER_TICKS
-        ? { ...session, queue: [...queue, intent] }
-        : session;
-    }
-  }
+  if (speed.isPaused) return session;
+  if (isTurnBased(speed)) return advanced(session, act(game, intent));
+  const now = immediate(game, intent);
+  if (now) return advanced(session, now);
+  return queue.length < BUFFER_TICKS
+    ? { ...session, queue: [...queue, intent] }
+    : session;
 };
 
 /** A real-time tick: the oldest queued Intent is the player's, else the player passes. */
 const ticked = (session: Session): Session => {
-  if (session.speed.kind !== "real-time") return session;
+  if (intervalOf(session.speed) === undefined) return session;
   const [next, ...rest] = session.queue;
   const intents = new Map(next ? [[PLAYER, next]] : []);
   return advanced({ ...session, queue: rest }, tick(session.game, intents));

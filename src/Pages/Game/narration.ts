@@ -57,6 +57,7 @@ const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
   learn: "learn",
   interact: "interact",
   trade: "trade that",
+  spawn: "spawn",
 };
 
 const usingOf = (ability: AbilityId, verbs: readonly [string, string]) =>
@@ -82,9 +83,8 @@ const CONDITION_NOUNS: Record<ConditionId, string> = {
   bleed: "bleeding",
   stun: "the stun",
   paralysis: "paralysis",
-  vigor: "vigor",
-  focus: "focus",
-  mending: "mending",
+  regeneration: "regeneration",
+  "mana regeneration": "mana regeneration",
 };
 
 /** "The adventurer bleeds for up to 2 turns." */
@@ -92,9 +92,8 @@ const CONDITION_VERBS: Record<ConditionId, string> = {
   bleed: "bleeds",
   stun: "is stunned",
   paralysis: "is paralyzed",
-  vigor: "is invigorated",
-  focus: "is focused",
-  mending: "mends",
+  regeneration: "regenerates",
+  "mana regeneration": "regenerates mana",
 };
 
 const counted = (count: number, noun: string) =>

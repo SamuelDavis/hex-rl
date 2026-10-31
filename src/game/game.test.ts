@@ -130,7 +130,7 @@ const spawnsOf = (games: readonly Game[]) =>
       .map((creature) => ({ creature, turn: game.turn })),
   );
 
-const MENDING = CONDITIONS.mending.every.interval;
+const REGENERATION = CONDITIONS.regeneration.every.interval;
 
 describe("newGame", () => {
   test("starts at the spawn with full health", () => {
@@ -294,7 +294,7 @@ describe("spawners", () => {
     });
     const games = historyOf(wrecked);
     const healedAt = games.findIndex((game) => !isWrecked(game, mine));
-    expect(healedAt).toBe(MENDING * spawnerHpOf("mine"));
+    expect(healedAt).toBe(REGENERATION * spawnerHpOf("mine"));
     const turns = spawnsOf(games).map(({ turn }) => turn);
     expect(turns[0]).toBe(healedAt);
     expect(turns[1]! - healedAt).toBeGreaterThanOrEqual(interval);
@@ -308,12 +308,13 @@ describe("spawners", () => {
     expect(spawnsOf(historyOf(newGame(landOf(out, [far]))))).toEqual([]);
   });
 
-  test("are entities with health and conditions, like any other", () => {
+  test("are agents with health and conditions, like any other entity, whose turn is a spawn Deed", () => {
     const game = newGame(landOf(out, [mine]));
     expect(game.entities.get(spawnerIdOf(mine.at))).toMatchObject({
+      controller: "mind",
       hp: spawnerHpOf("mine"),
       faction: "wild",
-      conditions: new Map([["mending", expect.anything()]]),
+      conditions: new Map([["regeneration", expect.anything()]]),
     });
   });
 });
@@ -1283,8 +1284,8 @@ describe("conditions", () => {
     const history = historyOf(drained, 100);
     expect(playerOf(history.at(-1)!)).toMatchObject({ hp: 11, mp: MAX_MP });
     expect([...playerOf(history.at(-1)!).conditions.keys()]).toEqual([
-      "vigor",
-      "focus",
+      "regeneration",
+      "mana regeneration",
     ]);
   });
 

@@ -17,6 +17,7 @@ import {
 } from "./deeds";
 import { destroy, prepare, takeAll, transfer } from "./inventory";
 import { step, turn } from "./movement";
+import { spawn } from "./spawning";
 import { interact, trade } from "./towns";
 
 const RULES: {
@@ -34,6 +35,7 @@ const RULES: {
   learn,
   interact,
   trade,
+  spawn,
 };
 
 /** A Rule's outcome, rejected as `gated` when a condition the actor suffers forbids the Deed; checked after the Rule's own checks, so a bump still finds its foe. */

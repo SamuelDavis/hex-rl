@@ -25,7 +25,7 @@ export type Cause =
   | { readonly kind: "condition"; readonly condition: ConditionId }
   | { readonly kind: "system"; readonly system: SystemId };
 
-export type SystemId = "chunks" | "spawning" | "vision";
+export type SystemId = "chunks" | "vision";
 
 /** Every event names its `source`, who did it or to whom it happened, and `target`, if any, who it was done to. `cause` is stamped by whatever produced it. */
 export type GameEvent = { readonly cause?: Cause } & (
