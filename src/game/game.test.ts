@@ -68,11 +68,13 @@ import {
   origin,
   step,
   WAIT,
+  ADVENTURER,
+  who,
 } from "./testing";
 
 const rejection = (action: Intent, reason: Rejection): GameEvent => ({
   kind: "rejected",
-  actor: "player",
+  actor: ADVENTURER,
   action,
   reason,
 });
@@ -462,7 +464,7 @@ describe("act", () => {
     });
     expect(turned.events).toContainEqual({
       kind: "turned",
-      actor: "goblin",
+      actor: who(creature({ q: 4, r: 0 }, "goblin")),
       facing: "nw",
     });
     const stepped = act(turned, WAIT);
@@ -472,7 +474,7 @@ describe("act", () => {
     });
     expect(stepped.events).toContainEqual({
       kind: "stepped",
-      actor: "goblin",
+      actor: who(creature({ q: 4, r: 0 }, "goblin")),
       direction: "nw",
       to: { q: 3, r: 0 },
     });
@@ -896,7 +898,11 @@ describe("transfer", () => {
       ["boots", "helm", "large", "pants"].sort(),
     );
     expect(next.chests.get(here)?.items).toEqual([shirt]);
-    expect(next.events).toContainEqual({ kind: "spilled", items: [shirt] });
+    expect(next.events).toContainEqual({
+      kind: "spilled",
+      actor: ADVENTURER,
+      items: [shirt],
+    });
   });
 
   test("taking all takes the gold and the smallest items that fit, spending a turn", () => {
@@ -917,6 +923,7 @@ describe("transfer", () => {
     expect(next.chests.get(here)).toEqual({ gold: 0, items: [shirt] });
     expect(next.events).toContainEqual({
       kind: "moved",
+      actor: ADVENTURER,
       cargo: { kind: "gold", amount: 4 },
       from: "ground",
       to: "pack",
@@ -965,7 +972,9 @@ describe("use a potion", () => {
     expect(healed.player.pack).toEqual([mana, { ...health, id: "h2" }]);
     expect(healed.turn).toBe(0);
     expect(healed.creatures).toEqual(game.creatures);
-    expect(healed.events).toEqual([{ kind: "used", ability: "health" }]);
+    expect(healed.events).toEqual([
+      { kind: "used", actor: ADVENTURER, ability: "health" },
+    ]);
     expect(act(healed, { kind: "use", ability: "mana" }).player.mp).toBe(
       MAX_MP,
     );
@@ -997,7 +1006,7 @@ describe("prepare", () => {
     const prepared = act(game, { kind: "prepare" });
     expect(prepared.turn).toBe(game.turn + 1);
     expect(prepared.player).toEqual(game.player);
-    expect(prepared.events).toEqual([{ kind: "prepared" }]);
+    expect(prepared.events).toEqual([{ kind: "prepared", actor: ADVENTURER }]);
   });
 });
 
@@ -1035,7 +1044,11 @@ describe("levels", () => {
     const weak = { ...creature(east, "cub", "nw"), level: XP_PER_LEVEL };
     const next = act(gameWith([weak]), step("se"));
     expect(next.player.xp).toBe(CREATURES.cub.hp * XP_PER_LEVEL);
-    expect(next.events).toContainEqual({ kind: "leveled", level: 2 });
+    expect(next.events).toContainEqual({
+      kind: "leveled",
+      actor: ADVENTURER,
+      level: 2,
+    });
   });
 
   test("each unspent level learns a spell, or raises one, without spending a turn", () => {
@@ -1043,7 +1056,7 @@ describe("levels", () => {
     const once = act(game, learning("cleave"));
     expect(once.turn).toBe(0);
     expect(once.events).toEqual([
-      { kind: "learned", spell: "cleave", level: 1 },
+      { kind: "learned", actor: ADVENTURER, spell: "cleave", level: 1 },
     ]);
     const twice = act(once, learning("cleave"));
     expect(twice.player.spells.get("cleave")).toBe(2);
@@ -1102,7 +1115,8 @@ describe("monster spells", () => {
     const hitHp = MAX_HP - 2 * CREATURES.bandit.damage;
     expect(hit.events).toContainEqual({
       kind: "afflicted",
-      creature: "bandit",
+      actor: who(leveled("bandit", 2)),
+      target: ADVENTURER,
       affliction: "bleed",
       turns: 2,
     });
@@ -1132,9 +1146,9 @@ describe("monster spells", () => {
       rejection({ kind: "turn", direction: "n" }, "paralyzed"),
     ]);
     expect(act(paralyzed, step("se")).events).toContainEqual({
-      kind: "hitCreature",
-      actor: "player",
-      creature: "goblin",
+      kind: "hit",
+      actor: ADVENTURER,
+      target: who(leveled("goblin", 1)),
     });
   });
 
@@ -1167,7 +1181,7 @@ describe("monster spells", () => {
     }
     expect(next.events).toContainEqual({
       kind: "summoned",
-      creature: "wolf",
+      actor: who(wolf),
       summoned: "cub",
       count: 2,
     });

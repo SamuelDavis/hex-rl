@@ -10,7 +10,7 @@ import {
   type Message,
   type Session,
 } from "./session";
-import { east, gameWith, creature } from "../../game/testing";
+import { ADVENTURER, creature, east, gameWith, who } from "../../game/testing";
 import { hexKey } from "../../game/hex";
 import type { Game } from "../../game/game";
 
@@ -28,7 +28,7 @@ describe("newSession", () => {
     const session = newSession(7, RANGE);
     expect(session.game.land.seed).toBe(7);
     expect(session.mode).toEqual(EXPLORE);
-    expect(session.log).toEqual([{ kind: "began" }]);
+    expect(session.log).toEqual([{ kind: "began", actor: ADVENTURER }]);
   });
 });
 
@@ -36,9 +36,9 @@ describe("update", () => {
   test("logs each action's events", () => {
     const session = run(targeting(east), { kind: "move", direction: "se" });
     expect(session.log).toContainEqual({
-      kind: "hitCreature",
-      actor: "player",
-      creature: "troll",
+      kind: "hit",
+      actor: ADVENTURER,
+      target: who(creature(east, "troll")),
     });
   });
 
@@ -71,7 +71,11 @@ describe("update", () => {
     );
     expect(session.mode).toEqual(EXPLORE);
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({ kind: "used", ability: "fireball" });
+    expect(session.log).toContainEqual({
+      kind: "used",
+      actor: ADVENTURER,
+      ability: "fireball",
+    });
   });
 
   test("cancelling an aim spends no turn", () => {
@@ -89,7 +93,11 @@ describe("update", () => {
       kind: "use",
       ability: "strike",
     });
-    expect(session.log).toContainEqual({ kind: "used", ability: "strike" });
+    expect(session.log).toContainEqual({
+      kind: "used",
+      actor: ADVENTURER,
+      ability: "strike",
+    });
   });
 
   test("drops the target once it is out of range", () => {
@@ -103,7 +111,7 @@ describe("update", () => {
   test("preparing spends a turn", () => {
     const session = run(targeting(east), { kind: "prepare" });
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({ kind: "prepared" });
+    expect(session.log).toContainEqual({ kind: "prepared", actor: ADVENTURER });
   });
 
   test("using a potion quaffs it at once, even while aiming, spending no turn", () => {
@@ -124,7 +132,11 @@ describe("update", () => {
     );
     expect(session.mode.kind).toBe("aim");
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({ kind: "used", ability: "mana" });
+    expect(session.log).toContainEqual({
+      kind: "used",
+      actor: ADVENTURER,
+      ability: "mana",
+    });
   });
 
   test("resizing the view changes the target range", () => {

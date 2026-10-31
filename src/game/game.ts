@@ -38,7 +38,7 @@ import {
   type Effect,
   type SpellId,
 } from "./abilities";
-import { dangerOf, type Spawner, type Tile } from "./terrain";
+import { dangerOf, type Biome, type Spawner, type Tile } from "./terrain";
 import {
   capacityOf,
   fits,
@@ -307,86 +307,110 @@ export type Rejection =
   | "no-gold"
   | "unable";
 
+/** Who an event concerns: enough to name them and tell them apart. */
+export interface Who {
+  readonly id: ActorId;
+  readonly kind: ActorKind;
+  readonly faction: Faction;
+  /** Biome of a creature's home; townsfolk are known by it. */
+  readonly biome?: Biome;
+}
+
+/** Every event names its `actor`, who did it or to whom it happened; `target`, if any, is who it was done to. */
 export type GameEvent =
-  | { readonly kind: "began" }
+  | { readonly kind: "began"; readonly actor: Who }
   | {
       readonly kind: "rejected";
-      readonly actor: ActorKind;
+      readonly actor: Who;
       readonly action: Intent;
       readonly reason: Rejection;
     }
   | {
       readonly kind: "turned";
-      readonly actor: ActorKind;
+      readonly actor: Who;
       readonly facing: Direction;
     }
   | {
       readonly kind: "stepped";
-      readonly actor: ActorKind;
+      readonly actor: Who;
       readonly direction: Direction;
       readonly to: Hex;
     }
-  | { readonly kind: "used"; readonly ability: AbilityId }
-  | {
-      readonly kind: "hitCreature";
-      readonly actor: ActorKind;
-      readonly creature: CreatureKind;
-    }
-  | {
-      readonly kind: "killed";
-      readonly actor: ActorKind;
-      readonly creature: CreatureKind;
-    }
-  | { readonly kind: "dropped"; readonly creature: CreatureKind }
+  | { readonly kind: "used"; readonly actor: Who; readonly ability: AbilityId }
+  | { readonly kind: "hit"; readonly actor: Who; readonly target: Who }
+  | { readonly kind: "killed"; readonly actor: Who; readonly target: Who }
+  | { readonly kind: "dropped"; readonly actor: Who }
   | {
       readonly kind: "moved";
+      readonly actor: Who;
       readonly cargo: Cargo;
       readonly from: Where;
       readonly to: Where;
     }
-  | { readonly kind: "spilled"; readonly items: readonly Item[] }
-  | { readonly kind: "destroyed" }
-  | { readonly kind: "prepared" }
-  | { readonly kind: "hitSpawner"; readonly spawner: SpawnerKind }
-  | { readonly kind: "wrecked"; readonly spawner: SpawnerKind }
-  | { readonly kind: "emerged"; readonly creature: CreatureKind }
-  | { readonly kind: "struck"; readonly creature: CreatureKind }
-  | { readonly kind: "leveled"; readonly level: number }
+  | {
+      readonly kind: "spilled";
+      readonly actor: Who;
+      readonly items: readonly Item[];
+    }
+  | { readonly kind: "destroyed"; readonly actor: Who }
+  | { readonly kind: "prepared"; readonly actor: Who }
+  | {
+      readonly kind: "hitSpawner";
+      readonly actor: Who;
+      readonly spawner: SpawnerKind;
+    }
+  | {
+      readonly kind: "wrecked";
+      readonly actor: Who;
+      readonly spawner: SpawnerKind;
+    }
+  | { readonly kind: "emerged"; readonly actor: Who }
+  | { readonly kind: "leveled"; readonly actor: Who; readonly level: number }
   | {
       readonly kind: "learned";
+      readonly actor: Who;
       readonly spell: SpellId;
       readonly level: number;
     }
   | {
       readonly kind: "summoned";
-      readonly creature: CreatureKind;
+      readonly actor: Who;
       readonly summoned: CreatureKind;
       readonly count: number;
     }
   | {
       readonly kind: "afflicted";
-      readonly creature: CreatureKind;
+      readonly actor: Who;
+      readonly target: Who;
       readonly affliction: Affliction;
       readonly turns: number;
     }
-  | { readonly kind: "bled" }
-  | { readonly kind: "died" }
-  | { readonly kind: "restocked"; readonly creature: CreatureKind }
+  | { readonly kind: "bled"; readonly actor: Who }
+  | { readonly kind: "died"; readonly actor: Who }
+  | { readonly kind: "restocked"; readonly actor: Who }
+  | { readonly kind: "interacted"; readonly actor: Who; readonly target: Who }
   | {
-      readonly kind: "interacted";
-      readonly creature: CreatureKind;
-      readonly id: Creature["id"];
+      readonly kind: "bought" | "sold";
+      readonly actor: Who;
+      readonly target: Who;
+      readonly item: Item;
+      readonly price: number;
     }
-  | { readonly kind: "bought"; readonly item: Item; readonly price: number }
-  | { readonly kind: "sold"; readonly item: Item; readonly price: number }
   | {
       readonly kind: "bountied";
+      readonly actor: Who;
+      readonly target: Who;
       readonly spawner: SpawnerKind;
       readonly at: Hex;
       readonly level: number;
     }
-  | { readonly kind: "bountySlain"; readonly creature: CreatureKind }
-  | { readonly kind: "rewarded"; readonly gold: number };
+  | { readonly kind: "bountySlain"; readonly actor: Who; readonly target: Who }
+  | {
+      readonly kind: "rewarded";
+      readonly actor: Who;
+      readonly target: Who;
+      readonly gold: number;
+    };
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
 
@@ -451,7 +475,7 @@ const rejected = (
 ): Game =>
   recorded(game, {
     kind: "rejected",
-    actor: kindOf(game, actor),
+    actor: whoOf(game, actor),
     action,
     reason,
   });
@@ -459,11 +483,23 @@ const rejected = (
 const creatureOf = (game: Game, id: Creature["id"]): Creature =>
   game.creatures.find((creature) => creature.id === id)!;
 
-const actorOf = (game: Game, actor: ActorId): Actor =>
+const actorOf = (game: Game, actor: ActorId): Player | Creature =>
   actor === PLAYER ? game.player : creatureOf(game, actor);
 
-const kindOf = (game: Game, actor: ActorId): ActorKind =>
-  actor === PLAYER ? PLAYER : creatureOf(game, actor).kind;
+const THE_PLAYER: Who = { id: PLAYER, kind: PLAYER, faction: "town" };
+
+const whoIs = ({ land }: Game, actor: Player | Creature): Who =>
+  "home" in actor
+    ? {
+        id: actor.id,
+        kind: actor.kind,
+        faction: factionOfCreature(actor),
+        biome: land.tileAt(actor.home.at).biome,
+      }
+    : THE_PLAYER;
+
+export const whoOf = (game: Game, actor: ActorId): Who =>
+  whoIs(game, actorOf(game, actor));
 
 export const factionOfCreature = ({ home }: Creature): Faction =>
   spawnerOf(home.kind).faction;
@@ -559,7 +595,7 @@ const unleashBoss = (game: Game, spawner: Spawner): Game => {
       spawner,
       { ...stateOf(game, spawner), isBossDue: false },
     ),
-    { kind: "emerged", creature: boss },
+    { kind: "emerged", actor: whoIs(game, creature) },
   );
 };
 
@@ -646,7 +682,7 @@ export const newGame = (land: Land): Game =>
       kills: 0,
       seen: new Set(),
       turn: 0,
-      events: [{ kind: "began" }],
+      events: [{ kind: "began", actor: THE_PLAYER }],
     }),
   );
 
@@ -673,7 +709,7 @@ const dropLoot = (game: Game, creature: Creature): Game => {
   if (!loot) return game;
   return recorded(piledOn(game, creature.at, loot), {
     kind: "dropped",
-    creature: creature.kind,
+    actor: whoIs(game, creature),
   });
 };
 
@@ -732,7 +768,7 @@ const spilled = (game: Game): Game => {
   if (spilled.length === 0) return game;
   return recorded(
     piledOn(withPlayer(game, { pack: kept }), at, { gold: 0, items: spilled }),
-    { kind: "spilled", items: spilled },
+    { kind: "spilled", actor: THE_PLAYER, items: spilled },
   );
 };
 
@@ -752,7 +788,13 @@ const transferGold = (game: Game, action: Transfer): Outcome => {
         ...chest,
         gold: lying,
       }),
-      { kind: "moved", cargo: { kind: "gold", amount }, from, to },
+      {
+        kind: "moved",
+        actor: THE_PLAYER,
+        cargo: { kind: "gold", amount },
+        from,
+        to,
+      },
     ),
   );
 };
@@ -771,7 +813,15 @@ const transferItem = (game: Game, action: Transfer): Outcome => {
   if (isOver && capacity >= capacityOf(game.player.equipment))
     return refused("full");
   return performed(
-    spilled(recorded(next, { kind: "moved", cargo: item, from, to })),
+    spilled(
+      recorded(next, {
+        kind: "moved",
+        actor: THE_PLAYER,
+        cargo: item,
+        from,
+        to,
+      }),
+    ),
   );
 };
 
@@ -802,6 +852,7 @@ const takeAll: Rule<TakeAll> = (game) => {
       (taking, moved) =>
         recorded(taking, {
           kind: "moved",
+          actor: THE_PLAYER,
           cargo: moved,
           from: "ground",
           to: "pack",
@@ -814,7 +865,10 @@ const takeAll: Rule<TakeAll> = (game) => {
 const destroy: Rule<Destroy> = (game) => {
   if (!chestAt(game, game.player.at)) return refused("no-chest");
   return performed(
-    recorded(withChest(game, game.player.at, EMPTY), { kind: "destroyed" }),
+    recorded(withChest(game, game.player.at, EMPTY), {
+      kind: "destroyed",
+      actor: THE_PLAYER,
+    }),
   );
 };
 
@@ -824,17 +878,18 @@ const attackCreature = (
   target: Creature,
   damage: number,
 ): Game => {
-  const actor = kindOf(game, by);
+  const actor = whoOf(game, by);
+  const victim = whoIs(game, target);
   const hp = target.hp - damage;
   if (hp > 0)
     return recorded(updated(game, target.id, { hp }), {
-      kind: "hitCreature",
+      kind: "hit",
       actor,
-      creature: target.kind,
+      target: victim,
     });
   const slain = recorded(
     { ...game, creatures: game.creatures.filter((m) => m !== target) },
-    { kind: "killed", actor, creature: target.kind },
+    { kind: "killed", actor, target: victim },
   );
   return dropLoot(by === PLAYER ? credited(slain, target) : slain, target);
 };
@@ -848,7 +903,8 @@ const credited = (game: Game, slain: Creature): Game =>
     slain,
   );
 
-const bountyHunted = (game: Game, { kind, home }: Creature): Game => {
+const bountyHunted = (game: Game, slain: Creature): Game => {
+  const { kind, home } = slain;
   const { bounty } = game.player;
   if (
     !bounty ||
@@ -859,7 +915,8 @@ const bountyHunted = (game: Game, { kind, home }: Creature): Game => {
     return game;
   return recorded(withPlayer(game, { bounty: { ...bounty, isSlain: true } }), {
     kind: "bountySlain",
-    creature: kind,
+    actor: THE_PLAYER,
+    target: whoIs(game, slain),
   });
 };
 
@@ -867,7 +924,9 @@ const experienced = (game: Game, xp: number): Game => {
   const before = levelOf(game.player);
   const next = withPlayer(game, { xp: game.player.xp + xp });
   const level = levelOf(next.player);
-  return level > before ? recorded(next, { kind: "leveled", level }) : next;
+  return level > before
+    ? recorded(next, { kind: "leveled", actor: THE_PLAYER, level })
+    : next;
 };
 
 const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
@@ -883,10 +942,12 @@ const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
   if (hp > 0 || wasWrecked)
     return recorded(hurt({ isWrecked: wasWrecked }), {
       kind: "hitSpawner",
+      actor: THE_PLAYER,
       spawner: spawner.kind,
     });
   return recorded(hurt({ isWrecked: true, isBossDue: true }), {
     kind: "wrecked",
+    actor: THE_PLAYER,
     spawner: spawner.kind,
   });
 };
@@ -894,7 +955,7 @@ const attackSpawner = (game: Game, spawner: Spawner, damage: number): Game => {
 const hurt = (game: Game, damage: number): Game => {
   const hp = game.player.hp - damage;
   const next = withPlayer(game, { hp });
-  return hp > 0 ? next : recorded(next, { kind: "died" });
+  return hp > 0 ? next : recorded(next, { kind: "died", actor: THE_PLAYER });
 };
 
 const afflicted = (game: Game, creature: Creature): Game => {
@@ -914,14 +975,24 @@ const afflicted = (game: Game, creature: Creature): Game => {
       creature.id,
       { readyAt: game.turn + turns + cooldown },
     ),
-    { kind: "afflicted", creature: creature.kind, affliction, turns },
+    {
+      kind: "afflicted",
+      actor: whoIs(game, creature),
+      target: THE_PLAYER,
+      affliction,
+      turns,
+    },
   );
 };
 
 const struck = (game: Game, creature: Creature): Game =>
   afflicted(
     hurt(
-      recorded(game, { kind: "struck", creature: creature.kind }),
+      recorded(game, {
+        kind: "hit",
+        actor: whoIs(game, creature),
+        target: THE_PLAYER,
+      }),
       CREATURES[creature.kind].damage * creature.level,
     ),
     creature,
@@ -1042,6 +1113,7 @@ const use: Rule<Use> = (game, action) => {
   const mastery = masteryOf(game.player, action.ability);
   const used = recorded(spent(game, action.ability), {
     kind: "used",
+    actor: THE_PLAYER,
     ability: action.ability,
   });
   return performed(
@@ -1060,7 +1132,7 @@ const learn: Rule<Learn> = (game, { spell }) => {
   return performed(
     recorded(
       withPlayer(game, { spells: new Map([...player.spells, [spell, level]]) }),
-      { kind: "learned", spell, level },
+      { kind: "learned", actor: THE_PLAYER, spell, level },
     ),
     false,
   );
@@ -1092,7 +1164,7 @@ const summon: Rule<Summon> = (game, _, actor) => {
       }),
       {
         kind: "summoned",
-        creature: caster.kind,
+        actor: whoIs(game, caster),
         summoned: spell.creature,
         count: summoned.length,
       },
@@ -1118,7 +1190,7 @@ const restock: Rule<Restock> = (game, _, actor) => {
         purse: Math.max(trader.purse, spell.purse),
         readyAt: turn + cooldown,
       }),
-      { kind: "restocked", creature: trader.kind },
+      { kind: "restocked", actor: whoIs(game, trader) },
     ),
   );
 };
@@ -1343,7 +1415,7 @@ const regenerate = (game: Game): Game => {
 const bleed = (game: Game): Game =>
   isOver(game) || afflictionOf(game, "bleed") === 0
     ? game
-    : hurt(recorded(game, { kind: "bled" }), 1);
+    : hurt(recorded(game, { kind: "bled", actor: THE_PLAYER }), 1);
 
 const endTurn = (acted: Game): Game =>
   withSight(
@@ -1359,7 +1431,7 @@ const turn: Rule<Turn> = (game, { direction }, actor) => {
   return performed(
     recorded(withActor(game, actor, { facing: direction }), {
       kind: "turned",
-      actor: kindOf(game, actor),
+      actor: whoOf(game, actor),
       facing: direction,
     }),
   );
@@ -1375,7 +1447,7 @@ const step: Rule<Step> = (game, { direction }, actor) => {
   return performed(
     recorded(withActor(game, actor, { at: to }), {
       kind: "stepped",
-      actor: kindOf(game, actor),
+      actor: whoOf(game, actor),
       direction,
       to,
     }),
@@ -1421,13 +1493,13 @@ const interact: Rule<Interact> = (game, { at }, actor) => {
   if (!service) return refused("uninterested");
   const met = recorded(game, {
     kind: "interacted",
-    creature: npc.kind,
-    id: npc.id,
+    actor: THE_PLAYER,
+    target: whoIs(game, npc),
   });
-  return performed(service === "bounty" ? bountied(met, npc.at) : met);
+  return performed(service === "bounty" ? bountied(met, npc) : met);
 };
 
-const rewarded = (game: Game, bounty: Bounty): Game => {
+const rewarded = (game: Game, bounty: Bounty, bailiff: Creature): Game => {
   const gold = BOUNTY_GOLD_PER_LEVEL * bounty.level;
   return recorded(
     withPlayer(game, {
@@ -1435,7 +1507,12 @@ const rewarded = (game: Game, bounty: Bounty): Game => {
       bounty: undefined,
       bountyLevel: bounty.level,
     }),
-    { kind: "rewarded", gold },
+    {
+      kind: "rewarded",
+      actor: whoIs(game, bailiff),
+      target: THE_PLAYER,
+      gold,
+    },
   );
 };
 
@@ -1458,18 +1535,25 @@ const lairAbove = (game: Game, from: Hex, level: number) => {
 };
 
 /** Pays a slain bounty, then posts the next if none is outstanding. */
-const bountied = (game: Game, from: Hex): Game => {
+const bountied = (game: Game, bailiff: Creature): Game => {
   const { bounty } = game.player;
   if (bounty && !bounty.isSlain) return game;
-  const paid = bounty ? rewarded(game, bounty) : game;
-  const lair = lairAbove(paid, from, paid.player.bountyLevel);
+  const paid = bounty ? rewarded(game, bounty, bailiff) : game;
+  const lair = lairAbove(paid, bailiff.at, paid.player.bountyLevel);
   if (!lair) return paid;
   const level = dangerOf(lair.at, game.land.spawn);
   return recorded(
     withPlayer(paid, {
       bounty: { kind: lair.kind, at: lair.at, level, isSlain: false },
     }),
-    { kind: "bountied", spawner: lair.kind, at: lair.at, level },
+    {
+      kind: "bountied",
+      actor: whoIs(game, bailiff),
+      target: THE_PLAYER,
+      spawner: lair.kind,
+      at: lair.at,
+      level,
+    },
   );
 };
 
@@ -1492,7 +1576,13 @@ const sell = (game: Game, trader: Creature, item: Item): Outcome => {
         trader.id,
         { wares: [...trader.wares, item], purse: trader.purse - price },
       ),
-      { kind: "sold", item, price },
+      {
+        kind: "sold",
+        actor: THE_PLAYER,
+        target: whoIs(game, trader),
+        item,
+        price,
+      },
     ),
   );
 };
@@ -1513,7 +1603,13 @@ const buy = (game: Game, trader: Creature, item: Item): Outcome => {
           purse: trader.purse + price,
         },
       ),
-      { kind: "bought", item, price },
+      {
+        kind: "bought",
+        actor: THE_PLAYER,
+        target: whoIs(game, trader),
+        item,
+        price,
+      },
     ),
   );
 };
@@ -1541,7 +1637,8 @@ const RULES: {
   use,
   transfer,
   "take-all": takeAll,
-  prepare: (game) => performed(recorded(game, { kind: "prepared" })),
+  prepare: (game) =>
+    performed(recorded(game, { kind: "prepared", actor: THE_PLAYER })),
   destroy,
   learn,
   summon,

@@ -1,5 +1,8 @@
 import {
+  factionOfCreature,
   newGame,
+  PLAYER,
+  type Who,
   type Intent,
   type Game,
   type Land,
@@ -64,6 +67,16 @@ export const facingEast = (world = landOf()): Game => {
 export const gameWith = (creatures: Creature[], world = landOf()): Game => ({
   ...facingEast(world),
   creatures,
+});
+
+export const ADVENTURER: Who = { id: PLAYER, kind: PLAYER, faction: "town" };
+
+/** How events name `creature`, at home on `landOf`'s default plains. */
+export const who = (creature: Creature, biome: Biome = Biome.Plains): Who => ({
+  id: creature.id,
+  kind: creature.kind,
+  faction: factionOfCreature(creature),
+  biome,
 });
 
 export const WAIT: Intent = { kind: "wait" };

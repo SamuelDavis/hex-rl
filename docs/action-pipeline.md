@@ -6,7 +6,7 @@ Contract for turning any actor's choice into authoritative game events. One voca
 
 | Term | Meaning | In code (`src/game/`) |
 |---|---|---|
-| Actor | Takes turns: the player or a creature (a wild monster or townsfolk, [towns.md](towns.md)). All share `Actor` (id, position, facing, hit points). | `Actor`, `Player`, `Creature`; `ActorKind` names it in events |
+| Actor | Takes turns: the player or a creature (a wild monster or townsfolk, [towns.md](towns.md)). All share `Actor` (id, position, facing, hit points). | `Actor`, `Player`, `Creature`; `Who` names it in events |
 | Intent | What an actor wants: a Deed, or `move` (go a direction). The pipeline's sole input. | `Intent` |
 | Deed | Something a Rule can perform, dispatchable alone: `turn`, `step`, `attack`, `wait`, `use`, ... | `Deed` |
 | Rule | One Deed's checks and effects; knows no other Deed. | `RULES`, `Rule` |
@@ -34,7 +34,7 @@ Intent ─planOf(actor)→ Plan ─attempted→ Rule ─┬─ performed → Eve
 - Every actor's `move` steps; on `not-facing`, turns; on `occupied`, bumps by its policy. Monsters are `bold`: `attack` that hex. The player is `courteous`: `attack`, and on `friendly`, `interact`.
 - One rule set for every actor. Creature Minds choose Intents (`move` toward a goal, or `wait`), as the player does.
 - A rejected Plan spends nothing, for any actor; it records one `rejected` Event naming the last Deed attempted and its reason. A monster decides once per world turn, so a rejected Plan leaves it idle that turn.
-- Every consequence is an Event naming its actor (`turned`, `stepped`, `rejected`, ...). The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
+- Every consequence is an Event naming its `actor`, and its `target` if it has one, as a `Who` snapshot (id, kind, faction, home biome): enough for narration to name and tell actors apart without the game state. The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
 - `use` pays its Ability's costs (MP, cooldown, item) itself; only it has costs beyond the turn.
 - Player-only for now: `use`, `transfer`, `prepare`, `destroy`, `learn`, `interact`, `trade` act on the player's resources. Creature-only: `summon` (hostile, falling back to its move when `blocked`) and `restock` (idle, falling back when `full`), attempted first by a ready caster's Plan. Foes are actors of different factions; only the player attacks spawners, and only lairs.
 - Afflictions are player state, not Deeds: stun rejects every Intent but `wait` before planning (`incapacityOf`); paralysis is a rejection inside `turn` and `step`, after their own checks, so a bump attack still lands.

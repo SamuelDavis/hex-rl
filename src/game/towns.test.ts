@@ -21,6 +21,8 @@ import {
   origin,
   step,
   WAIT,
+  ADVENTURER,
+  who,
 } from "./testing";
 
 const TOWN: Spawner = { kind: "town", at: { q: -3, r: 0 } };
@@ -90,21 +92,21 @@ describe("factions", () => {
     const peasant = townsfolk({ q: 4, r: -1 }, "peasant", "s");
     const next = act(gameWith([goblin, peasant]), WAIT);
     expect(next.events).toContainEqual({
-      kind: "hitCreature",
-      actor: "goblin",
-      creature: "peasant",
+      kind: "hit",
+      actor: who(goblin),
+      target: who(peasant),
     });
     expect(next.events).toContainEqual({
-      kind: "hitCreature",
-      actor: "peasant",
-      creature: "goblin",
+      kind: "hit",
+      actor: who(peasant),
+      target: who(goblin),
     });
   });
 
   test("townsfolk ignore the player", () => {
     const games = historyOf(gameWith([townsfolk(east, "bailiff")]), 5);
     for (const { events, player } of games.slice(1)) {
-      expect(events.filter(({ kind }) => kind === "struck")).toEqual([]);
+      expect(events.filter(({ kind }) => kind === "hit")).toEqual([]);
       expect(player.hp).toBeGreaterThan(0);
     }
   });
@@ -116,8 +118,8 @@ describe("factions", () => {
     const next = act(gameWith([goblin, bailiff]), WAIT);
     expect(next.events).toContainEqual({
       kind: "killed",
-      actor: "bailiff",
-      creature: "goblin",
+      actor: who(bailiff),
+      target: who(goblin),
     });
     expect(next.player.xp).toBe(0);
     expect(next.kills).toBe(0);
@@ -137,8 +139,8 @@ describe("interact", () => {
     expect(next.turn).toBe(game.turn + 1);
     expect(next.events).toContainEqual({
       kind: "interacted",
-      creature: "reeve",
-      id: hexKey(east),
+      actor: ADVENTURER,
+      target: who(game.creatures[0]!),
     });
   });
 
@@ -149,7 +151,7 @@ describe("interact", () => {
     expect(next.events).toEqual([
       {
         kind: "rejected",
-        actor: "player",
+        actor: ADVENTURER,
         action: { kind: "interact", at: east },
         reason: "uninterested",
       },
@@ -216,6 +218,8 @@ describe("trade", () => {
     expect(traderIn(next).purse).toBe(0);
     expect(next.events).toContainEqual({
       kind: "sold",
+      actor: ADVENTURER,
+      target: who(reeve),
       item: sold,
       price: offerOf(sold),
     });
@@ -274,7 +278,7 @@ describe("restock", () => {
     expect(reeve.purse).toBe(spell.purse);
     expect(stocked!.events).toContainEqual({
       kind: "restocked",
-      creature: "reeve",
+      actor: who(reeve),
     });
     const [min, max] = spell.cooldown;
     expect(reeve.readyAt - stocked!.turn + 1).toBeGreaterThanOrEqual(min);
@@ -331,6 +335,8 @@ describe("bounties", () => {
     });
     expect(posted.events).toContainEqual({
       kind: "bountied",
+      actor: who(bailiff),
+      target: ADVENTURER,
       spawner: "den",
       at: near.at,
       level: 1,
@@ -352,7 +358,8 @@ describe("bounties", () => {
     expect(slain.player.bounty?.isSlain).toBe(true);
     expect(slain.events).toContainEqual({
       kind: "bountySlain",
-      creature: "alpha wolf",
+      actor: ADVENTURER,
+      target: who(boss(east)),
     });
   });
 
@@ -360,6 +367,8 @@ describe("bounties", () => {
     const paid = talk(slay(posted));
     expect(paid.events).toContainEqual({
       kind: "rewarded",
+      actor: who(bailiff),
+      target: ADVENTURER,
       gold: BOUNTY_GOLD_PER_LEVEL,
     });
     expect(paid.player.gold).toBe(

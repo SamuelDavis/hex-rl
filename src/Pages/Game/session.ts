@@ -82,7 +82,7 @@ export const conversantOf = ({
 const addresseeOf = ({ events, creatures }: Game): Creature | undefined => {
   for (const event of events) {
     if (event.kind === "interacted")
-      return creatures.find(({ id }) => id === event.id);
+      return creatures.find(({ id }) => id === event.target.id);
     if (event.kind === "rejected" && event.action.kind === "interact") {
       const { at } = event.action;
       return at && creatures.find((creature) => sameHex(creature.at, at));
@@ -95,7 +95,7 @@ const performed = (session: Session, action: Intent): Session => {
   const { range, target, log } = session;
   const game = act(session.game, action);
   const hasStepped = game.events.some(
-    (event) => event.kind === "stepped" && event.actor === PLAYER,
+    (event) => event.kind === "stepped" && event.actor.id === PLAYER,
   );
   const interacted = game.events.find((event) => event.kind === "interacted");
   const addressee = addresseeOf(game);
@@ -105,7 +105,8 @@ const performed = (session: Session, action: Intent): Session => {
     isInventoryOpen: hasStepped
       ? game.chests.has(hexKey(game.player.at))
       : session.isInventoryOpen,
-    conversant: interacted?.id ?? (hasStepped ? undefined : session.conversant),
+    conversant:
+      interacted?.target.id ?? (hasStepped ? undefined : session.conversant),
     target: addressee
       ? targetOf(game, addressee)
       : target && tracked(game, range, target),

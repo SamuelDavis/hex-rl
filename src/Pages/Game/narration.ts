@@ -1,15 +1,13 @@
 import { abilityOf, type AbilityId } from "../../game/abilities";
 import type { Direction } from "../../game/hex";
 import {
-  factionOfCreature,
   PLAYER,
-  type Creature,
   type Intent,
-  type ActorKind,
   type Cargo,
   type GameEvent,
   type Rejection,
   type Where,
+  type Who,
 } from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
 import {
@@ -74,11 +72,6 @@ const verbOf = (action: Intent) =>
     ? usingOf(action.ability, ["quaff", "cast"])
     : VERBS[action.kind];
 
-const PLAYER_NAME = "The adventurer";
-
-const actorNameOf = (actor: ActorKind) =>
-  actor === PLAYER ? PLAYER_NAME : `The ${actor}`;
-
 const DIRECTION_NAMES: Record<Direction, string> = {
   nw: "north-west",
   n: "north",
@@ -126,11 +119,19 @@ const TOWN_STYLES: Record<Biome, string> = {
   [Biome.Marsh]: "fen",
 };
 
-/** Townsfolk take their town's biome: "coastal reeve"; monsters are their kind. */
-export const creatureNameOf = (creature: Creature, homeBiome: Biome) =>
-  factionOfCreature(creature) === "town"
-    ? `${TOWN_STYLES[homeBiome]} ${creature.kind}`
-    : creature.kind;
+/** "adventurer"; townsfolk take their town's biome, "coastal reeve"; monsters are their kind. */
+export const whoNameOf = ({ kind, faction, biome }: Who): string => {
+  if (kind === PLAYER) return "adventurer";
+  return faction === "town" && biome !== undefined
+    ? `${TOWN_STYLES[biome]} ${kind}`
+    : kind;
+};
+
+/** "the coastal reeve" */
+const the = (who: Who) => `the ${whoNameOf(who)}`;
+
+/** "The coastal reeve", to open a sentence. */
+const The = (who: Who) => `The ${whoNameOf(who)}`;
 
 export const placeOf = ({ q, r }: Hex) => `(${q}, ${r})`;
 
@@ -139,64 +140,63 @@ export const bountyOf = (spawner: SpawnerKind, at: Hex) =>
   `slay the ${bossOf(spawner)} of the ${SPAWNERS[spawner].name} at ${placeOf(at)}`;
 
 export const narrationOf = (event: GameEvent): string => {
+  const actor = The(event.actor);
   switch (event.kind) {
     case "began":
-      return `${PLAYER_NAME} sets out into the wilds.`;
+      return `${actor} sets out into the wilds.`;
     case "rejected":
-      return `${actorNameOf(event.actor)} cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
+      return `${actor} cannot ${verbOf(event.action)}: ${REASONS[event.reason]}.`;
     case "turned":
-      return `${actorNameOf(event.actor)} turns ${DIRECTION_NAMES[event.facing]}.`;
+      return `${actor} turns ${DIRECTION_NAMES[event.facing]}.`;
     case "stepped":
-      return `${actorNameOf(event.actor)} steps ${DIRECTION_NAMES[event.direction]}.`;
+      return `${actor} steps ${DIRECTION_NAMES[event.direction]}.`;
     case "used":
-      return `${PLAYER_NAME} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
-    case "hitCreature":
-      return `${actorNameOf(event.actor)} hits the ${event.creature}.`;
+      return `${actor} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
+    case "hit":
+      return `${actor} hits ${the(event.target)}.`;
     case "killed":
-      return `${actorNameOf(event.actor)} kills the ${event.creature}.`;
+      return `${actor} kills ${the(event.target)}.`;
     case "dropped":
-      return `The ${event.creature} drops a chest.`;
+      return `${actor} drops a chest.`;
     case "moved":
-      return `${PLAYER_NAME} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
+      return `${actor} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
     case "spilled":
-      return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from the pack.`;
+      return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from ${the(event.actor)}'s pack.`;
     case "prepared":
-      return `${PLAYER_NAME} prepares themselves.`;
+      return `${actor} prepares themselves.`;
     case "destroyed":
-      return `${PLAYER_NAME} destroys the chest.`;
+      return `${actor} destroys the chest.`;
     case "hitSpawner":
-      return `${PLAYER_NAME} hits the ${SPAWNERS[event.spawner].name}.`;
+      return `${actor} hits the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":
-      return `${PLAYER_NAME} wrecks the ${SPAWNERS[event.spawner].name}.`;
+      return `${actor} wrecks the ${SPAWNERS[event.spawner].name}.`;
     case "emerged":
-      return `The ${event.creature} emerges!`;
-    case "struck":
-      return `The ${event.creature} hits ${PLAYER_NAME.toLowerCase()}.`;
+      return `${actor} emerges!`;
     case "leveled":
-      return `${PLAYER_NAME} reaches level ${event.level}.`;
+      return `${actor} reaches level ${event.level}.`;
     case "learned":
-      return `${PLAYER_NAME} learns ${event.spell} (level ${event.level}).`;
+      return `${actor} learns ${event.spell} (level ${event.level}).`;
     case "summoned":
-      return `The ${event.creature} summons ${counted(event.count, event.summoned)}.`;
+      return `${actor} summons ${counted(event.count, event.summoned)}.`;
     case "afflicted":
-      return `${PLAYER_NAME} ${AFFLICTION_VERBS[event.affliction]} for ${counted(event.turns, "turn")}.`;
+      return `${The(event.target)} ${AFFLICTION_VERBS[event.affliction]} for ${counted(event.turns, "turn")}.`;
     case "bled":
-      return `${PLAYER_NAME} bleeds.`;
+      return `${actor} bleeds.`;
     case "died":
-      return `${PLAYER_NAME} dies.`;
+      return `${actor} dies.`;
     case "restocked":
-      return `The ${event.creature} restocks their wares.`;
+      return `${actor} restocks their wares.`;
     case "interacted":
-      return `${PLAYER_NAME} hails the ${event.creature}.`;
+      return `${actor} hails ${the(event.target)}.`;
     case "bought":
-      return `${PLAYER_NAME} buys the ${nameOf(event.item)} for ${event.price} gold.`;
+      return `${actor} buys the ${nameOf(event.item)} from ${the(event.target)} for ${event.price} gold.`;
     case "sold":
-      return `${PLAYER_NAME} sells the ${nameOf(event.item)} for ${event.price} gold.`;
+      return `${actor} sells the ${nameOf(event.item)} to ${the(event.target)} for ${event.price} gold.`;
     case "bountied":
-      return `The bailiff posts a bounty: ${bountyOf(event.spawner, event.at)}.`;
+      return `${actor} posts a bounty: ${bountyOf(event.spawner, event.at)}.`;
     case "bountySlain":
-      return `${PLAYER_NAME} slays the bounty; a bailiff will pay.`;
+      return `${actor} slays ${the(event.target)}; a bailiff will pay.`;
     case "rewarded":
-      return `The bailiff pays ${PLAYER_NAME.toLowerCase()} ${event.gold} gold.`;
+      return `${actor} pays ${the(event.target)} ${event.gold} gold.`;
   }
 };
