@@ -42,6 +42,7 @@ import {
   loadOf,
   lootOf,
   overflowOf,
+  takenOf,
   PLACE_NAMES,
   PLACES,
   type Chest,
@@ -183,6 +184,10 @@ export interface Prepare {
   readonly kind: "prepare";
 }
 
+export interface TakeAll {
+  readonly kind: "take-all";
+}
+
 export interface Destroy {
   readonly kind: "destroy";
 }
@@ -203,6 +208,7 @@ type Deed =
   | Wait
   | Use
   | Transfer
+  | TakeAll
   | Prepare
   | Destroy
   | Learn
@@ -670,6 +676,37 @@ const transfer: Rule<Transfer> = (game, action) =>
   action.cargo === GOLD
     ? transferGold(game, action)
     : transferItem(game, action);
+
+const takeAll: Rule<TakeAll> = (game) => {
+  const { at, pack, equipment, gold } = game.player;
+  const chest = chestAt(game, at);
+  if (!chest) return refused("no-chest");
+  const room = capacityOf(equipment) - loadOf(pack);
+  const rng = rngOf(game.land.seed, "take", game.turn);
+  const taken = takenOf(chest.items, room, rng);
+  if (chest.gold === 0 && taken.length === 0) return refused("full");
+  const cargo: readonly Cargo[] = [
+    ...(chest.gold > 0 ? [{ kind: "gold", amount: chest.gold } as const] : []),
+    ...taken,
+  ];
+  const next = withChest(
+    withPlayer(game, { gold: gold + chest.gold, pack: [...pack, ...taken] }),
+    at,
+    { gold: 0, items: chest.items.filter((item) => !taken.includes(item)) },
+  );
+  return performed(
+    cargo.reduce(
+      (taking, moved) =>
+        recorded(taking, {
+          kind: "moved",
+          cargo: moved,
+          from: "ground",
+          to: "pack",
+        }),
+      next,
+    ),
+  );
+};
 
 const destroy: Rule<Destroy> = (game) => {
   if (!chestAt(game, game.player.at)) return refused("no-chest");
@@ -1181,6 +1218,7 @@ const RULES: {
   wait: (game) => performed(game),
   use,
   transfer,
+  "take-all": takeAll,
   prepare: (game) => performed(recorded(game, { kind: "prepared" })),
   destroy,
   learn,

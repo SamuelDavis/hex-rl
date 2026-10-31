@@ -8,6 +8,7 @@ import {
   type GameEvent,
   type Learn,
   type Prepare,
+  type TakeAll,
   type Transfer,
 } from "../../game/game";
 import { hexKey, type Hex } from "../../game/hex";
@@ -34,6 +35,7 @@ export type Message =
   | { readonly kind: "inventory" }
   | { readonly kind: "dismiss" }
   | Transfer
+  | TakeAll
   | Prepare
   | Destroy
   | Learn
@@ -89,6 +91,7 @@ export const update = (session: Session, message: Message): Session => {
       return { ...session, target: nextTarget(game, range, target) };
     }
     case "transfer":
+    case "take-all":
     case "prepare":
     case "destroy":
     case "learn":

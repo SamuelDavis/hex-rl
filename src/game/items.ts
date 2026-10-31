@@ -155,21 +155,35 @@ export const capacityOf = (equipment: Equipment): number =>
     BASE_CAPACITY,
   );
 
+const smallestFirst = (items: readonly Item[], rng: Rng): Item[] =>
+  rng.shuffle(items, 0).sort((a, b) => sizeOf(a) - sizeOf(b));
+
 /** Spills the largest items, ties broken by `rng`, until `capacity` holds the rest. */
 export const overflowOf = (
   items: readonly Item[],
   capacity: number,
   rng: Rng,
 ): { readonly kept: readonly Item[]; readonly spilled: readonly Item[] } => {
-  const spillOrder = rng
-    .shuffle(items, 0)
-    .sort((a, b) => sizeOf(b) - sizeOf(a));
   const spilled: Item[] = [];
-  for (const item of spillOrder) {
+  for (const item of smallestFirst(items, rng).reverse()) {
     if (loadOf(items) - loadOf(spilled) <= capacity) break;
     spilled.push(item);
   }
   return { kept: items.filter((item) => !spilled.includes(item)), spilled };
+};
+
+/** Takes the smallest items, ties broken by `rng`, while `room` holds them. */
+export const takenOf = (
+  items: readonly Item[],
+  room: number,
+  rng: Rng,
+): readonly Item[] => {
+  const taken: Item[] = [];
+  for (const item of smallestFirst(items, rng)) {
+    if (loadOf(taken) + sizeOf(item) > room) break;
+    taken.push(item);
+  }
+  return taken;
 };
 
 const ITEM_WEIGHTS: readonly (readonly [PotionKind | GearKind, number])[] = [

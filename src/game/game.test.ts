@@ -887,6 +887,43 @@ describe("transfer", () => {
     expect(next.events).toContainEqual({ kind: "spilled", items: [shirt] });
   });
 
+  test("taking all takes the gold and the smallest items that fit, spending a turn", () => {
+    const game = withLoot(
+      { gold: 4, items: [shirt, potion, pants, helm] },
+      { pack: [boots, gearOf("gloves", "gloves")] },
+    );
+    const next = act(game, { kind: "take-all" });
+    expect(next.turn).toBe(1);
+    expect(next.player.gold).toBe(4);
+    expect(next.player.pack.map(({ id }) => id)).toEqual([
+      "boots",
+      "gloves",
+      "potion",
+      "helm",
+      "pants",
+    ]);
+    expect(next.chests.get(here)).toEqual({ gold: 0, items: [shirt] });
+    expect(next.events).toContainEqual({
+      kind: "moved",
+      cargo: { kind: "gold", amount: 4 },
+      from: "ground",
+      to: "pack",
+    });
+  });
+
+  test("taking all rejects a missing chest and a full pack, spending no turn", () => {
+    const takeAll: Intent = { kind: "take-all" };
+    const full = withLoot({ items: [helm] }, { pack: [shirt, shirt] });
+    for (const [game, reason] of [
+      [facingEast(), "no-chest"],
+      [full, "full"],
+    ] as const) {
+      const next = act(game, takeAll);
+      expect(next.events).toEqual([rejection(takeAll, reason)]);
+      expect(next.turn).toBe(0);
+    }
+  });
+
   test("destroying a chest clears it and all it holds, spending a turn", () => {
     const next = act(withLoot({ gold: 9, items: [helm] }), { kind: "destroy" });
     expect(next.chests.has(here)).toBe(false);

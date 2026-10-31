@@ -42,6 +42,7 @@ const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
   attack: "attack",
   wait: "wait",
   transfer: "move that",
+  "take-all": "take anything",
   prepare: "prepare",
   destroy: "destroy",
   learn: "learn",

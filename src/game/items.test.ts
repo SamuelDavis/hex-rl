@@ -7,6 +7,7 @@ import {
   nameOf,
   overflowOf,
   placeFor,
+  takenOf,
   type GearKind,
   type Item,
 } from "./items";
@@ -133,6 +134,36 @@ describe("overflowOf", () => {
     for (const spill of spills) expect(spill.slice(0, 2)).toEqual(["c", "p"]);
     expect(new Set(spills.map((spill) => spill[2])).size).toBeGreaterThan(1);
     expect(spillOf(1)).toEqual(spillOf(1));
+  });
+});
+
+describe("takenOf", () => {
+  const lying = [
+    gear("c", "chest"),
+    gear("h", "helm"),
+    gear("p", "pants"),
+    { id: "m", kind: "potion", potion: "mana" } as const,
+    gear("g", "gloves"),
+  ];
+
+  test("takes the smallest items first while they fit", () => {
+    const taken = takenOf(lying, 4, rngOf(0)).map(({ id }) => id);
+    expect(taken[0]).toBe("m");
+    expect(taken.slice(1, 3).sort()).toEqual(["g", "h"]);
+    expect(taken.slice(3)).toEqual(["p"]);
+  });
+
+  test("takes everything when it all fits, nothing sized when nothing fits", () => {
+    expect(takenOf(lying, 7, rngOf(0))).toHaveLength(lying.length);
+    expect(takenOf(lying, 0, rngOf(0)).map(({ id }) => id)).toEqual(["m"]);
+  });
+
+  test("breaks ties between same-size items at random, deterministically", () => {
+    const takeOf = (seed: number) =>
+      takenOf(lying, 1, rngOf(seed)).map(({ id }) => id);
+    const takes = Array.from({ length: 30 }, (_, seed) => takeOf(seed));
+    expect(new Set(takes.map((take) => take[1])).size).toBe(2);
+    expect(takeOf(1)).toEqual(takeOf(1));
   });
 });
 

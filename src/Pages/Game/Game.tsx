@@ -732,6 +732,14 @@ function InventoryPanel(props: {
       </section>
       <section>
         <h4>{getChest() ? "Chest" : "Ground"}</h4>
+        <Show when={getChest()}>
+          <button
+            type="button"
+            onClick={() => props.dispatch({ kind: "take-all" })}
+          >
+            Take all
+          </button>
+        </Show>
         <ul class="max-h-[33vh] overflow-y-auto">
           <Show when={(getChest()?.gold ?? 0) > 0}>
             <li>
