@@ -39,6 +39,8 @@ export interface Game {
   readonly seq: number;
   /** What lies on the ground, by hex key; a chest is never empty. */
   readonly chests: ReadonlyMap<string, Chest>;
+  /** Tiles reshaped in play (settlements' clearings), by hex key, over the land's. */
+  readonly altered: ReadonlyMap<string, Tile>;
   /** Hexes the player has seen, by key. */
   readonly seen: ReadonlySet<string>;
   readonly turn: number;
@@ -52,10 +54,15 @@ export const emptyGame = (land: Land): Game => ({
   occupants: new Map(),
   seq: 0,
   chests: new Map(),
+  altered: new Map(),
   seen: new Set(),
   turn: 0,
   events: [],
 });
+
+/** The tile at `hex` as it now is: reshaped in play, else the land's. */
+export const tileAt = (game: Game, hex: Hex): Tile =>
+  game.altered.get(hexKey(hex)) ?? game.land.tileAt(hex);
 
 /** `id`, if it exists and has every component named. */
 export const withOf = <K extends ComponentName>(
@@ -106,8 +113,14 @@ export const isBlocked = (game: Game, hex: Hex): boolean =>
   game.occupants.has(hexKey(hex));
 
 /** Whether a step from `from` could reach `to`, ignoring who stands there. */
-export const isInReach = ({ land }: Game, from: Hex, to: Hex): boolean =>
-  canStep(land.tileAt, from, to);
+/** `tileAt` bound to `game`, for code that reads tiles by hex alone. */
+export const tilesOf =
+  (game: Game) =>
+  (hex: Hex): Tile =>
+    tileAt(game, hex);
+
+export const isInReach = (game: Game, from: Hex, to: Hex): boolean =>
+  canStep(tilesOf(game), from, to);
 
 export const isBeside = (game: Game, from: Hex, to: Hex): boolean =>
   directionBetween(from, to) !== undefined && isInReach(game, from, to);

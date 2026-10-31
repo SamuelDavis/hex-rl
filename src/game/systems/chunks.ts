@@ -1,7 +1,9 @@
 import { cellKey, grid, type Bounds, type Cell } from "procgen";
 import { spawnerEntityOf, spawnerIdOf } from "../archetypes";
+import { clearingOf, isSettlement } from "../content/settlements";
+import { reshaped } from "../settlements";
 import { centerOf, type Hex } from "../hex";
-import { CHUNK } from "../terrain";
+import { CHUNK, type Spawner } from "../terrain";
 import { entitiesWith, inserted, type Game } from "../world";
 
 /** Chunks from each seat's, in every direction, whose entities are processed. `SIMULATION_RADIUS × CHUNK` spans more than `SIGHT` hexes, so nothing a seat sees is frozen. */
@@ -31,6 +33,14 @@ const activeBoundsOf = (game: Game): readonly Bounds[] => [
   ).values(),
 ];
 
+/** Adds `spawner`; a settlement reshapes the ground around it. */
+const placed = (game: Game, spawner: Spawner): Game => {
+  const added = inserted(game, spawnerEntityOf(spawner));
+  return isSettlement(spawner.kind)
+    ? reshaped(added, spawner.at, clearingOf(spawner.kind))
+    : added;
+};
+
 /** Adds the spawners of newly active chunks; once added, they persist like any entity. */
 export const materialised = (game: Game): Game => {
   const active = activeOf(game);
@@ -41,7 +51,7 @@ export const materialised = (game: Game): Game => {
       (state, spawner) =>
         state.entities.has(spawnerIdOf(spawner.at))
           ? state
-          : inserted(state, spawnerEntityOf(spawner)),
+          : placed(state, spawner),
       game,
     );
 };

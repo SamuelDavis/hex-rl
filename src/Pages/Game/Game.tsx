@@ -40,6 +40,8 @@ import {
   MAX_HP,
   MAX_MP,
   spawnersOf,
+  tileAt,
+  tilesOf,
   spellLevelOf,
   unlocksOf,
   visibleOf,
@@ -148,7 +150,7 @@ export default function Game() {
     if (message) dispatch(message);
   };
   const getGame = () => getSession().game;
-  const getTile = () => getGame().land.tileAt(playerOf(getGame()).at);
+  const getTile = () => tileAt(getGame(), playerOf(getGame()).at);
   const getVisible = createMemo(() => visibleOf(getGame()));
   const getRange = createMemo(() => screenRadiusOf(getSize()));
   const isAiming = () => getSession().mode.kind === "aim";
@@ -269,7 +271,7 @@ export default function Game() {
     if (!canvas) return;
     const { width, height } = getSize();
     const game = getGame();
-    const { land, chests, seen } = game;
+    const { chests, seen } = game;
     const player = playerOf(game);
     const ratio = window.devicePixelRatio;
     canvas.width = width * ratio;
@@ -278,7 +280,7 @@ export default function Game() {
     context.scale(ratio, ratio);
     drawScene(context, {
       theme: CANVAS_THEMES[getTheme()],
-      tileAt: land.tileAt,
+      tileAt: tilesOf(game),
       spawnersIn: (bounds) => spawnersOf(game, bounds),
       isWrecked: (spawner) => isWrecked(game, spawner),
       player,
@@ -1361,7 +1363,7 @@ function OtherPanel(props: {
   restart: () => void;
 }) {
   const key = (id: ControlId) => <kbd>{hotkeyOf(props.keymap, id)}</kbd>;
-  const getTile = () => props.game.land.tileAt(playerOf(props.game).at);
+  const getTile = () => tileAt(props.game, playerOf(props.game).at);
   return (
     <>
       <div class="flex flex-wrap gap-(--pico-spacing)">

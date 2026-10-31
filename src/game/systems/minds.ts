@@ -25,6 +25,7 @@ import {
   updated,
   type Creature,
   type Game,
+  tilesOf,
 } from "../world";
 
 export const HUNT_RADIUS = 4;
@@ -117,7 +118,7 @@ const mindOf = (game: Game, creature: Creature): Mind => {
     .filter(
       (foe) =>
         distanceOf(foe) <= SIGHT &&
-        canNotice(game.land.tileAt, at, facing, foe.at),
+        canNotice(tilesOf(game), at, facing, foe.at),
     )
     .sort(
       (a, b) => threatOf(a) - threatOf(b) || distanceOf(a) - distanceOf(b),

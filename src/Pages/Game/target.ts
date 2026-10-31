@@ -1,6 +1,7 @@
 import {
   creaturesOf,
   playerOf,
+  tilesOf,
   visibleOf,
   type Game,
   type Creature,
@@ -16,8 +17,8 @@ export interface Target {
   readonly seenTurn: number;
 }
 
-export const sightOf = ({ land }: Game, { at, facing }: Creature) =>
-  visibleFrom(land.tileAt, at, facing);
+export const sightOf = (game: Game, { at, facing }: Creature) =>
+  visibleFrom(tilesOf(game), at, facing);
 
 const targetsOf = (game: Game, range: number): readonly Creature[] => {
   const visible = visibleOf(game);

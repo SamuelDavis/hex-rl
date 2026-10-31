@@ -15,6 +15,7 @@ import {
   whoIs,
   withOf,
   type Game,
+  tilesOf,
 } from "../world";
 import {
   performed,
@@ -90,7 +91,7 @@ const aimProblemOf = (
   }
   if (aim.kind === "hex") {
     if (!at || hexDistance(from, at) > aim.range) return "out-of-range";
-    if (!visibleFrom(game.land.tileAt, from, facing).has(hexKey(at)))
+    if (!visibleFrom(tilesOf(game), from, facing).has(hexKey(at)))
       return "out-of-sight";
   }
   return undefined;

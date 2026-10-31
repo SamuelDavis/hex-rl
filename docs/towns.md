@@ -1,6 +1,6 @@
 # Towns
 
-Contract for townsfolk, factions, interaction, trade, bounties and settlement growth. Data in `src/game/content/creatures.ts`, `content/factions.ts` and `content/settlements.ts`, rules in `src/game/actions/towns.ts`, `src/game/quests.ts` and `src/game/settlements.ts`, tests in `src/game/towns.test.ts` and `src/game/settlements.test.ts`.
+Contract for townsfolk, factions, interaction, trade, bounties, settlement growth and the ground it reshapes. Data in `src/game/content/creatures.ts`, `content/factions.ts` and `content/settlements.ts`, rules in `src/game/actions/towns.ts`, `src/game/quests.ts` and `src/game/settlements.ts`, tests in `src/game/towns.test.ts` and `src/game/settlements.test.ts`.
 
 ## Vocabulary
 
@@ -35,11 +35,18 @@ Contract for townsfolk, factions, interaction, trade, bounties and settlement gr
 
 ## Growth
 
-- Paying a bounty grows the paying bailiff's home settlement (`grown`): one `townLevel`, recorded `grew`. A bailiff whose home isn't a settlement in play grows nothing.
-- Reaching a tier's `level` (`TIERS`: keep at 4, castle at 8) changes the spawner's kind (`rose`): its hit points rise by the difference, its folk are rehomed to the new kind, and its new boss emerges on its next turn.
-- Each level founds one outpost (`founded`) of a kind it lacks: on a free, dry, treeless hex within `OUTPOST_REACH`, not beside its settlement or any spawner, where its `OUTPOSTS` test passes on the site or a neighbour (docks by water, gold mine by mountains, sawmill by trees, bazaar by desert, stables and farm on plains; barracks and smithy anywhere). Kind and site are seeded by the settlement's hex and level. No suitable site, no outpost.
+- Paying a bounty grows the paying bailiff's home settlement (`grown`): one `townLevel` (`grew`), then one outpost (`founded`), then its tier (`rose`). A bailiff whose home isn't a settlement in play grows nothing.
+- Outposts: one per level, of a kind it lacks and whose `needs` tier it has reached (barracks and stables a keep), on a free, dry, treeless hex within `OUTPOST_REACH`, not beside its settlement or any spawner, where its `suits` test passes on the site or a neighbour (docks by water, gold mine by mountains, sawmill by trees, bazaar by desert, stables and farm on plains; barracks and smithy anywhere). Kind and site are seeded by the settlement's hex and level. No suitable site, no outpost. Founding before rising means a town founds once before it is a keep.
+- Tiers (`TIERS`: keep at level 2, castle at 4): the spawner's kind changes, its hit points rise by the difference, its folk are rehomed to the new kind, and its new boss emerges on its next turn.
 - Barons, dukes and outposts' folk offer no Service yet.
-- Spawners in play may differ from terrain's (risen or founded); the UI reads `spawnersOf`.
+
+## Ground
+
+Settlements reshape the land as they grow, so a settlement and its outposts read as one place (`reshaped`, `src/game/settlements.ts`):
+
+- Every clearing levels the ground within its radius (`clearingOf`: outpost 1, town 2, keep 3, castle 4) to its settlement's ground and clears trees; the `SMOOTHING` band (2 hexes) beyond eases ground linearly back to the land's. Where clearings overlap, the one whose edge is nearest wins. Water is never touched.
+- Reshaped tiles live in `Game.altered`, over the land; everything reads tiles through `tileAt(game, hex)` / `tilesOf(game)`, never `land.tileAt`. They are recomputed around a settlement when it materialises or rises, and around an outpost when founded.
+- Terrain's `settledAt` still levels each town's `TOWN_CLEARING` so siting and the spawn point stay pure; the reshape on materialising adds its smoothing.
 
 ## UI
 

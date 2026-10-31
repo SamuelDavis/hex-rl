@@ -16,7 +16,7 @@ Contract for how game state, behaviour and content are organised in `src/game/`:
 | Component | One concern's data: a small interface of flat fields. | `components.ts`, `Components` |
 | Entity | An id, a kind, a spawn `seq`, and any subset of components' fields. Plain data, never a class. | `Entity`, `With<K>`, `has` |
 | Archetype | Which components a kind of entity is built with. The only place content becomes entities. | `archetypes.ts` |
-| Game | Entities in spawn order, an occupancy index, chests, seen hexes, turn, events. | `Game`, `world.ts` |
+| Game | Entities in spawn order, an occupancy index, chests, tiles reshaped in play (`altered`, read via `tileAt`), seen hexes, turn, events. | `Game`, `world.ts` |
 | System | Pure function over entities with given components; one concern, one module. Per-entity ones are phases of each entity's turn (`TURN`); world-level ones run after (`UPKEEP`). | `systems/`, `TURN`, `UPKEEP` |
 | Agent | An entity that chooses Intents: a `seat` (a human's, given them) or a `mind` (chooses its own by its components: a creature's Mind, a spawner's spawning). | `Agent.controller` |
 | Intent / Deed / Rule / Plan | As in [action-pipeline.md](action-pipeline.md), for any entity with `agent`. | `actions/` |
@@ -132,7 +132,7 @@ src/game/
   health.ts       damage, depletion, loot
   progression.ts  levels, mastery, kill credit
   quests.ts       bounties
-  settlements.ts  settlement growth: levels, tiers, outposts
+  settlements.ts  settlement growth: levels, tiers, outposts, reshaped ground
   chests.ts       ground chests
   tick.ts         tick, immediate, act, newGame, UPKEEP
   actions/        Deeds, Rules, Plans (one module per Rule family), pipeline

@@ -5,6 +5,8 @@ export {
   isOver,
   playerOf,
   spawnersOf,
+  tileAt,
+  tilesOf,
   whoOf,
   type Creature,
   type Game,

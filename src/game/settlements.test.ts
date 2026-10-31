@@ -13,7 +13,7 @@ import {
 } from "./hex";
 import { grown, OUTPOST_REACH } from "./settlements";
 import { Biome, type Spawner, type Tile } from "./terrain";
-import { entitiesWith, withOf } from "./world";
+import { entitiesWith, tileAt, withOf } from "./world";
 import {
   creature,
   east,
@@ -74,6 +74,7 @@ describe("settlements", () => {
         kind: "founded",
         target: expect.objectContaining({ kind: outpost!.kind }),
       }),
+      expect.objectContaining({ kind: "rose", into: "keep" }),
     ]);
   });
 
@@ -110,31 +111,37 @@ describe("settlements", () => {
           expect(hexDistance(outpost.at, other.at)).toBeGreaterThan(1);
   });
 
-  test("at level 4 the town becomes a keep, at 8 a castle", () => {
-    const keep = grownTimes(game, 3);
+  test("at level 2 the town becomes a keep, at 4 a castle", () => {
+    const keep = grownTimes(game, 1);
     expect(settlementOf(keep).kind).toBe("keep");
     expect(eventsOf(keep)).toContainEqual(
       expect.objectContaining({ kind: "rose", into: "keep" }),
     );
-    expect(settlementOf(grownTimes(game, 7)).kind).toBe("castle");
+    expect(settlementOf(grownTimes(game, 2)).kind).toBe("keep");
+    expect(settlementOf(grownTimes(game, 3)).kind).toBe("castle");
+  });
+
+  test("barracks and stables wait for a keep", () => {
+    const [first] = outpostsOf(grownTimes(game, 1));
+    expect(["smithy", "farm"]).toContain(first!.kind);
   });
 
   test("rising toughens it", () => {
-    const keep = grownTimes(game, 3);
+    const keep = grownTimes(game, 1);
     expect(settlementOf(keep).maxHp).toBeGreaterThan(settlementOf(game).maxHp);
   });
 
   test("its folk move with it, and its new boss comes first", () => {
     const bailiff = creature(east, "bailiff", "nw", TOWN);
     const peopled = withCreatures(game, [bailiff]);
-    const keep = act(grownTimes(peopled, 3), WAIT);
+    const keep = act(grownTimes(peopled, 1), WAIT);
     const folk = folkOf(keep);
     expect(folk.map(({ kind }) => kind).sort()).toEqual(["bailiff", "baron"]);
     for (const { home } of folk) expect(home.kind).toBe("keep");
   });
 
   test("a castle keeps a duke, a baron and a bailiff", () => {
-    const castle = grownTimes(game, 7);
+    const castle = grownTimes(game, 3);
     const peopled = Array.from({ length: 40 }).reduce<Game>(
       (state) => act(state, WAIT),
       castle,
@@ -168,5 +175,66 @@ describe("settlements", () => {
     expect(has(wild.entities.get(spawnerIdOf(lair.at))!, "settlement")).toBe(
       false,
     );
+  });
+
+  describe("ground", () => {
+    /** Rising one block per hex from the town outward. */
+    const slope = Object.fromEntries(
+      hexesWithin(16).map((offset) => [
+        hexKey(add(TOWN.at, offset)),
+        land(10 + hexDistance(offset, { q: 0, r: 0 })),
+      ]),
+    );
+    const sloped = gameWith([], landOf(slope, [TOWN]));
+    /** Ground at each distance from the town, along hexes far from every outpost. */
+    const profileOf = (state: Game) => {
+      const remote = (hex: Hex) =>
+        outpostsOf(state).every(({ at }) => hexDistance(at, hex) > 3);
+      return Array.from({ length: 7 }, (_, d) => {
+        const hex = hexesWithin(d)
+          .map((offset) => add(TOWN.at, offset))
+          .find((each) => hexDistance(each, TOWN.at) === d && remote(each))!;
+        return tileAt(state, hex).ground;
+      });
+    };
+
+    test("a town levels 2 hexes around it, smoothing 2 beyond", () => {
+      expect(profileOf(sloped)).toEqual([10, 10, 10, 11, 13, 15, 16]);
+    });
+
+    test("a keep levels 3, a castle 4", () => {
+      expect(profileOf(grownTimes(sloped, 1))).toEqual([
+        10, 10, 10, 10, 11, 13, 16,
+      ]);
+      expect(profileOf(grownTimes(sloped, 3)).slice(0, 6)).toEqual([
+        10, 10, 10, 10, 10, 12,
+      ]);
+    });
+
+    test("outposts level 1 hex around them to their settlement's ground, clearing trees", () => {
+      const wooded = Object.fromEntries(
+        hexesWithin(16).map((offset) => [
+          hexKey(add(TOWN.at, offset)),
+          land(10 + hexDistance(offset, { q: 0, r: 0 }), offset.q % 2 === 0),
+        ]),
+      );
+      const state = grownTimes(gameWith([], landOf(wooded, [TOWN])), 3);
+      expect(outpostsOf(state).length).toBeGreaterThan(0);
+      for (const { at } of outpostsOf(state))
+        for (const offset of hexesWithin(1))
+          expect(tileAt(state, add(at, offset))).toMatchObject({
+            ground: 10,
+            tree: false,
+          });
+    });
+
+    test("water is never leveled", () => {
+      const pond = { q: TOWN.at.q + 1, r: TOWN.at.r };
+      const wet = gameWith(
+        [],
+        landOf({ ...slope, [hexKey(pond)]: water }, [TOWN]),
+      );
+      expect(tileAt(wet, pond)).toEqual(water);
+    });
   });
 });
