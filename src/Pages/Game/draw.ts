@@ -38,14 +38,19 @@ const TILT = 0.7;
 const PIXELS_PER_BLOCK = 7;
 const MAX_RELIEF = 40;
 const SIDE_SHADE = -14;
-const EDGE_SHADE = -6;
-const SHADOW = "rgb(0 0 0 / 0.35)";
-const WATCHED = "hsl(0 90% 50% / 0.15)";
-const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
+const SHADOW = "hsl(15 25% 9% / 0.4)";
+const GROOVE = "hsl(15 25% 9% / 0.45)";
+const HATCH_SPACING = 3;
+const WAVES = [
+  { x: -0.45, y: -0.2, length: 0.4 },
+  { x: 0.05, y: 0.25, length: 0.45 },
+];
+const WATCHED = "hsl(5 63% 53% / 0.18)";
+const WATCHED_EDGE = "hsl(5 63% 58% / 0.8)";
 const WATCHED_EDGE_WIDTH = 2;
-const TARGETED: Hsl = [110, 100, 55];
-const AIMED: Hsl = [25, 100, 55];
-const AIM_AREA = "hsl(25 100% 55% / 0.3)";
+const TARGETED: Hsl = [43, 58, 80];
+const AIMED: Hsl = [36, 75, 55];
+const AIM_AREA = "hsl(36 75% 55% / 0.3)";
 const OUTLINE = 2.4;
 const ETCH = 1.2;
 const FIGURE_SIZE = PIXELS_PER_UNIT * 1.5;
@@ -66,27 +71,27 @@ type Hsl = readonly [hue: number, saturation: number, lightness: number];
 type Palette = Readonly<Record<Tone, Hsl>>;
 
 const GROUND: Record<Biome, Hsl> = {
-  [Biome.Ocean]: [40, 30, 55],
-  [Biome.Beach]: [45, 60, 75],
-  [Biome.Desert]: [38, 55, 65],
-  [Biome.Plains]: [95, 45, 50],
-  [Biome.Forest]: [110, 45, 38],
-  [Biome.Taiga]: [140, 25, 38],
-  [Biome.Tundra]: [200, 20, 88],
-  [Biome.Mountain]: [30, 5, 52],
-  [Biome.Peak]: [210, 30, 96],
-  [Biome.Marsh]: [75, 30, 38],
+  [Biome.Ocean]: [35, 20, 45],
+  [Biome.Beach]: [42, 45, 70],
+  [Biome.Desert]: [34, 45, 58],
+  [Biome.Plains]: [62, 24, 44],
+  [Biome.Forest]: [75, 20, 33],
+  [Biome.Taiga]: [95, 12, 31],
+  [Biome.Tundra]: [40, 18, 74],
+  [Biome.Mountain]: [25, 8, 42],
+  [Biome.Peak]: [43, 40, 86],
+  [Biome.Marsh]: [55, 18, 29],
 };
 
 const CANOPY: Record<Biome, Hsl> = {
   ...GROUND,
-  [Biome.Forest]: [115, 50, 26],
-  [Biome.Plains]: [105, 45, 32],
-  [Biome.Taiga]: [150, 35, 22],
-  [Biome.Tundra]: [150, 25, 30],
-  [Biome.Desert]: [90, 40, 35],
-  [Biome.Mountain]: [140, 30, 25],
-  [Biome.Marsh]: [95, 30, 24],
+  [Biome.Forest]: [85, 26, 24],
+  [Biome.Plains]: [75, 26, 30],
+  [Biome.Taiga]: [110, 18, 21],
+  [Biome.Tundra]: [110, 14, 28],
+  [Biome.Desert]: [65, 24, 32],
+  [Biome.Mountain]: [100, 16, 23],
+  [Biome.Marsh]: [70, 20, 22],
 };
 
 const CONIFERS: ReadonlySet<Biome> = new Set([
@@ -94,8 +99,6 @@ const CONIFERS: ReadonlySet<Biome> = new Set([
   Biome.Tundra,
   Biome.Mountain,
 ]);
-
-const FOG: Hsl = [220, 15, 12];
 
 const PALETTE: Palette = {
   ink: [15, 25, 9],
@@ -140,7 +143,7 @@ const css = ([h, s, l]: Hsl, shade = 0) =>
 
 const colorOf = (tile: Tile): Hsl => {
   if (tile.water !== undefined)
-    return [210, 60, Math.max(22, 52 - 4 * (tile.water - tile.ground))];
+    return [205, 22, Math.max(16, 40 - 4 * (tile.water - tile.ground))];
   const [h, s, l] = GROUND[tile.biome];
   return [h, s, l + 0.8 * (tile.ground - SEA_LEVEL)];
 };
@@ -228,7 +231,7 @@ export const drawScene = (
       .map((monster) => [hexKey(monster.at), monster]),
   );
 
-  context.fillStyle = css(FOG);
+  context.fillStyle = css(PALETTE.ink);
   context.fillRect(0, 0, width, height);
   context.lineWidth = 0.6;
 
@@ -259,19 +262,25 @@ export const drawScene = (
     ]);
 
     if (bottom < top) {
+      const rim = FRONT_CORNERS.map((i) => corner(i, top));
       polygon([
-        ...FRONT_CORNERS.map((i) => corner(i, top)),
+        ...rim,
         ...[...FRONT_CORNERS].reverse().map((i) => corner(i, bottom)),
       ]);
       context.fillStyle = css(color, SIDE_SHADE);
+      context.strokeStyle = GROOVE;
       context.fill();
+      context.stroke();
+      hatch(context, rim, (top - bottom) * PIXELS_PER_BLOCK);
     }
     const face = CORNERS.map((_, i) => corner(i, top));
     polygon(face);
     context.fillStyle = css(color);
-    context.strokeStyle = css(color, EDGE_SHADE);
+    context.strokeStyle = GROOVE;
     context.fill();
     context.stroke();
+    if (tile.water !== undefined)
+      etchWaves(context, project(center, top), css(color, 12));
     const watched = target?.kind === "seen" ? target.sight : undefined;
     if (watched?.has(hexKey(hex))) {
       polygon(face);
@@ -332,6 +341,47 @@ export const drawScene = (
     if (sameHex(hex, player.at))
       drawFigure(context, PLAYER_FIGURE, base, headingOf(player.facing));
   }
+};
+
+const hatch = (
+  context: CanvasRenderingContext2D,
+  rim: readonly Vec2[],
+  drop: number,
+) => {
+  context.beginPath();
+  rim.slice(1).forEach((to, i) => {
+    const from = rim[i]!;
+    const strokes = Math.floor(
+      Math.hypot(to.x - from.x, to.y - from.y) / HATCH_SPACING,
+    );
+    for (let k = 1; k < strokes; k++) {
+      const x = from.x + ((to.x - from.x) * k) / strokes;
+      const y = from.y + ((to.y - from.y) * k) / strokes;
+      context.moveTo(x, y);
+      context.lineTo(x, y + drop);
+    }
+  });
+  context.strokeStyle = GROOVE;
+  context.stroke();
+};
+
+const etchWaves = (
+  context: CanvasRenderingContext2D,
+  { x, y }: Vec2,
+  crest: string,
+) => {
+  context.beginPath();
+  for (const wave of WAVES) {
+    const left = x + wave.x * PIXELS_PER_UNIT;
+    const top = y + wave.y * PIXELS_PER_UNIT * TILT;
+    context.moveTo(left, top);
+    context.lineTo(left + wave.length * PIXELS_PER_UNIT, top);
+  }
+  context.strokeStyle = crest;
+  context.lineCap = "round";
+  context.lineWidth = ETCH;
+  context.stroke();
+  context.lineWidth = 0.6;
 };
 
 const headingOf = (direction: Direction): Vec2 => {
