@@ -15,7 +15,7 @@ import {
   SPAWNERS,
   type Affliction,
   type SpawnerKind,
-} from "../../game/monsters";
+} from "../../game/creatures";
 import type { Hex } from "../../game/hex";
 
 const REASONS: Record<Rejection, string> = {
@@ -128,12 +128,12 @@ export const narrationOf = (event: GameEvent): string => {
       return `${actorNameOf(event.actor)} steps ${DIRECTION_NAMES[event.direction]}.`;
     case "used":
       return `${PLAYER_NAME} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
-    case "hitMonster":
-      return `${actorNameOf(event.actor)} hits the ${event.monster}.`;
+    case "hitCreature":
+      return `${actorNameOf(event.actor)} hits the ${event.creature}.`;
     case "killed":
-      return `${actorNameOf(event.actor)} kills the ${event.monster}.`;
+      return `${actorNameOf(event.actor)} kills the ${event.creature}.`;
     case "dropped":
-      return `The ${event.monster} drops a chest.`;
+      return `The ${event.creature} drops a chest.`;
     case "moved":
       return `${PLAYER_NAME} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
     case "spilled":
@@ -147,15 +147,15 @@ export const narrationOf = (event: GameEvent): string => {
     case "wrecked":
       return `${PLAYER_NAME} wrecks the ${SPAWNERS[event.spawner].name}.`;
     case "emerged":
-      return `The ${event.monster} emerges!`;
+      return `The ${event.creature} emerges!`;
     case "struck":
-      return `The ${event.monster} hits ${PLAYER_NAME.toLowerCase()}.`;
+      return `The ${event.creature} hits ${PLAYER_NAME.toLowerCase()}.`;
     case "leveled":
       return `${PLAYER_NAME} reaches level ${event.level}.`;
     case "learned":
       return `${PLAYER_NAME} learns ${event.spell} (level ${event.level}).`;
     case "summoned":
-      return `The ${event.monster} summons ${counted(event.count, event.summoned)}.`;
+      return `The ${event.creature} summons ${counted(event.count, event.summoned)}.`;
     case "afflicted":
       return `${PLAYER_NAME} ${AFFLICTION_VERBS[event.affliction]} for ${counted(event.turns, "turn")}.`;
     case "bled":
@@ -163,9 +163,9 @@ export const narrationOf = (event: GameEvent): string => {
     case "died":
       return `${PLAYER_NAME} dies.`;
     case "restocked":
-      return `The ${event.monster} restocks their wares.`;
+      return `The ${event.creature} restocks their wares.`;
     case "interacted":
-      return `${PLAYER_NAME} hails the ${event.monster}.`;
+      return `${PLAYER_NAME} hails the ${event.creature}.`;
     case "bought":
       return `${PLAYER_NAME} buys the ${nameOf(event.item)} for ${event.price} gold.`;
     case "sold":

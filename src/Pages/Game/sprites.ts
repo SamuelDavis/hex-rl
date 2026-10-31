@@ -1,4 +1,4 @@
-import type { MonsterKind, SpawnerKind } from "../../game/monsters";
+import type { CreatureKind, SpawnerKind } from "../../game/creatures";
 
 export const SPRITE_BOX = 32;
 export const SPRITE_FOOT = 30;
@@ -382,7 +382,7 @@ export const CHEST: Sprite = [
 
 export const PLAYER_FIGURE: Figure = { sprite: PLAYER, scale: 1 };
 
-export const MONSTER_FIGURES: Record<MonsterKind, Figure> = {
+export const CREATURE_FIGURES: Record<CreatureKind, Figure> = {
   wolf: { sprite: WOLF, scale: 1 },
   cub: { sprite: WOLF, scale: 0.7 },
   bandit: { sprite: BANDIT, scale: 1 },

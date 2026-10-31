@@ -12,8 +12,8 @@ import {
   type Item,
 } from "./items";
 import { rngOf } from "procgen";
-import { MONSTERS } from "./monsters";
-import { monster, origin } from "./testing";
+import { CREATURES } from "./creatures";
+import { creature, origin } from "./testing";
 
 const gear = (id: string, gear: GearKind): Item => ({
   id,
@@ -23,7 +23,7 @@ const gear = (id: string, gear: GearKind): Item => ({
 });
 
 const goblins = Array.from({ length: 300 }, (_, i) => ({
-  ...monster(origin),
+  ...creature(origin),
   id: `goblin-${i}`,
 }));
 
@@ -60,7 +60,7 @@ describe("lootOf", () => {
   });
 
   test("rolls gold within the monster's range", () => {
-    const { min, max } = MONSTERS.goblin.gold;
+    const { min, max } = CREATURES.goblin.gold;
     const golds = loot.flatMap((chest) => (chest?.gold ? [chest.gold] : []));
     expect(golds.length).toBeGreaterThan(0);
     for (const gold of golds) {

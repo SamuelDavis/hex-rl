@@ -42,7 +42,7 @@ import {
   XP_PER_LEVEL,
   type Game as GameState,
   type GameEvent,
-  type Monster,
+  type Creature,
   type Where,
 } from "../../game/game";
 import { directionToward, hexKey, type Direction } from "../../game/hex";
@@ -69,7 +69,7 @@ import {
   SPELL_IDS,
   type AbilityId,
 } from "../../game/abilities";
-import { SERVICES, type Affliction } from "../../game/monsters";
+import { SERVICES, type Affliction } from "../../game/creatures";
 import { sightOf, targetInView } from "./target";
 import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 
@@ -130,9 +130,13 @@ export default function Game() {
   const getTargetMark = createMemo(() => {
     const { game, range, target } = getSession();
     if (!target) return undefined;
-    const monster = targetInView(game, range, target);
-    return monster
-      ? { kind: "seen" as const, at: monster.at, sight: sightOf(game, monster) }
+    const creature = targetInView(game, range, target);
+    return creature
+      ? {
+          kind: "seen" as const,
+          at: creature.at,
+          sight: sightOf(game, creature),
+        }
       : { kind: "remembered" as const, at: target.lastSeen };
   });
 
@@ -211,7 +215,7 @@ export default function Game() {
     if (!canvas) return;
     const { width, height } = getSize();
     const game = getGame();
-    const { land, player, monsters, chests, seen } = game;
+    const { land, player, creatures, chests, seen } = game;
     const ratio = window.devicePixelRatio;
     canvas.width = width * ratio;
     canvas.height = height * ratio;
@@ -223,7 +227,7 @@ export default function Game() {
       spawnersIn: land.spawnersIn,
       isWrecked: (spawner) => isWrecked(game, spawner),
       player,
-      monsters,
+      creatures,
       chests,
       visible: getVisible(),
       target: getTargetMark(),
@@ -848,7 +852,7 @@ function InventoryPanel(props: {
 
 function TradePanel(props: {
   game: GameState;
-  trader: Monster;
+  trader: Creature;
   dispatch: (message: Message) => void;
 }) {
   const getPlayer = () => props.game.player;
@@ -1092,21 +1096,22 @@ function OtherPanel(props: {
         {key("move-sw")} {key("move-s")} {key("move-se")}; wait with{" "}
         {key("wait")}. Bump monsters to attack, and their dens, camps, villages,
         mines and caves to wreck them until they heal. Press {key("target")} to
-        cycle through monsters in view and see what each can see, even while
-        aiming. Press {key("slot-1")}–{key("slot-6")} to cast the spell in that
-        slot, or tap it; choose what each slot holds, spell or potion, in the
-        Slots tab (spends a turn); potions are drunk without spending a turn.
-        Step onto a chest, open the Pack tab, or press {key("inventory")}, to
-        equip gear and move loot between your pack and the ground (each move
-        spends a turn). Aimed spells move their reticle with the movement keys;
-        cast with {key("confirm")} or the slot's key again, or cancel with{" "}
-        {key("cancel")}. Slaying monsters earns experience; each level learns or
-        raises a spell in the Spells tab. Monsters grow stronger, and their
-        tricks (summoning, bleeding, stunning, paralysis) worse, farther from
-        where you set out. Climb one block at a time; swim freely. Towns spawn a
-        bailiff, a reeve and peasants, who fight monsters; bump one, or press{" "}
-        {key("interact")} and aim, to interact: a reeve trades, a bailiff posts
-        bounties on ever-farther lairs.
+        cycle through monsters and townsfolk in view and see what each can see,
+        even while aiming. Press {key("slot-1")}–{key("slot-6")} to cast the
+        spell in that slot, or tap it; choose what each slot holds, spell or
+        potion, in the Slots tab (spends a turn); potions are drunk without
+        spending a turn. Step onto a chest, open the Pack tab, or press{" "}
+        {key("inventory")}, to equip gear and move loot between your pack and
+        the ground (each move spends a turn). Aimed spells move their reticle
+        with the movement keys; cast with {key("confirm")} or the slot's key
+        again, or cancel with {key("cancel")}. Slaying monsters earns
+        experience; each level learns or raises a spell in the Spells tab.
+        Monsters grow stronger, and their tricks (summoning, bleeding, stunning,
+        paralysis) worse, farther from where you set out. Climb one block at a
+        time; swim freely. Towns spawn a bailiff, a reeve and peasants, who
+        fight monsters; bump one, or press {key("interact")} and aim, to
+        interact: a reeve trades, a bailiff posts bounties on ever-farther
+        lairs.
       </p>
       <button type="button" onClick={() => props.remap()}>
         Controls
@@ -1126,7 +1131,7 @@ function OtherPanel(props: {
           <dt>Seed</dt>
           <dd>{props.game.land.seed}</dd>
           <dt>Monsters awake</dt>
-          <dd>{props.game.monsters.length}</dd>
+          <dd>{props.game.creatures.length}</dd>
           <dt>Monsters slain</dt>
           <dd>{props.game.kills}</dd>
         </dl>

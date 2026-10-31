@@ -1,5 +1,5 @@
 import type { Bounds, Vec2 } from "procgen";
-import { factionOfMonster, type Monster, type Player } from "../../game/game";
+import { factionOfCreature, type Creature, type Player } from "../../game/game";
 import {
   add,
   centerOf,
@@ -76,7 +76,7 @@ export interface Scene {
   readonly spawnersIn: (bounds: Bounds) => readonly Spawner[];
   readonly isWrecked: (spawner: Spawner) => boolean;
   readonly player: Player;
-  readonly monsters: readonly Monster[];
+  readonly creatures: readonly Creature[];
   readonly chests: ReadonlyMap<string, unknown>;
   readonly visible: ReadonlySet<string>;
   readonly target: TargetMark | undefined;
@@ -94,7 +94,7 @@ export const drawScene = (
     spawnersIn,
     isWrecked,
     player,
-    monsters,
+    creatures,
     chests,
     visible,
     target,
@@ -137,10 +137,10 @@ export const drawScene = (
   const spawnerAt = new Map(
     spawnersIn(view).map((spawner) => [hexKey(spawner.at), spawner]),
   );
-  const monsterAt = new Map(
-    monsters
+  const creatureAt = new Map(
+    creatures
       .filter(({ at }) => visible.has(hexKey(at)))
-      .map((monster) => [hexKey(monster.at), monster]),
+      .map((creature) => [hexKey(creature.at), creature]),
   );
 
   context.fillStyle = css(theme.fog);
@@ -231,16 +231,18 @@ export const drawScene = (
     if (target && sameHex(hex, target.at))
       drawReticle(context, base, marks.targeted);
     if (aim && sameHex(hex, aim.at)) drawReticle(context, base, marks.aimed);
-    const monster = monsterAt.get(hexKey(hex));
-    if (monster) {
-      theme.monster(
+    const creature = creatureAt.get(hexKey(hex));
+    if (creature) {
+      theme.creature(
         context,
         base,
-        monster.kind,
-        factionOfMonster(monster) === "town" ? "friendly" : monster.mind.state,
-        headingOf(monster.facing),
+        creature.kind,
+        factionOfCreature(creature) === "town"
+          ? "friendly"
+          : creature.mind.state,
+        headingOf(creature.facing),
       );
-      theme.level(context, base, monster.level);
+      theme.level(context, base, creature.level);
     } else if (target?.kind === "remembered" && sameHex(hex, target.at))
       theme.unknown(context, base);
     if (sameHex(hex, player.at))

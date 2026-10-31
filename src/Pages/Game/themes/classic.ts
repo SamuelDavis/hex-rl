@@ -1,5 +1,5 @@
 import type { Vec2 } from "procgen";
-import type { MonsterKind, SpawnerKind } from "../../../game/monsters";
+import type { CreatureKind, SpawnerKind } from "../../../game/creatures";
 import { Biome, CONIFEROUS, SEA_LEVEL } from "../../../game/terrain";
 import type { CanvasTheme, Disposition } from "../canvasTheme";
 import {
@@ -33,7 +33,7 @@ const RINGS: Record<Disposition, Hsl> = {
   hunting: [40, 95, 55],
 };
 
-const TOKENS: Record<MonsterKind, { glyph: string; hue: number }> = {
+const TOKENS: Record<CreatureKind, { glyph: string; hue: number }> = {
   wolf: { glyph: "w", hue: 30 },
   cub: { glyph: "c", hue: 35 },
   bandit: { glyph: "b", hue: 0 },
@@ -212,7 +212,7 @@ export const CLASSIC: CanvasTheme = {
   },
   player: (context, base, heading) =>
     drawToken(context, base, { fill: PLAYER_TOKEN, glyph: "@", heading }),
-  monster: (context, base, kind, disposition, heading) => {
+  creature: (context, base, kind, disposition, heading) => {
     const { glyph, hue } = TOKENS[kind];
     drawToken(context, base, {
       fill: [hue, 60, 30],

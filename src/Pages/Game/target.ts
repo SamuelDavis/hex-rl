@@ -1,4 +1,4 @@
-import { visibleOf, type Game, type Monster } from "../../game/game";
+import { visibleOf, type Game, type Creature } from "../../game/game";
 import { hexDistance, hexKey, type Hex } from "../../game/hex";
 import { visibleFrom } from "../../game/sight";
 
@@ -10,18 +10,18 @@ export interface Target {
   readonly seenTurn: number;
 }
 
-export const sightOf = ({ land }: Game, { at, facing }: Monster) =>
+export const sightOf = ({ land }: Game, { at, facing }: Creature) =>
   visibleFrom(land.tileAt, at, facing);
 
-const targetsOf = (game: Game, range: number): Monster[] => {
+const targetsOf = (game: Game, range: number): Creature[] => {
   const visible = visibleOf(game);
   const distanceOf = (at: Hex) => hexDistance(at, game.player.at);
-  return game.monsters
+  return game.creatures
     .filter(({ at }) => visible.has(hexKey(at)) && distanceOf(at) <= range)
     .sort((a, b) => distanceOf(a.at) - distanceOf(b.at));
 };
 
-export const targetOf = (game: Game, { id, at }: Monster): Target => ({
+export const targetOf = (game: Game, { id, at }: Creature): Target => ({
   id,
   lastSeen: at,
   seenTurn: game.turn,
@@ -31,7 +31,7 @@ export const targetInView = (
   game: Game,
   range: number,
   target: Target,
-): Monster | undefined =>
+): Creature | undefined =>
   targetsOf(game, range).find(({ id }) => id === target.id);
 
 export const nextTarget = (
@@ -50,10 +50,10 @@ export const tracked = (
   range: number,
   target: Target,
 ): Target | undefined => {
-  const monster = game.monsters.find(({ id }) => id === target.id);
-  if (!monster || hexDistance(monster.at, game.player.at) > range)
+  const creature = game.creatures.find(({ id }) => id === target.id);
+  if (!creature || hexDistance(creature.at, game.player.at) > range)
     return undefined;
-  if (targetInView(game, range, target)) return targetOf(game, monster);
+  if (targetInView(game, range, target)) return targetOf(game, creature);
   if (game.turn - target.seenTurn >= TARGET_MEMORY) return undefined;
   return target;
 };

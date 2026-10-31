@@ -39,13 +39,13 @@ import {
   type Hex,
 } from "./hex";
 import {
-  MONSTER_SPELLS,
+  CREATURE_SPELLS,
   membersOf,
-  MONSTERS,
+  CREATURES,
   SPAWNERS,
   spawnerHpOf,
   type SpawnerKind,
-} from "./monsters";
+} from "./creatures";
 import {
   ABILITIES,
   CLEAVE_SPLASH,
@@ -64,7 +64,7 @@ import {
   gameWith,
   land,
   landOf,
-  monster,
+  creature,
   origin,
   step,
   WAIT,
@@ -114,7 +114,7 @@ const withState = (
   state: Partial<SpawnerState>,
 ): Game => ({
   ...game,
-  monsters: [],
+  creatures: [],
   spawners: new Map([
     [
       hexKey(spawner.at),
@@ -134,9 +134,9 @@ const spawnsOf = (games: readonly Game[]) =>
   games
     .slice(1)
     .flatMap((game, i) =>
-      game.monsters
-        .filter(({ id }) => !games[i]!.monsters.some((m) => m.id === id))
-        .map((monster) => ({ monster, turn: game.turn })),
+      game.creatures
+        .filter(({ id }) => !games[i]!.creatures.some((m) => m.id === id))
+        .map((creature) => ({ creature, turn: game.turn })),
     );
 
 describe("newGame", () => {
@@ -163,22 +163,22 @@ describe("spawners", () => {
 
   test("spawn monsters from their pool beside themselves", () => {
     expect(spawns.length).toBeGreaterThan(0);
-    for (const { monster } of spawns) {
-      expect(monster.home).toEqual(mine);
-      expect(pool.map(([kind]) => kind)).toContain(monster.kind);
-      expect(hexDistance(monster.at, mine.at)).toBe(1);
+    for (const { creature } of spawns) {
+      expect(creature.home).toEqual(mine);
+      expect(pool.map(([kind]) => kind)).toContain(creature.kind);
+      expect(hexDistance(creature.at, mine.at)).toBe(1);
     }
   });
 
   test("block monsters", () => {
     const blocker = { kind: "camp", at: { q: 6, r: -1 } } as const;
     const at = { q: 6, r: 0 };
-    const hostile = { ...monster(at), mind: hostileAt(at, blocker.at) };
+    const hostile = { ...creature(at), mind: hostileAt(at, blocker.at) };
     const world = landOf(out, [blocker]);
-    for (const { monsters } of history)
-      for (const { at } of monsters) expect(at).not.toEqual(mine.at);
-    for (const { monsters } of historyOf(gameWith([hostile], world), 20))
-      for (const { at } of monsters) expect(at).not.toEqual(blocker.at);
+    for (const { creatures } of history)
+      for (const { at } of creatures) expect(at).not.toEqual(mine.at);
+    for (const { creatures } of historyOf(gameWith([hostile], world), 20))
+      for (const { at } of creatures) expect(at).not.toEqual(blocker.at);
   });
 
   test("spawn nothing while hemmed in", () => {
@@ -207,18 +207,18 @@ describe("spawners", () => {
     );
     const trapped = {
       ...wrecked,
-      monsters: [monster(site, "goblin", "nw", mine)],
+      creatures: [creature(site, "goblin", "nw", mine)],
     };
-    const bossOf = ({ monsters }: Game) =>
-      monsters.find(({ kind }) => kind === SPAWNERS.mine.boss);
+    const bossOf = ({ creatures }: Game) =>
+      creatures.find(({ kind }) => kind === SPAWNERS.mine.boss);
     const held = historyOf(trapped, 10);
     expect(held.filter(bossOf)).toEqual([]);
-    const freed = act({ ...held.at(-1)!, monsters: [] }, WAIT);
+    const freed = act({ ...held.at(-1)!, creatures: [] }, WAIT);
     expect(bossOf(freed)?.at).toEqual(site);
   });
 
   test("fill up to their cap and no further", () => {
-    const counts = history.map(({ monsters }) => monsters.length);
+    const counts = history.map(({ creatures }) => creatures.length);
     expect(Math.max(...counts)).toBe(cap);
   });
 
@@ -231,14 +231,14 @@ describe("spawners", () => {
 
   test("replace slain monsters", () => {
     const full = history.at(-1)!;
-    const cleared = { ...full, monsters: [] };
+    const cleared = { ...full, creatures: [] };
     expect(spawnsOf(historyOf(cleared)).length).toBeGreaterThan(0);
   });
 
   test("have more hit points than the monsters they spawn", () => {
     for (const kind of Object.keys(SPAWNERS) as SpawnerKind[])
       for (const spawned of membersOf(kind))
-        expect(spawnerHpOf(kind)).toBeGreaterThan(MONSTERS[spawned].hp);
+        expect(spawnerHpOf(kind)).toBeGreaterThan(CREATURES[spawned].hp);
   });
 
   test("block the player, who wrecks them by striking off their hit points", () => {
@@ -260,19 +260,19 @@ describe("spawners", () => {
     });
     const hits = Math.ceil(spawnerHpOf("mine") / PLAYER_DAMAGE);
     const games = historyOf(idle, hits, step("se"));
-    expect(games.at(-2)!.monsters).toEqual([]);
-    expect(games.at(-1)!.monsters).toMatchObject([
+    expect(games.at(-2)!.creatures).toEqual([]);
+    expect(games.at(-1)!.creatures).toMatchObject([
       { kind: SPAWNERS.mine.boss, home: adjacent, mind: { state: "hostile" } },
     ]);
-    expect(hexDistance(games.at(-1)!.monsters[0]!.at, adjacent.at)).toBe(1);
+    expect(hexDistance(games.at(-1)!.creatures[0]!.at, adjacent.at)).toBe(1);
   });
 
   test("have bosses stronger and richer than the monsters they spawn", () => {
     for (const type of Object.values(SPAWNERS)) {
       if (type.faction !== "wild") continue;
-      const boss = MONSTERS[type.boss];
+      const boss = CREATURES[type.boss];
       for (const [spawned] of type.pool) {
-        const { hp, damage, gold } = MONSTERS[spawned];
+        const { hp, damage, gold } = CREATURES[spawned];
         expect(boss.hp).toBeGreaterThan(hp);
         expect(boss.damage).toBeGreaterThanOrEqual(damage);
         expect(boss.gold.min).toBeGreaterThan(gold.max);
@@ -319,14 +319,14 @@ describe("turn, step and attack", () => {
       rejection(sideways, "not-facing"),
     ]);
     const into: Intent = { kind: "step", direction: "se" };
-    const blocked = act(gameWith([monster(east, "troll")]), into);
-    expect(blocked.monsters[0]!.hp).toBe(MONSTERS.troll.hp);
+    const blocked = act(gameWith([creature(east, "troll")]), into);
+    expect(blocked.creatures[0]!.hp).toBe(CREATURES.troll.hp);
     expect(blocked.events).toEqual([rejection(into, "occupied")]);
   });
 
   test("attack needs the target faced", () => {
     const behind: Intent = { kind: "attack", at: { q: -1, r: 0 } };
-    expect(act(gameWith([monster({ q: -1, r: 0 })]), behind).events).toEqual([
+    expect(act(gameWith([creature({ q: -1, r: 0 })]), behind).events).toEqual([
       rejection(behind, "not-facing"),
     ]);
   });
@@ -349,11 +349,14 @@ describe("act", () => {
   });
 
   test("a direction not faced turns in place and spends a turn", () => {
-    const game = { ...newGame(landOf()), monsters: [monster({ q: 4, r: 0 })] };
+    const game = {
+      ...newGame(landOf()),
+      creatures: [creature({ q: 4, r: 0 })],
+    };
     const next = act(game, step("se"));
     expect(next.player).toMatchObject({ at: origin, facing: "se" });
     expect(next.turn).toBe(1);
-    expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
+    expect(next.creatures[0]!.at).toEqual({ q: 3, r: 0 });
     expect(next.seen.has(hexKey({ q: SIGHT, r: 0 }))).toBe(true);
   });
 
@@ -367,17 +370,17 @@ describe("act", () => {
   });
 
   test("bumping a monster attacks it", () => {
-    const next = act(gameWith([monster(east, "troll")]), step("se"));
+    const next = act(gameWith([creature(east, "troll")]), step("se"));
     expect(next.player.at).toEqual(origin);
-    expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - PLAYER_DAMAGE);
+    expect(next.creatures[0]!.hp).toBe(CREATURES.troll.hp - PLAYER_DAMAGE);
   });
 
   test("attacking an adjacent monster hits it and spends a turn", () => {
-    const next = act(gameWith([monster(east, "troll")]), {
+    const next = act(gameWith([creature(east, "troll")]), {
       kind: "attack",
       at: east,
     });
-    expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - PLAYER_DAMAGE);
+    expect(next.creatures[0]!.hp).toBe(CREATURES.troll.hp - PLAYER_DAMAGE);
     expect(next.turn).toBe(1);
   });
 
@@ -387,20 +390,20 @@ describe("act", () => {
       rejection(empty, "no-target"),
     ]);
     const far: Intent = { kind: "attack", at: { q: 2, r: 0 } };
-    expect(act(gameWith([monster({ q: 2, r: 0 })]), far).events).toEqual([
+    expect(act(gameWith([creature({ q: 2, r: 0 })]), far).events).toEqual([
       rejection(far, "out-of-reach"),
     ]);
   });
 
   test("killing a monster removes and counts it", () => {
-    const next = act(gameWith([{ ...monster(east), hp: 1 }]), step("se"));
-    expect(next.monsters).toEqual([]);
+    const next = act(gameWith([{ ...creature(east), hp: 1 }]), step("se"));
+    expect(next.creatures).toEqual([]);
     expect(next.kills).toBe(1);
   });
 
   test("slain monsters drop their loot, if any, in a chest where they fell", () => {
     const kobolds = Array.from({ length: 50 }, (_, i) => ({
-      ...monster(east, "kobold"),
+      ...creature(east, "kobold"),
       id: `${i}`,
       hp: 1,
     }));
@@ -412,7 +415,7 @@ describe("act", () => {
   });
 
   test("loot falling where a chest lies joins it", () => {
-    const troll = { ...monster(east, "troll"), hp: 1 };
+    const troll = { ...creature(east, "troll"), hp: 1 };
     const loot = lootOf(0, troll)!;
     const potion: Item = { id: "p", kind: "potion", potion: "mana" };
     const game = {
@@ -434,26 +437,26 @@ describe("act", () => {
   });
 
   test("adjacent monsters attack after the player acts", () => {
-    const next = act(gameWith([monster(east)]), WAIT);
-    expect(next.player.hp).toBe(MAX_HP - MONSTERS.goblin.damage);
+    const next = act(gameWith([creature(east)]), WAIT);
+    expect(next.player.hp).toBe(MAX_HP - CREATURES.goblin.damage);
   });
 
   test("monsters can't strike up a cliff", () => {
     const world = landOf({ "1,0": land(4) });
-    expect(act(gameWith([monster(east)], world), WAIT).player.hp).toBe(MAX_HP);
+    expect(act(gameWith([creature(east)], world), WAIT).player.hp).toBe(MAX_HP);
   });
 
   test("monsters in sight close in", () => {
-    const next = act(gameWith([monster({ q: 4, r: 0 })]), WAIT);
-    expect(next.monsters[0]!.at).toEqual({ q: 3, r: 0 });
+    const next = act(gameWith([creature({ q: 4, r: 0 })]), WAIT);
+    expect(next.creatures[0]!.at).toEqual({ q: 3, r: 0 });
   });
 
   test("monsters turn to face the way they head, then step, like the player", () => {
     const turned = act(
-      gameWith([monster({ q: 4, r: 0 }, "goblin", "n")]),
+      gameWith([creature({ q: 4, r: 0 }, "goblin", "n")]),
       WAIT,
     );
-    expect(turned.monsters[0]).toMatchObject({
+    expect(turned.creatures[0]).toMatchObject({
       at: { q: 4, r: 0 },
       facing: "nw",
     });
@@ -463,7 +466,7 @@ describe("act", () => {
       facing: "nw",
     });
     const stepped = act(turned, WAIT);
-    expect(stepped.monsters[0]).toMatchObject({
+    expect(stepped.creatures[0]).toMatchObject({
       at: { q: 3, r: 0 },
       facing: "nw",
     });
@@ -476,28 +479,34 @@ describe("act", () => {
   });
 
   test("an adjacent hostile monster facing away turns before it strikes", () => {
-    const beside = monster(east, "troll", "se");
+    const beside = creature(east, "troll", "se");
     const turned = act(gameWith([beside]), WAIT);
     expect(turned.player.hp).toBe(MAX_HP);
-    expect(turned.monsters[0]!.facing).toBe("nw");
+    expect(turned.creatures[0]!.facing).toBe("nw");
     const struck = act(turned, WAIT);
-    expect(struck.player.hp).toBe(MAX_HP - MONSTERS.troll.damage);
+    expect(struck.player.hp).toBe(MAX_HP - CREATURES.troll.damage);
   });
 
   test("monsters facing away don't notice the player beyond their awareness", () => {
-    const next = act(gameWith([monster({ q: 4, r: 0 }, "goblin", "se")]), WAIT);
-    expect(next.monsters[0]!.mind).toBe(IDLE);
+    const next = act(
+      gameWith([creature({ q: 4, r: 0 }, "goblin", "se")]),
+      WAIT,
+    );
+    expect(next.creatures[0]!.mind).toBe(IDLE);
   });
 
   test("monsters notice the player within their awareness, whatever their facing", () => {
-    const next = act(gameWith([monster({ q: 2, r: 0 }, "goblin", "se")]), WAIT);
-    expect(next.monsters[0]!.mind.state).toBe("hostile");
+    const next = act(
+      gameWith([creature({ q: 2, r: 0 }, "goblin", "se")]),
+      WAIT,
+    );
+    expect(next.creatures[0]!.mind.state).toBe("hostile");
   });
 
   test("monsters that notice the player turn hostile, anchored where they stood idle", () => {
     const at = { q: 4, r: 0 };
-    const next = act(gameWith([monster(at)]), WAIT);
-    expect(next.monsters[0]!.mind).toMatchObject({
+    const next = act(gameWith([creature(at)]), WAIT);
+    expect(next.creatures[0]!.mind).toMatchObject({
       state: "hostile",
       anchor: at,
       lastSeen: origin,
@@ -505,15 +514,15 @@ describe("act", () => {
   });
 
   test("monsters that strike are hostile", () => {
-    const next = act(gameWith([monster(east, "goblin", "se")]), WAIT);
-    expect(next.monsters[0]!.mind.state).toBe("hostile");
+    const next = act(gameWith([creature(east, "goblin", "se")]), WAIT);
+    expect(next.creatures[0]!.mind.state).toBe("hostile");
   });
 
   test("hostile monsters head for where they last saw the player", () => {
     const at = { q: 6, r: 0 };
     const lastSeen = { q: 6, r: -4 };
-    const hostile = { ...monster(at), mind: hostileAt(at, lastSeen) };
-    const next = historyOf(gameWith([hostile], pit), 2).at(-1)!.monsters[0]!;
+    const hostile = { ...creature(at), mind: hostileAt(at, lastSeen) };
+    const next = historyOf(gameWith([hostile], pit), 2).at(-1)!.creatures[0]!;
     expect(hexDistance(next.at, lastSeen)).toBe(3);
   });
 
@@ -521,11 +530,11 @@ describe("act", () => {
     const home = { kind: "village", at: { q: 6, r: 0 } } as const;
     const lastSeen = { q: 6, r: -4 };
     const hostile = {
-      ...monster(home.at, "goblin", "nw", home),
+      ...creature(home.at, "goblin", "nw", home),
       mind: hostileAt(home.at, lastSeen),
     };
     const states = historyOf(gameWith([hostile], pit), 60).map(
-      ({ monsters }) => monsters[0]!,
+      ({ creatures }) => creatures[0]!,
     );
     const start = states.findIndex(({ mind }) => mind.state === "hunting");
     expect(start).toBeGreaterThan(0);
@@ -554,13 +563,13 @@ describe("act", () => {
       { q: -8, r: 8 },
     ];
     const hunters = spots.map((at) => ({
-      ...monster(at, "goblin", "nw", { kind: "village", at }),
+      ...creature(at, "goblin", "nw", { kind: "village", at }),
       mind: huntingAt(at, at),
     }));
     const games = historyOf(gameWith(hunters, pit), HUNT_TURNS - 1);
     const north = centerOf(DIRECTIONS.n);
-    const drift = games.slice(1).flatMap(({ monsters }) =>
-      monsters.map(({ at }, i) => {
+    const drift = games.slice(1).flatMap(({ creatures }) =>
+      creatures.map(({ at }, i) => {
         const from = centerOf(spots[i]!);
         const to = centerOf(at);
         return (to.x - from.x) * north.x + (to.y - from.y) * north.y;
@@ -574,7 +583,7 @@ describe("act", () => {
   test("engaged monsters are leashed to their anchor, not their home", () => {
     const home = { kind: "village", at: { q: 10, r: 0 } } as const;
     const games = historyOf(
-      gameWith([monster({ q: 4, r: 0 }, "goblin", "nw", home)]),
+      gameWith([creature({ q: 4, r: 0 }, "goblin", "nw", home)]),
       10,
     );
     expect(games.at(-1)!.player.hp).toBeLessThan(MAX_HP);
@@ -584,13 +593,13 @@ describe("act", () => {
     const anchor = { q: 12, r: 0 };
     const home = { kind: "village", at: anchor } as const;
     const chaser = {
-      ...monster({ q: 7, r: 0 }, "goblin", "nw", home),
+      ...creature({ q: 7, r: 0 }, "goblin", "nw", home),
       mind: hostileAt(anchor, origin),
     };
     const games = historyOf(gameWith([chaser]), 10);
-    for (const { monsters } of games.slice(1)) {
-      expect(monsters[0]!.mind.state).toBe("hostile");
-      expect(hexDistance(monsters[0]!.at, anchor)).toBeLessThanOrEqual(
+    for (const { creatures } of games.slice(1)) {
+      expect(creatures[0]!.mind.state).toBe("hostile");
+      expect(hexDistance(creatures[0]!.at, anchor)).toBeLessThanOrEqual(
         SPAWNERS.village.leash,
       );
     }
@@ -600,10 +609,10 @@ describe("act", () => {
   test("engaged monsters keep their anchor when they find the player again", () => {
     const anchor = { q: 12, r: 0 };
     const hunter = {
-      ...monster({ q: 4, r: 0 }),
+      ...creature({ q: 4, r: 0 }),
       mind: huntingAt(anchor, { q: 4, r: -2 }),
     };
-    const next = act(gameWith([hunter]), WAIT).monsters[0]!;
+    const next = act(gameWith([hunter]), WAIT).creatures[0]!;
     expect(next.mind).toMatchObject({ state: "hostile", anchor });
   });
 
@@ -611,12 +620,12 @@ describe("act", () => {
     const home = { kind: "village", at: { q: 8, r: 0 } } as const;
     const { leash } = SPAWNERS.village;
     const strays = [
-      monster({ q: 9, r: 0 }, "goblin", "nw", home),
-      monster({ q: 8, r: -12 }, "goblin", "nw", home),
+      creature({ q: 9, r: 0 }, "goblin", "nw", home),
+      creature({ q: 8, r: -12 }, "goblin", "nw", home),
     ];
     const games = historyOf(gameWith(strays, pit), 60);
     const [homebody, stray] = [0, 1].map((i) =>
-      games.map(({ monsters }) => monsters[i]!),
+      games.map(({ creatures }) => creatures[i]!),
     );
     expect(new Set(homebody!.map(({ at }) => hexKey(at))).size).toBeGreaterThan(
       1,
@@ -627,24 +636,24 @@ describe("act", () => {
   });
 
   test("monsters turn to face the player they strike", () => {
-    const next = act(gameWith([monster(east, "goblin", "se")]), WAIT);
-    expect(next.monsters[0]!.facing).toBe("nw");
+    const next = act(gameWith([creature(east, "goblin", "se")]), WAIT);
+    expect(next.creatures[0]!.facing).toBe("nw");
   });
 
   test("monsters out of sight don't notice the player", () => {
     const world = landOf({ "2,0": land(10, true) });
-    const next = act(gameWith([monster({ q: 4, r: 0 })], world), WAIT);
-    expect(next.monsters[0]!.mind).toBe(IDLE);
+    const next = act(gameWith([creature({ q: 4, r: 0 })], world), WAIT);
+    expect(next.creatures[0]!.mind).toBe(IDLE);
   });
 
   test("monsters beyond the forget radius are forgotten", () => {
-    const far = monster({ q: FORGET_RADIUS + 2, r: 0 });
-    expect(act(gameWith([far]), WAIT).monsters).toEqual([]);
+    const far = creature({ q: FORGET_RADIUS + 2, r: 0 });
+    expect(act(gameWith([far]), WAIT).creatures).toEqual([]);
   });
 
   test("the game ends when the player dies, and accepts no more actions", () => {
     const game = {
-      ...gameWith([monster(east)]),
+      ...gameWith([creature(east)]),
       player: { ...newGame(landOf()).player, hp: 1 },
     };
     const dead = act(game, WAIT);
@@ -659,10 +668,11 @@ describe("act", () => {
 describe("use", () => {
   const ne = add(origin, DIRECTIONS.ne);
   const south = add(origin, DIRECTIONS.s);
-  const trolls = (...at: Hex[]) => at.map((hex) => monster(hex, "troll", "nw"));
+  const trolls = (...at: Hex[]) =>
+    at.map((hex) => creature(hex, "troll", "nw"));
   const hpAt = (game: Game, hex: Hex) =>
-    game.monsters.find(({ id }) => id === hexKey(hex))?.hp;
-  const TROLL = MONSTERS.troll.hp;
+    game.creatures.find(({ id }) => id === hexKey(hex))?.hp;
+  const TROLL = CREATURES.troll.hp;
 
   test("spends mana, a turn, and starts the cooldown", () => {
     const next = act(facingEast(), { kind: "use", ability: "heal" });
@@ -945,7 +955,7 @@ describe("use a potion", () => {
   });
 
   test("restores up to the maximum and uses up one potion, spending no turn", () => {
-    const game = holding(gameWith([monster(east, "troll")]), {
+    const game = holding(gameWith([creature(east, "troll")]), {
       hp: 5,
       mp: 9,
       pack: [health, mana, { ...health, id: "h2" }],
@@ -954,7 +964,7 @@ describe("use a potion", () => {
     expect(healed.player.hp).toBe(5 + HEALTH_POTION_HP);
     expect(healed.player.pack).toEqual([mana, { ...health, id: "h2" }]);
     expect(healed.turn).toBe(0);
-    expect(healed.monsters).toEqual(game.monsters);
+    expect(healed.creatures).toEqual(game.creatures);
     expect(healed.events).toEqual([{ kind: "used", ability: "health" }]);
     expect(act(healed, { kind: "use", ability: "mana" }).player.mp).toBe(
       MAX_MP,
@@ -1022,9 +1032,9 @@ describe("levels", () => {
   });
 
   test("kills grant experience scaled by the monster's level", () => {
-    const weak = { ...monster(east, "cub", "nw"), level: XP_PER_LEVEL };
+    const weak = { ...creature(east, "cub", "nw"), level: XP_PER_LEVEL };
     const next = act(gameWith([weak]), step("se"));
-    expect(next.player.xp).toBe(MONSTERS.cub.hp * XP_PER_LEVEL);
+    expect(next.player.xp).toBe(CREATURES.cub.hp * XP_PER_LEVEL);
     expect(next.events).toContainEqual({ kind: "leveled", level: 2 });
   });
 
@@ -1044,13 +1054,13 @@ describe("levels", () => {
   });
 
   test("spell effects scale linearly with spell level", () => {
-    const game = gameWith([monster(east, "troll", "nw")]);
+    const game = gameWith([creature(east, "troll", "nw")]);
     const adept = {
       ...game,
       player: { ...game.player, spells: new Map([["cleave", 3] as const]) },
     };
     const next = act(adept, { kind: "use", ability: "cleave" });
-    expect(next.monsters[0]!.hp).toBe(MONSTERS.troll.hp - 3 * PLAYER_DAMAGE);
+    expect(next.creatures[0]!.hp).toBe(CREATURES.troll.hp - 3 * PLAYER_DAMAGE);
   });
 });
 
@@ -1060,7 +1070,7 @@ describe("monster levels", () => {
   const spawnedLevels = (spawn: Hex) => {
     const world = landOf(out, [mine]);
     const game = { ...newGame(world), land: { ...world, spawn } };
-    return spawnsOf(historyOf(game, 40)).map(({ monster }) => monster.level);
+    return spawnsOf(historyOf(game, 40)).map(({ creature }) => creature.level);
   };
 
   test("rise with the spawner's distance from the spawn", () => {
@@ -1073,26 +1083,26 @@ describe("monster levels", () => {
   });
 
   test("scale monster damage linearly", () => {
-    const kobold = { ...monster(east, "kobold", "nw"), level: 3 };
+    const kobold = { ...creature(east, "kobold", "nw"), level: 3 };
     expect(act(gameWith([kobold]), WAIT).player.hp).toBe(
-      MAX_HP - 3 * MONSTERS.kobold.damage,
+      MAX_HP - 3 * CREATURES.kobold.damage,
     );
   });
 });
 
 describe("monster spells", () => {
-  const leveled = (kind: Parameters<typeof monster>[1], level: number) => ({
-    ...monster(east, kind, "nw"),
+  const leveled = (kind: Parameters<typeof creature>[1], level: number) => ({
+    ...creature(east, kind, "nw"),
     level,
   });
-  const alone = (game: Game): Game => ({ ...game, monsters: [] });
+  const alone = (game: Game): Game => ({ ...game, creatures: [] });
 
   test("bandits inflict a turn of bleeding per level", () => {
     const hit = act(gameWith([leveled("bandit", 2)]), WAIT);
-    const hitHp = MAX_HP - 2 * MONSTERS.bandit.damage;
+    const hitHp = MAX_HP - 2 * CREATURES.bandit.damage;
     expect(hit.events).toContainEqual({
       kind: "afflicted",
-      monster: "bandit",
+      creature: "bandit",
       affliction: "bleed",
       turns: 2,
     });
@@ -1122,14 +1132,14 @@ describe("monster spells", () => {
       rejection({ kind: "turn", direction: "n" }, "paralyzed"),
     ]);
     expect(act(paralyzed, step("se")).events).toContainEqual({
-      kind: "hitMonster",
+      kind: "hitCreature",
       actor: "player",
-      monster: "goblin",
+      creature: "goblin",
     });
   });
 
   test("afflictions wait out their cooldown before recurring", () => {
-    const spell = MONSTER_SPELLS.goblin;
+    const spell = CREATURE_SPELLS.goblin;
     if (spell?.kind !== "afflict") throw new Error("goblins afflict");
     const games = historyOf(
       gameWith([leveled("goblin", 1)]),
@@ -1144,12 +1154,12 @@ describe("monster spells", () => {
   test("hostile wolves summon a cub per level beside themselves", () => {
     const at = { q: 3, r: 0 };
     const wolf = {
-      ...monster(at, "wolf", "nw"),
+      ...creature(at, "wolf", "nw"),
       level: 2,
       mind: hostileAt(at, origin),
     };
     const next = act(gameWith([wolf]), WAIT);
-    const cubs = next.monsters.filter(({ kind }) => kind === "cub");
+    const cubs = next.creatures.filter(({ kind }) => kind === "cub");
     expect(cubs).toHaveLength(2);
     for (const cub of cubs) {
       expect(cub.level).toBe(2);
@@ -1157,11 +1167,13 @@ describe("monster spells", () => {
     }
     expect(next.events).toContainEqual({
       kind: "summoned",
-      monster: "wolf",
+      creature: "wolf",
       summoned: "cub",
       count: 2,
     });
     const again = act(next, WAIT);
-    expect(again.monsters.filter(({ kind }) => kind === "cub")).toHaveLength(2);
+    expect(again.creatures.filter(({ kind }) => kind === "cub")).toHaveLength(
+      2,
+    );
   });
 });

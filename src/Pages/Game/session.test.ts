@@ -10,7 +10,7 @@ import {
   type Message,
   type Session,
 } from "./session";
-import { east, gameWith, monster } from "../../game/testing";
+import { east, gameWith, creature } from "../../game/testing";
 import { hexKey } from "../../game/hex";
 import type { Game } from "../../game/game";
 
@@ -19,7 +19,7 @@ const near = { q: 3, r: 0 };
 const run = (session: Session, ...messages: Message[]) =>
   messages.reduce(update, session);
 const targeting = (...at: { q: number; r: number }[]) =>
-  run(sessionOf(gameWith(at.map((hex) => monster(hex, "troll"))), RANGE), {
+  run(sessionOf(gameWith(at.map((hex) => creature(hex, "troll"))), RANGE), {
     kind: "cycleTarget",
   });
 
@@ -36,9 +36,9 @@ describe("update", () => {
   test("logs each action's events", () => {
     const session = run(targeting(east), { kind: "move", direction: "se" });
     expect(session.log).toContainEqual({
-      kind: "hitMonster",
+      kind: "hitCreature",
       actor: "player",
-      monster: "troll",
+      creature: "troll",
     });
   });
 
@@ -160,7 +160,7 @@ describe("update", () => {
 describe("interacting", () => {
   const town = { kind: "town", at: { q: -3, r: 0 } } as const;
   const npc = (kind: "reeve" | "peasant") => ({
-    ...monster(east, kind, "nw", town),
+    ...creature(east, kind, "nw", town),
     readyAt: Infinity,
   });
   const beside = (kind: "reeve" | "peasant") =>

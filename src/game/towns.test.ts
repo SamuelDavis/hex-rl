@@ -5,10 +5,10 @@ import {
   newGame,
   type Game,
   type Intent,
-  type Monster,
+  type Creature,
 } from "./game";
 import { hexKey, type Direction, type Hex } from "./hex";
-import { MONSTER_SPELLS, type MonsterKind } from "./monsters";
+import { CREATURE_SPELLS, type CreatureKind } from "./creatures";
 import { offerOf, priceOf, type Item } from "./items";
 import { dangerOf, type Spawner } from "./terrain";
 import { sighted } from "./mind";
@@ -17,7 +17,7 @@ import {
   gameWith,
   land,
   landOf,
-  monster,
+  creature,
   origin,
   step,
   WAIT,
@@ -25,8 +25,8 @@ import {
 
 const TOWN: Spawner = { kind: "town", at: { q: -3, r: 0 } };
 
-const townsfolk = (at: Hex, kind: MonsterKind, facing: Direction = "nw") =>
-  monster(at, kind, facing, TOWN);
+const townsfolk = (at: Hex, kind: CreatureKind, facing: Direction = "nw") =>
+  creature(at, kind, facing, TOWN);
 
 const potion = (id: string): Item => ({ id, kind: "potion", potion: "health" });
 
@@ -44,7 +44,7 @@ const withGold = (game: Game, gold: number): Game => ({
 describe("towns", () => {
   const town = { kind: "town", at: { q: 6, r: 0 } } as const;
   const history = historyOf(newGame(landOf({}, [town])), 200);
-  const kindsAt = (game: Game) => game.monsters.map(({ kind }) => kind);
+  const kindsAt = (game: Game) => game.creatures.map(({ kind }) => kind);
 
   test("spawn a bailiff, then a reeve, then peasants", () => {
     const firsts = history
@@ -63,12 +63,12 @@ describe("towns", () => {
     const full = history.at(-1)!;
     const lordless = {
       ...full,
-      monsters: full.monsters.filter(
+      creatures: full.creatures.filter(
         ({ kind }) => kind !== "bailiff" && kind !== "peasant",
       ),
     };
     const next = historyOf(lordless, 100).find(
-      (game) => game.monsters.length > lordless.monsters.length,
+      (game) => game.creatures.length > lordless.creatures.length,
     )!;
     expect(kindsAt(next)).toContain("bailiff");
     expect(kindsAt(next)).not.toContain("peasant");
@@ -86,18 +86,18 @@ describe("towns", () => {
 describe("factions", () => {
   test("townsfolk and monsters that notice each other fight", () => {
     const at = { q: 4, r: 0 };
-    const goblin = monster(at, "goblin", "n");
+    const goblin = creature(at, "goblin", "n");
     const peasant = townsfolk({ q: 4, r: -1 }, "peasant", "s");
     const next = act(gameWith([goblin, peasant]), WAIT);
     expect(next.events).toContainEqual({
-      kind: "hitMonster",
+      kind: "hitCreature",
       actor: "goblin",
-      monster: "peasant",
+      creature: "peasant",
     });
     expect(next.events).toContainEqual({
-      kind: "hitMonster",
+      kind: "hitCreature",
       actor: "peasant",
-      monster: "goblin",
+      creature: "goblin",
     });
   });
 
@@ -111,13 +111,13 @@ describe("factions", () => {
 
   test("kills by townsfolk earn the player nothing", () => {
     const at = { q: 4, r: 0 };
-    const goblin = { ...monster(at, "goblin", "n"), hp: 1 };
+    const goblin = { ...creature(at, "goblin", "n"), hp: 1 };
     const bailiff = townsfolk({ q: 4, r: -1 }, "bailiff", "s");
     const next = act(gameWith([goblin, bailiff]), WAIT);
     expect(next.events).toContainEqual({
       kind: "killed",
       actor: "bailiff",
-      monster: "goblin",
+      creature: "goblin",
     });
     expect(next.player.xp).toBe(0);
     expect(next.kills).toBe(0);
@@ -126,7 +126,7 @@ describe("factions", () => {
   test("the player's spells spare townsfolk", () => {
     const game = gameWith([townsfolk(east, "peasant")]);
     const next = act(game, { kind: "use", ability: "cleave" });
-    expect(next.monsters[0]!.hp).toBe(game.monsters[0]!.hp);
+    expect(next.creatures[0]!.hp).toBe(game.creatures[0]!.hp);
   });
 });
 
@@ -137,7 +137,7 @@ describe("interact", () => {
     expect(next.turn).toBe(game.turn + 1);
     expect(next.events).toContainEqual({
       kind: "interacted",
-      monster: "reeve",
+      creature: "reeve",
       id: hexKey(east),
     });
   });
@@ -172,7 +172,7 @@ describe("interact", () => {
   });
 
   test("monsters can't be interacted with", () => {
-    const game = gameWith([monster(east)]);
+    const game = gameWith([creature(east)]);
     expect(act(game, { kind: "interact", at: east }).events).toMatchObject([
       { reason: "uninterested" },
     ]);
@@ -180,7 +180,7 @@ describe("interact", () => {
 
   test("idle townsfolk beside the player stand still", () => {
     const games = historyOf(gameWith([townsfolk(east, "peasant")]), 30);
-    for (const { monsters } of games) expect(monsters[0]!.at).toEqual(east);
+    for (const { creatures } of games) expect(creatures[0]!.at).toEqual(east);
   });
 });
 
@@ -197,7 +197,7 @@ describe("trade", () => {
     const game = withGold(gameWith([reeve]), gold);
     return { ...game, player: { ...game.player, pack: [sold] } };
   };
-  const traderIn = (game: Game) => game.monsters[0]!;
+  const traderIn = (game: Game) => game.creatures[0]!;
 
   test("sells a pack item for its offer, spending a turn", () => {
     const game = shop(0);
@@ -232,13 +232,13 @@ describe("trade", () => {
     expect(reasonOf(poor, "nothing")).toMatchObject([{ reason: "no-item" }]);
     const away = {
       ...poor,
-      monsters: [{ ...reeve, at: { q: 3, r: 0 } }],
+      creatures: [{ ...reeve, at: { q: 3, r: 0 } }],
     };
     expect(reasonOf(away, sold.id)).toMatchObject([{ reason: "out-of-reach" }]);
   });
 
   test("only reeves trade", () => {
-    const game = { ...shop(0), monsters: [townsfolk(east, "peasant")] };
+    const game = { ...shop(0), creatures: [townsfolk(east, "peasant")] };
     expect(
       act(game, { kind: "trade", trader, item: sold.id }).events,
     ).toMatchObject([{ reason: "no-target" }]);
@@ -246,18 +246,18 @@ describe("trade", () => {
 });
 
 describe("restock", () => {
-  const spell = MONSTER_SPELLS.reeve;
+  const spell = CREATURE_SPELLS.reeve;
   if (spell?.kind !== "restock") throw new Error("reeves restock");
   const far = { q: 5, r: 0 };
 
   test("an idle reeve fills its wares, then waits out a variable cooldown", () => {
     const games = historyOf(gameWith([townsfolk(far, "reeve")]), 3);
     const [, stocked] = games;
-    const reeve = stocked!.monsters[0]!;
+    const reeve = stocked!.creatures[0]!;
     expect(reeve.wares).toHaveLength(spell.stock);
     expect(stocked!.events).toContainEqual({
       kind: "restocked",
-      monster: "reeve",
+      creature: "reeve",
     });
     const [min, max] = spell.cooldown;
     expect(reeve.readyAt - stocked!.turn + 1).toBeGreaterThanOrEqual(min);
@@ -271,8 +271,8 @@ describe("restock", () => {
       readyAt: 5,
     };
     const games = historyOf(gameWith([part]), 6);
-    expect(games[4]!.monsters[0]!.wares).toHaveLength(1);
-    const wares = games[5]!.monsters[0]!.wares;
+    expect(games[4]!.creatures[0]!.wares).toHaveLength(1);
+    const wares = games[5]!.creatures[0]!.wares;
     expect(wares).toHaveLength(spell.stock);
     expect(wares[0]).toEqual(potion("left"));
     expect(new Set(wares.map(({ id }) => id)).size).toBe(spell.stock);
@@ -288,13 +288,13 @@ describe("bounties", () => {
   const bailiff = townsfolk(east, "bailiff");
   const talk = (game: Game) => act(game, step("se"));
   const posted = talk(gameWith([bailiff], world));
-  const boss = (at: Hex): Monster => ({
-    ...monster(at, "alpha wolf", "nw", near),
+  const boss = (at: Hex): Creature => ({
+    ...creature(at, "alpha wolf", "nw", near),
     hp: 1,
   });
   const slay = (game: Game) => {
-    const fought = act({ ...game, monsters: [boss(east)] }, step("se"));
-    return { ...fought, monsters: [bailiff] };
+    const fought = act({ ...game, creatures: [boss(east)] }, step("se"));
+    return { ...fought, creatures: [bailiff] };
   };
 
   test("a bailiff posts the nearest lair, never a town", () => {
@@ -321,13 +321,13 @@ describe("bounties", () => {
       ...boss(east),
       home: { kind: "den", at: { q: 8, r: 0 } } as const,
     };
-    const elsewhere = act({ ...posted, monsters: [other] }, step("se"));
+    const elsewhere = act({ ...posted, creatures: [other] }, step("se"));
     expect(elsewhere.player.bounty?.isSlain).toBe(false);
     const slain = slay(posted);
     expect(slain.player.bounty?.isSlain).toBe(true);
     expect(slain.events).toContainEqual({
       kind: "bountySlain",
-      monster: "alpha wolf",
+      creature: "alpha wolf",
     });
   });
 
@@ -357,7 +357,7 @@ describe("bounties", () => {
       id: "stranger",
       home: { kind: "town", at: { q: 0, r: 9 } } as const,
     };
-    const paid = talk({ ...slain, monsters: [stranger] });
+    const paid = talk({ ...slain, creatures: [stranger] });
     expect(paid.player.bountyLevel).toBe(1);
   });
 });
@@ -366,9 +366,9 @@ describe("minds", () => {
   test("monsters chase townsfolk as they chase the player", () => {
     const at = { q: 3, r: 0 };
     const peasant = townsfolk({ q: 3, r: -2 }, "peasant", "s");
-    const goblin = monster(at, "goblin", "n");
+    const goblin = creature(at, "goblin", "n");
     const next = act(gameWith([goblin, peasant]), WAIT);
-    expect(next.monsters.find(({ kind }) => kind === "goblin")!.mind).toEqual(
+    expect(next.creatures.find(({ kind }) => kind === "goblin")!.mind).toEqual(
       sighted(goblin.mind, at, peasant),
     );
   });

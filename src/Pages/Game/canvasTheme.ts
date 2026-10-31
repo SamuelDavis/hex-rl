@@ -1,6 +1,6 @@
 import type { Vec2 } from "procgen";
-import type { Monster } from "../../game/game";
-import type { MonsterKind, SpawnerKind } from "../../game/monsters";
+import type { Creature } from "../../game/game";
+import type { CreatureKind, SpawnerKind } from "../../game/creatures";
 import type { Biome, Tile } from "../../game/terrain";
 import type { ThemeId } from "../../theme";
 import type { Hsl, Tint } from "./paint";
@@ -8,7 +8,7 @@ import { CLASSIC } from "./themes/classic";
 import { WOODCUT } from "./themes/woodcut";
 
 /** How a creature regards the player: friendly townsfolk, else a monster's mind state. */
-export type Disposition = Monster["mind"]["state"] | "friendly";
+export type Disposition = Creature["mind"]["state"] | "friendly";
 
 export interface Marks {
   readonly watched: string;
@@ -52,10 +52,10 @@ export interface CanvasTheme {
     base: Vec2,
     heading: Vec2,
   ) => void;
-  readonly monster: (
+  readonly creature: (
     context: CanvasRenderingContext2D,
     base: Vec2,
-    kind: MonsterKind,
+    kind: CreatureKind,
     disposition: Disposition,
     heading: Vec2,
   ) => void;

@@ -33,7 +33,7 @@ import {
   hexKey,
   type Hex,
 } from "./hex";
-import type { SpawnerKind } from "./monsters";
+import type { SpawnerKind } from "./creatures";
 
 export const Biome = {
   Ocean: 0,

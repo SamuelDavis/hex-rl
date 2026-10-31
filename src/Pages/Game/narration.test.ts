@@ -24,7 +24,7 @@ test("events are told in the third person", () => {
   expect(narrationOf({ kind: "prepared" })).toBe(
     "The adventurer prepares themselves.",
   );
-  expect(narrationOf({ kind: "struck", monster: "troll" })).toBe(
+  expect(narrationOf({ kind: "struck", creature: "troll" })).toBe(
     "The troll hits the adventurer.",
   );
 });
@@ -61,7 +61,7 @@ test("summons and afflictions are counted", () => {
   expect(
     narrationOf({
       kind: "summoned",
-      monster: "wolf",
+      creature: "wolf",
       summoned: "cub",
       count: 2,
     }),
@@ -69,7 +69,7 @@ test("summons and afflictions are counted", () => {
   expect(
     narrationOf({
       kind: "afflicted",
-      monster: "troll",
+      creature: "troll",
       affliction: "stun",
       turns: 1,
     }),

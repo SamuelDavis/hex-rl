@@ -7,7 +7,7 @@ import {
   type Game,
   type GameEvent,
   type Learn,
-  type Monster,
+  type Creature,
   type Prepare,
   type TakeAll,
   type Trade,
@@ -33,7 +33,7 @@ export interface Session {
   /** Opens on stepping onto a chest; once dismissed, stays shut until the next step. */
   readonly isInventoryOpen: boolean;
   /** Who the player last interacted with; their dialog shows while they stay beside the player. */
-  readonly conversant: Monster["id"] | undefined;
+  readonly conversant: Creature["id"] | undefined;
   /** How far, in hexes, the view shows; targets beyond it can't be chosen. */
   readonly range: number;
   readonly log: readonly GameEvent[];
@@ -71,21 +71,21 @@ export const targetedAt = ({ game, range, target }: Session): Hex | undefined =>
 export const conversantOf = ({
   game,
   conversant,
-}: Session): Monster | undefined => {
-  const monster = game.monsters.find(({ id }) => id === conversant);
-  return monster && directionBetween(game.player.at, monster.at)
-    ? monster
+}: Session): Creature | undefined => {
+  const creature = game.creatures.find(({ id }) => id === conversant);
+  return creature && directionBetween(game.player.at, creature.at)
+    ? creature
     : undefined;
 };
 
 /** Whom the player tried to interact with this action, whether or not they could. */
-const addresseeOf = ({ events, monsters }: Game): Monster | undefined => {
+const addresseeOf = ({ events, creatures }: Game): Creature | undefined => {
   for (const event of events) {
     if (event.kind === "interacted")
-      return monsters.find(({ id }) => id === event.id);
+      return creatures.find(({ id }) => id === event.id);
     if (event.kind === "rejected" && event.action.kind === "interact") {
       const { at } = event.action;
-      return monsters.find((monster) => sameHex(monster.at, at));
+      return creatures.find((creature) => sameHex(creature.at, at));
     }
   }
   return undefined;

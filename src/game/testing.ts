@@ -3,11 +3,11 @@ import {
   type Intent,
   type Game,
   type Land,
-  type Monster,
+  type Creature,
 } from "./game";
 import { IDLE } from "./mind";
 import { hexKey, type Direction, type Hex } from "./hex";
-import { MONSTERS } from "./monsters";
+import { CREATURES } from "./creatures";
 import { SPELL_IDS } from "./abilities";
 import { Biome, type Spawner, type Tile } from "./terrain";
 
@@ -31,18 +31,18 @@ export const landOf = (
   spawnersIn: () => spawners,
 });
 
-export const monster = (
+export const creature = (
   at: Hex,
-  kind: Monster["kind"] = "goblin",
+  kind: Creature["kind"] = "goblin",
   facing: Direction = "nw",
   home: Spawner = { kind: "village", at },
-): Monster => ({
+): Creature => ({
   id: hexKey(at),
   kind,
   home,
   at,
   facing,
-  hp: MONSTERS[kind].hp,
+  hp: CREATURES[kind].hp,
   mind: IDLE,
   level: 1,
   readyAt: 0,
@@ -60,9 +60,9 @@ export const facingEast = (world = landOf()): Game => {
   };
 };
 
-export const gameWith = (monsters: Monster[], world = landOf()): Game => ({
+export const gameWith = (creatures: Creature[], world = landOf()): Game => ({
   ...facingEast(world),
-  monsters,
+  creatures,
 });
 
 export const WAIT: Intent = { kind: "wait" };

@@ -1,6 +1,6 @@
 import type { Rng } from "procgen";
 import { rngOf } from "procgen";
-import { MONSTERS, type MonsterKind } from "./monsters";
+import { CREATURES, type CreatureKind } from "./creatures";
 
 export const BASE_CAPACITY = 6;
 
@@ -226,7 +226,7 @@ export const offerOf = (item: Item): number =>
 const PREFIX_CHANCE = 0.75;
 
 /** `source` names the gear: "… of the wolf". */
-const itemOf = (rng: Rng, id: string, source?: MonsterKind): Item => {
+const itemOf = (rng: Rng, id: string, source?: CreatureKind): Item => {
   const kind = rng.weighted(ITEM_WEIGHTS, 0);
   if (isPotion(kind)) return { id, kind: "potion", potion: kind };
   const { bases, materials } = GEAR[kind];
@@ -247,10 +247,10 @@ const itemOf = (rng: Rng, id: string, source?: MonsterKind): Item => {
 
 export const lootOf = (
   seed: number,
-  { id, kind }: { readonly id: string; readonly kind: MonsterKind },
+  { id, kind }: { readonly id: string; readonly kind: CreatureKind },
 ): Chest | undefined => {
   const rng = rngOf(seed, "loot").child(id);
-  const { gold, items } = MONSTERS[kind];
+  const { gold, items } = CREATURES[kind];
   const amount = rng.chance(gold.chance, 0)
     ? rng.int(gold.min, gold.max, 1)
     : 0;

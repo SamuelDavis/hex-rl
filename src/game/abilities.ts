@@ -10,7 +10,7 @@ import type { PotionKind } from "./items";
 
 export type Aim =
   | { readonly kind: "none" }
-  | { readonly kind: "monster" }
+  | { readonly kind: "creature" }
   | { readonly kind: "hex"; readonly range: number };
 
 export type Area = "target" | "ahead" | "flanks" | "ring";
@@ -105,7 +105,7 @@ export const SPELLS = {
     mp: 2,
     cooldown: 1,
     spendsTurn: true,
-    aim: { kind: "monster" },
+    aim: { kind: "creature" },
     effects: [
       { kind: "face" },
       { kind: "damage", area: "target", amount: PLAYER_DAMAGE },

@@ -1,4 +1,4 @@
-export const MONSTERS = {
+export const CREATURES = {
   wolf: {
     hp: 3,
     damage: 1,
@@ -91,7 +91,7 @@ export const MONSTERS = {
   },
 } as const;
 
-export type MonsterKind = keyof typeof MONSTERS;
+export type CreatureKind = keyof typeof CREATURES;
 
 /** Creatures of different factions fight; the player is `town`. */
 export type Faction = "wild" | "town";
@@ -99,7 +99,7 @@ export type Faction = "wild" | "town";
 export type Affliction = "bleed" | "stun" | "paralysis";
 
 /** `perLevel` scales potency (cubs summoned, turns afflicted) linearly with the caster's level, rounded down. */
-export type MonsterSpell =
+export type CreatureSpell =
   | {
       /** Refills wares to `stock` items while idle. */
       readonly kind: "restock";
@@ -109,7 +109,7 @@ export type MonsterSpell =
     }
   | {
       readonly kind: "summon";
-      readonly monster: MonsterKind;
+      readonly creature: CreatureKind;
       readonly perLevel: number;
       /** Turns after casting before it can be cast again. */
       readonly cooldown: number;
@@ -122,25 +122,25 @@ export type MonsterSpell =
       readonly cooldown: number;
     };
 
-const SUMMON_CUBS: MonsterSpell = {
+const SUMMON_CUBS: CreatureSpell = {
   kind: "summon",
-  monster: "cub",
+  creature: "cub",
   perLevel: 1,
   cooldown: 15,
 };
-const BLEED: MonsterSpell = {
+const BLEED: CreatureSpell = {
   kind: "afflict",
   affliction: "bleed",
   perLevel: 1,
   cooldown: 3,
 };
-const STUN: MonsterSpell = {
+const STUN: CreatureSpell = {
   kind: "afflict",
   affliction: "stun",
   perLevel: 0.5,
   cooldown: 4,
 };
-const PARALYZE: MonsterSpell = {
+const PARALYZE: CreatureSpell = {
   kind: "afflict",
   affliction: "paralysis",
   perLevel: 1,
@@ -148,7 +148,7 @@ const PARALYZE: MonsterSpell = {
 };
 
 /** Summons are cast while hostile, restocks while idle; afflictions ride on a landed attack. */
-export const MONSTER_SPELLS: Partial<Record<MonsterKind, MonsterSpell>> = {
+export const CREATURE_SPELLS: Partial<Record<CreatureKind, CreatureSpell>> = {
   wolf: SUMMON_CUBS,
   "alpha wolf": SUMMON_CUBS,
   bandit: BLEED,
@@ -163,7 +163,7 @@ export const MONSTER_SPELLS: Partial<Record<MonsterKind, MonsterSpell>> = {
 export type Service = "trade" | "bounty";
 
 /** What the player gets by interacting with a creature; creatures without one are uninterested. */
-export const SERVICES: Partial<Record<MonsterKind, Service>> = {
+export const SERVICES: Partial<Record<CreatureKind, Service>> = {
   bailiff: "bounty",
   reeve: "trade",
 };
@@ -183,15 +183,15 @@ interface Spawning {
 /** Spawns weighted draws from `pool` up to `cap`; wrecked, it unleashes `boss`. */
 export interface Lair extends Spawning {
   readonly faction: "wild";
-  readonly pool: readonly (readonly [MonsterKind, number])[];
-  readonly boss: MonsterKind;
+  readonly pool: readonly (readonly [CreatureKind, number])[];
+  readonly boss: CreatureKind;
   readonly cap: number;
 }
 
 /** Spawns the first `roster` kind with fewer than its count alive. */
 export interface Town extends Spawning {
   readonly faction: "town";
-  readonly roster: readonly (readonly [MonsterKind, number])[];
+  readonly roster: readonly (readonly [CreatureKind, number])[];
 }
 
 export type SpawnerType = Lair | Town;
@@ -271,19 +271,19 @@ export type SpawnerKind = keyof typeof SPAWNERS;
 
 export const spawnerOf = (kind: SpawnerKind): SpawnerType => SPAWNERS[kind];
 
-export const bossOf = (kind: SpawnerKind): MonsterKind | undefined => {
+export const bossOf = (kind: SpawnerKind): CreatureKind | undefined => {
   const type = spawnerOf(kind);
   return type.faction === "wild" ? type.boss : undefined;
 };
 
-export const membersOf = (kind: SpawnerKind): readonly MonsterKind[] => {
+export const membersOf = (kind: SpawnerKind): readonly CreatureKind[] => {
   const type = spawnerOf(kind);
   const entries = type.faction === "wild" ? type.pool : type.roster;
-  return entries.map(([monster]) => monster);
+  return entries.map(([creature]) => creature);
 };
 
 const SPAWNER_HP_PER_MONSTER_HP = 3;
 
 export const spawnerHpOf = (kind: SpawnerKind): number =>
   SPAWNER_HP_PER_MONSTER_HP *
-  Math.max(...membersOf(kind).map((monster) => MONSTERS[monster].hp));
+  Math.max(...membersOf(kind).map((creature) => CREATURES[creature].hp));

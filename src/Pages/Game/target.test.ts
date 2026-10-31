@@ -8,12 +8,12 @@ import {
   tracked,
   type Target,
 } from "./target";
-import { gameWith, land, landOf, monster, origin } from "../../game/testing";
+import { gameWith, land, landOf, creature, origin } from "../../game/testing";
 
 const RANGE = 5;
-const near = monster({ q: 2, r: 0 }, "goblin", "se");
-const far = monster({ q: 4, r: 0 });
-const beyond = monster({ q: 6, r: 0 });
+const near = creature({ q: 2, r: 0 }, "goblin", "se");
+const far = creature({ q: 4, r: 0 });
+const beyond = creature({ q: 6, r: 0 });
 
 describe("nextTarget", () => {
   const game = gameWith([far, beyond, near]);

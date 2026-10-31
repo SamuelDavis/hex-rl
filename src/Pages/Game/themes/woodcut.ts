@@ -19,7 +19,7 @@ import {
 import {
   CHEST,
   CONIFER,
-  MONSTER_FIGURES,
+  CREATURE_FIGURES,
   PLAYER_FIGURE,
   SPAWNER_SPRITES,
   SPRITE_BOX,
@@ -247,10 +247,10 @@ export const WOODCUT: CanvasTheme = {
     drawSprite(context, CHEST, base, CHEST_SIZE, PALETTE),
   player: (context, base, heading) =>
     drawFigure(context, PLAYER_FIGURE, base, heading),
-  monster: (context, base, kind, disposition, heading) =>
+  creature: (context, base, kind, disposition, heading) =>
     drawFigure(
       context,
-      MONSTER_FIGURES[kind],
+      CREATURE_FIGURES[kind],
       base,
       heading,
       RINGS[disposition],
