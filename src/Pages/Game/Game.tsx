@@ -825,7 +825,7 @@ function InventoryPanel(props: {
       <p>
         <small>Each move spends a turn.</small>
       </p>
-      <details>
+      <details open>
         <summary>Equipment</summary>
         <ul>
           <For each={PLACE_NAMES}>
@@ -1363,33 +1363,6 @@ function OtherPanel(props: {
   const getTile = () => props.game.land.tileAt(playerOf(props.game).at);
   return (
     <>
-      <SpeedControl speed={props.speed} setSpeed={props.setSpeed} />
-      <p>
-        Face a direction, then step that way: tap toward it, use the buttons, or
-        press {key("move-nw")} {key("move-n")} {key("move-ne")} {key("move-sw")}{" "}
-        {key("move-s")} {key("move-se")}; wait with {key("wait")}. Bump monsters
-        to attack, and their dens, camps, villages, mines and caves to wreck
-        them until they heal. Press {key("target")} to cycle through monsters
-        and townsfolk in view and see what each can see, even while aiming.
-        Press {key("slot-1")}–{key("slot-6")} to cast the spell in that slot, or
-        tap it; choose what each slot holds, spell or potion, in Slots (spends a
-        turn); potions are drunk without spending a turn. Step onto a chest,
-        open Pack, or press {key("inventory")}, to equip gear and move loot
-        between your pack and the ground (each move spends a turn). Aimed spells
-        move their reticle with the movement keys; cast with {key("confirm")} or
-        the slot's key again, or cancel with {key("cancel")}. Slaying monsters
-        earns experience; each level learns or raises a spell in Spells.
-        Monsters grow stronger, and their tricks (summoning, bleeding, stunning,
-        paralysis) worse, farther from where you set out. Climb one block at a
-        time; swim freely. Set the speed above in ticks per second (0 is
-        turn-based: a tick on each action that spends one), or pause; in real
-        time, turn-spending actions queue (up to two) for the next tick, and{" "}
-        {key("cancel")} drops the last one queued. Towns spawn a bailiff, a
-        reeve and peasants, who fight monsters; bump one, or target one beside
-        you and press
-        {key("interact")}, to interact: a reeve trades, a bailiff posts bounties
-        on ever-farther lairs.
-      </p>
       <div class="flex flex-wrap gap-(--pico-spacing)">
         <button type="button" onClick={() => props.remap()}>
           Controls
@@ -1398,7 +1371,38 @@ function OtherPanel(props: {
           New world
         </button>
       </div>
+      <SpeedControl speed={props.speed} setSpeed={props.setSpeed} />
       <details>
+        <summary>Help</summary>
+        <p>
+          Face a direction, then step that way: tap toward it, use the buttons,
+          or press {key("move-nw")} {key("move-n")} {key("move-ne")}{" "}
+          {key("move-sw")} {key("move-s")} {key("move-se")}; wait with{" "}
+          {key("wait")}. Bump monsters to attack, and their dens, camps,
+          villages, mines and caves to wreck them until they heal. Press{" "}
+          {key("target")} to cycle through monsters and townsfolk in view and
+          see what each can see, even while aiming. Press {key("slot-1")}–
+          {key("slot-6")} to cast the spell in that slot, or tap it; choose what
+          each slot holds, spell or potion, in Slots (spends a turn); potions
+          are drunk without spending a turn. Step onto a chest, open Pack, or
+          press {key("inventory")}, to equip gear and move loot between your
+          pack and the ground (each move spends a turn). Aimed spells move their
+          reticle with the movement keys; cast with {key("confirm")} or the
+          slot's key again, or cancel with {key("cancel")}. Slaying monsters
+          earns experience; each level learns or raises a spell in Spells.
+          Monsters grow stronger, and their tricks (summoning, bleeding,
+          stunning, paralysis) worse, farther from where you set out. Climb one
+          block at a time; swim freely. Set the speed above in ticks per second
+          (0 is turn-based: a tick on each action that spends one), or pause; in
+          real time, turn-spending actions queue (up to two) for the next tick,
+          and {key("cancel")} drops the last one queued. Towns spawn a bailiff,
+          a reeve and peasants, who fight monsters; bump one, or target one
+          beside you and press
+          {key("interact")}, to interact: a reeve trades, a bailiff posts
+          bounties on ever-farther lairs.
+        </p>
+      </details>
+      <details open>
         <summary>Debug</summary>
         <dl>
           <dt>Height</dt>
