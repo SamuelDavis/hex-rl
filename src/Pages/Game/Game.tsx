@@ -161,8 +161,13 @@ export default function Game() {
   }
 
   const [isStarting, setStarting] = createSignal(false);
+  const [getLastStart, setLastStart] = persist(
+    createSignal<Start | undefined>(undefined),
+    { key: "start" },
+  );
 
   function start({ seed, at }: Start) {
+    setLastStart({ seed, at });
     setSession(newSession(seed, getRange(), at));
     setLoadout(STARTING_LOADOUT);
     setStarting(false);
@@ -408,7 +413,11 @@ export default function Game() {
         )}
       </HTMLDialog>
       <HTMLDialog open={isStarting()} onClose={() => setStarting(false)}>
-        <NewWorld start={start} cancel={() => setStarting(false)} />
+        <NewWorld
+          initial={getLastStart()}
+          start={start}
+          cancel={() => setStarting(false)}
+        />
       </HTMLDialog>
       <HTMLDialog open={isRemapping()} onClose={() => setRemapping(false)}>
         <KeymapEditor
@@ -962,11 +971,15 @@ interface Start {
   readonly at: Hex;
 }
 
-/** Chooses a seed (random by default) and a starting position (the origin by default). */
+/** Chooses a seed and a starting position, prefilled with the last used (else a random seed at the origin). */
 function NewWorld(props: {
+  initial: Start | undefined;
   start: (start: Start) => void;
   cancel: () => void;
 }) {
+  const [getSeed, setSeed] = createSignal(props.initial?.seed ?? randomSeed());
+  const at = props.initial?.at ?? { q: 0, r: 0 };
+
   function submit(event: SubmitEvent & { currentTarget: HTMLFormElement }) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -985,16 +998,31 @@ function NewWorld(props: {
       <form id="new-world" onSubmit={submit}>
         <label>
           Seed
-          <input type="number" name="seed" required value={randomSeed()} />
+          <fieldset role="group">
+            <input
+              type="number"
+              name="seed"
+              required
+              value={getSeed()}
+              onInput={(event) => setSeed(Number(event.currentTarget.value))}
+            />
+            <button
+              type="button"
+              class="secondary"
+              onClick={() => setSeed(randomSeed())}
+            >
+              Random
+            </button>
+          </fieldset>
         </label>
         <fieldset role="group">
           <label>
             q
-            <input type="number" name="q" required value={0} />
+            <input type="number" name="q" required value={at.q} />
           </label>
           <label>
             r
-            <input type="number" name="r" required value={0} />
+            <input type="number" name="r" required value={at.r} />
           </label>
         </fieldset>
         <small>
