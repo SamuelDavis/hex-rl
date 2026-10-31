@@ -72,58 +72,75 @@ const quarryOf = (game: Game, spawner: SpawnerEntity) =>
       (a, b) => hexDistance(a.at, spawner.at) - hexDistance(b.at, spawner.at),
     )[0];
 
-/** Its boss emerges hostile toward the nearest fighting foe once a hex beside it is free. */
-const unleashBoss = (game: Game, spawner: SpawnerEntity): Game => {
+const membersOf = (game: Game, { at }: Spawner) =>
+  entitiesWith(game, "membership").filter(({ home }) => sameHex(home.at, at));
+
+/** Its boss emerges beside it: roused by a wreck, hostile toward the nearest fighting foe; else idle. */
+const bossEmerged = (game: Game, spawner: SpawnerEntity, site: Hex): Game => {
   const home = spawnerOfEntity(spawner);
-  const boss = bossOf(home.kind);
-  const site = spawnSiteOf(game, home.at);
-  if (!site) return game;
-  const creature = spawned(game, home, boss, site);
-  const quarry = quarryOf(game, spawner);
-  const hostile = quarry
+  const creature = spawned(game, home, bossOf(home.kind), site);
+  const quarry = spawner.isBossDue ? quarryOf(game, spawner) : undefined;
+  const boss = quarry
     ? { ...creature, mind: sighted(IDLE, site, quarry) }
     : creature;
   return recorded(
-    updated(inserted(game, hostile), spawner.id, { isBossDue: false }),
-    { kind: "emerged", source: whoIs(game, hostile) },
+    updated(inserted(game, boss), spawner.id, { isBossDue: false }),
+    { kind: "emerged", source: whoIs(game, boss) },
   );
 };
 
-/** The kind `spawner` would spawn now, if it has room for one. */
+/** The recruit its strategy calls for now, if it has room for one. */
 const recruitOf = (
   game: Game,
-  { kind, at }: Spawner,
+  home: Spawner,
   rng: Rng,
 ): CreatureKind | undefined => {
-  const members = entitiesWith(game, "membership").filter(({ home }) =>
-    sameHex(home.at, at),
+  const { recruits, boss } = spawnerOf(home.kind);
+  const members = membersOf(game, home).filter(
+    ({ kind }) => kind !== boss.kind,
   );
-  const type = spawnerOf(kind);
-  if (type.faction === "wild")
-    return members.length < type.cap
-      ? rng.weighted(type.pool, at.q, at.r, game.turn, 1)
-      : undefined;
-  return type.roster.find(
-    ([recruit, count]) =>
-      members.filter((member) => member.kind === recruit).length < count,
-  )?.[0];
+  const { at } = home;
+  switch (recruits.kind) {
+    case "pool":
+      return members.length < recruits.cap
+        ? rng.weighted(recruits.pool, at.q, at.r, game.turn, 1)
+        : undefined;
+    case "roster":
+      return recruits.roster.find(
+        ([recruit, count]) =>
+          members.filter((member) => member.kind === recruit).length < count,
+      )?.[0];
+  }
 };
 
-/** Spawns one member when its timer and chance allow, at once on healing from a wreck, or its boss when due. */
+/** Its boss, if called for (`always`, or roused by a wreck) and none is alive: it comes before any recruit, at once. */
+const isBossCalled = (
+  game: Game,
+  spawner: SpawnerEntity,
+  home: Spawner,
+): boolean => {
+  const { boss } = spawnerOf(home.kind);
+  const isAlive = membersOf(game, home).some(({ kind }) => kind === boss.kind);
+  return !isAlive && (boss.spawns === "always" || spawner.isBossDue);
+};
+
+/** By its strategy: its boss when called for, at once; a wreck's rousing spent if its boss already lives; else a recruit when its timer and chance allow, or at once on healing from a wreck. */
 export const spawn: Rule<Spawn> = (game, _, actor) => {
   if (!has(actor, "spawning", "position", "health", "allegiance"))
     return refused("unable");
-  if (actor.isBossDue) {
-    const unleashed = unleashBoss(game, actor);
-    return unleashed === game ? refused("blocked") : performed(unleashed);
-  }
-  if (isUnhealed(actor)) return refused("not-ready");
   const home = spawnerOfEntity(actor);
   const { at } = home;
+  const site = spawnSiteOf(game, at);
+  if (isBossCalled(game, actor, home))
+    return site
+      ? performed(bossEmerged(game, actor, site))
+      : refused("blocked");
+  if (actor.isBossDue)
+    return performed(updated(game, actor.id, { isBossDue: false }));
+  if (isUnhealed(actor)) return refused("not-ready");
+  if (!site) return refused("blocked");
   const { interval, chance } = spawnerOf(home.kind);
   const rng = rngOf(game.land.seed, "spawns");
-  const site = spawnSiteOf(game, at);
-  if (!site) return refused("blocked");
   const recruit = recruitOf(game, home, rng);
   if (!recruit) return refused("full");
   const isDue =

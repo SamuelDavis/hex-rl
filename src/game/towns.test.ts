@@ -96,6 +96,8 @@ describe("factions", () => {
     const camp = { kind: "town", at: { q: 16, r: 0 } } as const;
     const lair = { kind: "village", at: { q: 16, r: 0 } } as const;
     const beside = { q: 15, r: 0 };
+    /** The town's bailiff, out of everyone's sight. */
+    const absent = { q: 16, r: -12 };
     /** Out of the player's sight, its spawner idle, with `creatures`. */
     const near = (spawner: Spawner, creatures: Creature[]) =>
       withCreatures(
@@ -107,7 +109,8 @@ describe("factions", () => {
 
     test("monsters attack a hostile spawner they notice", () => {
       const goblin = creature(beside, "goblin", "se", lair);
-      const next = act(near(camp, [goblin]), WAIT);
+      const bailiff = creature(absent, "bailiff", "n", camp);
+      const next = act(near(camp, [bailiff, goblin]), WAIT);
       expect(eventsOf(next)).toContainEqual(
         expect.objectContaining({
           kind: "hurt",
@@ -127,22 +130,25 @@ describe("factions", () => {
     test("monsters go after foes that can fight back before spawners", () => {
       const goblin = creature(beside, "goblin", "se", lair);
       const peasant = townsfolk({ q: 15, r: -2 }, "peasant", "s");
-      const next = act(near(camp, [goblin, peasant]), WAIT);
+      const bailiff = creature(absent, "bailiff", "n", camp);
+      const next = act(near(camp, [bailiff, goblin, peasant]), WAIT);
       expect(
         creaturesOf(next).find(({ kind }) => kind === "goblin")!.mind,
       ).toMatchObject({ state: "hostile", lastSeen: peasant.at });
     });
 
-    test("a wrecked town unleashes its bailiff, its boss", () => {
-      const wrecked = updated(near(camp, []), spawnerIdOf(camp.at), {
+    test("a town keeps its boss, the bailiff, alive before anyone else, and never two", () => {
+      const bailiffsOf = (game: Game) =>
+        creaturesOf(game).filter(({ kind }) => kind === "bailiff");
+      expect(bailiffsOf(act(near(camp, []), WAIT))).toHaveLength(1);
+      const bailiff = creature(absent, "bailiff", "n", camp);
+      const wrecked = updated(near(camp, [bailiff]), spawnerIdOf(camp.at), {
         hp: 0,
         isWrecked: true,
         isBossDue: true,
-        spawnsAt: 0,
       });
-      expect(creaturesOf(act(wrecked, WAIT))).toMatchObject([
-        { kind: "bailiff" },
-      ]);
+      for (const game of historyOf(wrecked, 100))
+        expect(bailiffsOf(game)).toHaveLength(1);
     });
   });
 

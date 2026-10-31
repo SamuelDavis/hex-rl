@@ -148,7 +148,8 @@ describe("newGame", () => {
 
 describe("spawners", () => {
   const mine = { kind: "mine", at: { q: 6, r: 0 } } as const;
-  const { pool, cap, interval } = SPAWNERS.mine;
+  const { recruits, interval } = SPAWNERS.mine;
+  const { pool, cap } = recruits;
   const out = { "0,0": land(30) };
 
   const history = historyOf(newGame(landOf(out, [mine])));
@@ -203,7 +204,7 @@ describe("spawners", () => {
       creature(site, "goblin", "nw", mine),
     ]);
     const bossOf = (game: Game) =>
-      creaturesOf(game).find(({ kind }) => kind === SPAWNERS.mine.boss);
+      creaturesOf(game).find(({ kind }) => kind === SPAWNERS.mine.boss.kind);
     const held = historyOf(trapped, 10);
     expect(held.filter(bossOf)).toEqual([]);
     const freed = act(withCreatures(held.at(-1)!, []), WAIT);
@@ -269,16 +270,17 @@ describe("spawners", () => {
     const at = wreckedAt(games);
     expect(creaturesOf(games[at - 1]!)).toEqual([]);
     expect(creaturesOf(games[at]!)).toMatchObject([
-      { kind: SPAWNERS.mine.boss, home: adjacent, mind: { state: "hostile" } },
+      { kind: SPAWNERS.mine.boss.kind, home: adjacent, mind: { state: "hostile" } },
     ]);
     expect(hexDistance(creaturesOf(games[at]!)[0]!.at, adjacent.at)).toBe(1);
   });
 
-  test("have bosses stronger and richer than the monsters they spawn", () => {
-    for (const type of Object.values(SPAWNERS)) {
-      if (type.faction !== "wild") continue;
-      const boss = CREATURES[type.boss];
-      for (const [spawned] of type.pool) {
+  test("unleashed by wrecks, have bosses stronger and richer than the monsters they spawn", () => {
+    for (const kind of Object.keys(SPAWNERS) as SpawnerKind[]) {
+      const { boss: lord } = SPAWNERS[kind];
+      if (lord.spawns !== "wrecked") continue;
+      const boss = CREATURES[lord.kind];
+      for (const spawned of membersOf(kind)) {
         const { hp, damage, gold } = CREATURES[spawned];
         expect(boss.hp).toBeGreaterThan(hp);
         expect(boss.damage).toBeGreaterThanOrEqual(damage);

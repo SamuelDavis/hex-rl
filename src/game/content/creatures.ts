@@ -122,40 +122,43 @@ export const SERVICES: Partial<Record<CreatureKind, Service>> = {
   reeve: "trade",
 };
 
-/** Wrecked, every spawner unleashes its `boss`. */
-interface Spawning {
+type Weighted = readonly (readonly [CreatureKind, number])[];
+
+/** How a spawner chooses its next recruit: weighted draws from `pool` while fewer than `cap` are alive, or the first `roster` kind with fewer than its count alive. */
+export type Recruiting =
+  | { readonly kind: "pool"; readonly pool: Weighted; readonly cap: number }
+  | { readonly kind: "roster"; readonly roster: Weighted };
+
+/** When its boss appears: once the spawner is wrecked, or `always`, kept alive before any recruit. At most one is alive at once. */
+export interface Boss {
+  readonly kind: CreatureKind;
+  readonly spawns: "wrecked" | "always";
+}
+
+/** A spawner's strategy: its recruiting and its boss, at most one recruit per `interval` turns, each turn at `chance`. */
+export interface SpawnerType {
+  readonly faction: FactionId;
   readonly name: string;
-  readonly boss: CreatureKind;
+  readonly boss: Boss;
+  readonly recruits: Recruiting;
   readonly leash: number;
   readonly interval: number;
   readonly chance: number;
 }
 
-/** Spawns weighted draws from `pool` up to `cap`. */
-export interface Lair extends Spawning {
-  readonly faction: Extract<FactionId, "wild">;
-  readonly pool: readonly (readonly [CreatureKind, number])[];
-  readonly cap: number;
-}
-
-/** Spawns the first `roster` kind with fewer than its count alive. */
-export interface Town extends Spawning {
-  readonly faction: Extract<FactionId, "town">;
-  readonly roster: readonly (readonly [CreatureKind, number])[];
-}
-
-export type SpawnerType = Lair | Town;
-
 export const SPAWNERS = {
   den: {
     faction: "wild",
     name: "wolf den",
-    pool: [
-      ["wolf", 3],
-      ["cub", 2],
-    ],
-    boss: "alpha wolf",
-    cap: 4,
+    boss: { kind: "alpha wolf", spawns: "wrecked" },
+    recruits: {
+      kind: "pool",
+      pool: [
+        ["wolf", 3],
+        ["cub", 2],
+      ],
+      cap: 4,
+    },
     leash: 8,
     interval: 15,
     chance: 0.2,
@@ -163,12 +166,15 @@ export const SPAWNERS = {
   camp: {
     faction: "wild",
     name: "bandit camp",
-    pool: [
-      ["bandit", 3],
-      ["thief", 1],
-    ],
-    boss: "bandit chief",
-    cap: 3,
+    boss: { kind: "bandit chief", spawns: "wrecked" },
+    recruits: {
+      kind: "pool",
+      pool: [
+        ["bandit", 3],
+        ["thief", 1],
+      ],
+      cap: 3,
+    },
     leash: 6,
     interval: 20,
     chance: 0.15,
@@ -176,9 +182,8 @@ export const SPAWNERS = {
   village: {
     faction: "wild",
     name: "goblin village",
-    pool: [["goblin", 1]],
-    boss: "goblin chief",
-    cap: 4,
+    boss: { kind: "goblin chief", spawns: "wrecked" },
+    recruits: { kind: "pool", pool: [["goblin", 1]], cap: 4 },
     leash: 6,
     interval: 15,
     chance: 0.2,
@@ -186,9 +191,8 @@ export const SPAWNERS = {
   mine: {
     faction: "wild",
     name: "kobold mine",
-    pool: [["kobold", 1]],
-    boss: "kobold foreman",
-    cap: 5,
+    boss: { kind: "kobold foreman", spawns: "wrecked" },
+    recruits: { kind: "pool", pool: [["kobold", 1]], cap: 5 },
     leash: 4,
     interval: 10,
     chance: 0.25,
@@ -196,9 +200,8 @@ export const SPAWNERS = {
   cave: {
     faction: "wild",
     name: "troll cave",
-    pool: [["troll", 1]],
-    boss: "troll elder",
-    cap: 1,
+    boss: { kind: "troll elder", spawns: "wrecked" },
+    recruits: { kind: "pool", pool: [["troll", 1]], cap: 1 },
     leash: 4,
     interval: 40,
     chance: 0.1,
@@ -206,12 +209,14 @@ export const SPAWNERS = {
   town: {
     faction: "town",
     name: "town",
-    boss: "bailiff",
-    roster: [
-      ["bailiff", 1],
-      ["reeve", 1],
-      ["peasant", 3],
-    ],
+    boss: { kind: "bailiff", spawns: "always" },
+    recruits: {
+      kind: "roster",
+      roster: [
+        ["reeve", 1],
+        ["peasant", 3],
+      ],
+    },
     leash: 6,
     interval: 10,
     chance: 0.5,
@@ -222,12 +227,19 @@ export type SpawnerKind = keyof typeof SPAWNERS;
 
 export const spawnerOf = (kind: SpawnerKind): SpawnerType => SPAWNERS[kind];
 
-export const bossOf = (kind: SpawnerKind): CreatureKind => spawnerOf(kind).boss;
+export const bossOf = (kind: SpawnerKind): CreatureKind =>
+  spawnerOf(kind).boss.kind;
 
+const recruitsOf = ({ recruits }: SpawnerType): Weighted =>
+  recruits.kind === "pool" ? recruits.pool : recruits.roster;
+
+/** The kinds it keeps alive: its recruits, and its boss when it is `always` kept. */
 export const membersOf = (kind: SpawnerKind): readonly CreatureKind[] => {
   const type = spawnerOf(kind);
-  const entries = type.faction === "wild" ? type.pool : type.roster;
-  return entries.map(([creature]) => creature);
+  const recruits = recruitsOf(type).map(([creature]) => creature);
+  return type.boss.spawns === "always"
+    ? [type.boss.kind, ...recruits]
+    : recruits;
 };
 
 const SPAWNER_HP_PER_MONSTER_HP = 3;

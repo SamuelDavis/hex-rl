@@ -145,6 +145,7 @@ src/game/
 | Status effect (heal-over-time, burning, countdown) | Row in `CONDITIONS` | Branch in a Rule or system |
 | Spell, potion, creature knack | Row in `ABILITIES` composing Effects; a knack also in `KNACKS` | Per-ability function |
 | Creature, NPC, spawner kind | Rows in `content/creatures.ts`; components in `archetypes.ts` | New entity type |
+| Spawning behaviour | A `Recruiting` variant or `Boss.spawns` value (`content/creatures.ts`) and its case in `actions/spawning.ts` | Branching on a spawner's kind or faction |
 | Faction | Row in `FACTIONS` | Comparing factions directly |
 | Attribute | Field in a component (e.g. `Stats`) and its archetypes; read where used | Reading it off a kind's table |
 | Per-entity behaviour each turn | Phase in `systems/`, entry in `TURN` | Logic in `turns` |
@@ -166,7 +167,7 @@ Long-term goal: a peer-to-peer, host-authoritative, simplified MMO. Nothing is b
 
 - Quests are a `questing` component, not conditions with data and reactions: no second quest exists to justify the generality.
 - Stats are base values only; condition and equipment modifiers wait for the first one.
-- Spawning is its own Deed, not an Ability: lair rosters, caps, boss and revival don't reduce to the summon effect yet.
+- Spawning is its own Deed, not an Ability: recruiting strategies, bosses and revival don't reduce to the summon effect yet.
 
 ## Prior art
 

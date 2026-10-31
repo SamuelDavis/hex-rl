@@ -1,6 +1,7 @@
 import type { Bounds } from "procgen";
 import type { Bounty, Entity } from "./components";
 import { bossOf, spawnerOf } from "./content/creatures";
+import { relationOf, type FactionId } from "./content/factions";
 import { centerOf, hexDistance, sameHex, type Hex } from "./hex";
 import { dangerOf } from "./terrain";
 import { recorded, updated, whoIs, withOf, type Game } from "./world";
@@ -65,14 +66,19 @@ const rewarded = (
   );
 };
 
-/** The nearest lair to `from` above `level`, searched in widening rings. */
-const lairAbove = ({ land }: Game, from: Hex, level: number) => {
+/** The nearest spawner hostile to `faction` around `from` above `level`, searched in widening rings. */
+const lairAbove = (
+  { land }: Game,
+  from: Hex,
+  faction: FactionId,
+  level: number,
+) => {
   for (const radius of BOUNTY_SEARCH) {
     const lair = land
       .spawnersIn(boundsAround(from, radius))
       .filter(
         ({ kind, at }) =>
-          spawnerOf(kind).faction === "wild" &&
+          relationOf(spawnerOf(kind).faction, faction) === "hostile" &&
           dangerOf(at, land.spawn) > level &&
           hexDistance(at, from) <= radius,
       )
@@ -86,7 +92,7 @@ const lairAbove = ({ land }: Game, from: Hex, level: number) => {
 export const bountied = (
   game: Game,
   hunter: string,
-  bailiff: Entity & { readonly at: Hex },
+  bailiff: Entity & { readonly at: Hex; readonly faction: FactionId },
 ): Game => {
   const questing = withOf(game, hunter, "questing", "purse");
   if (!questing) return game;
@@ -94,7 +100,7 @@ export const bountied = (
   if (bounty && !bounty.isSlain) return game;
   const paid = bounty ? rewarded(game, hunter, bounty, bailiff) : game;
   const { bountyLevel } = withOf(paid, hunter, "questing")!;
-  const lair = lairAbove(paid, bailiff.at, bountyLevel);
+  const lair = lairAbove(paid, bailiff.at, bailiff.faction, bountyLevel);
   if (!lair) return paid;
   const level = dangerOf(lair.at, game.land.spawn);
   return recorded(

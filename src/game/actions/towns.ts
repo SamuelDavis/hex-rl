@@ -36,7 +36,7 @@ export const interact: Rule<Interact> = (game, { at }, actor) => {
   if (!at) return refused("no-target");
   if (!isBeside(game, actor.at, at)) return refused("out-of-reach");
   const npc = occupantAt(game, at);
-  if (!npc?.at) return refused("no-target");
+  if (!npc || !has(npc, "position", "allegiance")) return refused("no-target");
   const service = SERVICES[npc.kind as keyof typeof SERVICES];
   if (!service) return refused("uninterested");
   const met = recorded(game, {
@@ -44,11 +44,7 @@ export const interact: Rule<Interact> = (game, { at }, actor) => {
     source: whoIs(game, actor),
     target: whoIs(game, npc),
   });
-  return performed(
-    service === "bounty"
-      ? bountied(met, actor.id, { ...npc, at: npc.at })
-      : met,
-  );
+  return performed(service === "bounty" ? bountied(met, actor.id, npc) : met);
 };
 
 const sell = (
