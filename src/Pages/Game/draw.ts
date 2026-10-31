@@ -81,6 +81,8 @@ export interface Scene {
   readonly visible: ReadonlySet<string>;
   readonly target: TargetMark | undefined;
   readonly aim: AimMark | undefined;
+  /** The lair of the player's outstanding bounty, if any. */
+  readonly bounty: Hex | undefined;
   readonly seen: ReadonlySet<string>;
   readonly width: number;
   readonly height: number;
@@ -99,6 +101,7 @@ export const drawScene = (
     visible,
     target,
     aim,
+    bounty,
     seen,
     width,
     height,
@@ -227,6 +230,7 @@ export const drawScene = (
       theme.spawner(context, base, spawner.kind, (color) =>
         lit(isWrecked(spawner) ? ashen(color) : color),
       );
+    if (bounty && sameHex(hex, bounty)) theme.bounty(context, base);
     if (isVisible && chests.has(hexKey(hex))) theme.chest(context, base);
     if (target && sameHex(hex, target.at))
       drawReticle(context, base, marks.targeted);

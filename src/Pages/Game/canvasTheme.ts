@@ -47,6 +47,8 @@ export interface CanvasTheme {
     tint: Tint,
   ) => void;
   readonly chest: (context: CanvasRenderingContext2D, base: Vec2) => void;
+  /** Marks the lair of the player's outstanding bounty, over its spawner. */
+  readonly bounty: (context: CanvasRenderingContext2D, base: Vec2) => void;
   readonly player: (
     context: CanvasRenderingContext2D,
     base: Vec2,

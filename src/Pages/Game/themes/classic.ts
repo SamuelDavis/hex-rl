@@ -192,6 +192,19 @@ export const CLASSIC: CanvasTheme = {
     context.fillStyle = css(color, -20);
     context.fill();
   },
+  bounty: (context, base) => {
+    drawEllipse(context, base, TOKEN_SIZE * 2);
+    context.strokeStyle = css(GOLD);
+    context.lineWidth = 2.5;
+    context.stroke();
+    context.lineWidth = HAIRLINE;
+    drawLabel(context, { x: base.x, y: base.y - PIXELS_PER_UNIT * 1.4 }, "!", {
+      font: `bold ${TOKEN_SIZE * 2}px monospace`,
+      fill: css(GOLD),
+      halo: SHADOW,
+      width: 3,
+    });
+  },
   chest: (context, { x, y }) => {
     const width = PIXELS_PER_UNIT * 0.7;
     const height = width * TILT;

@@ -222,6 +222,7 @@ export default function Game() {
       visible: getVisible(),
       target: getTargetMark(),
       aim: getAimMark(),
+      bounty: player.bounty?.isSlain ? undefined : player.bounty?.at,
       seen,
       width,
       height,

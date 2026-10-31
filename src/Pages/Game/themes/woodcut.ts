@@ -243,6 +243,15 @@ export const WOODCUT: CanvasTheme = {
       SPAWNER_SIZE,
       tinted(PALETTE, tint),
     ),
+  bounty: (context, base) => {
+    drawFootprint(context, base, TOKEN_SIZE * 2, PALETTE.blood);
+    drawLabel(context, { x: base.x, y: base.y - SPAWNER_SIZE * 1.05 }, "✠", {
+      font: `bold ${FIGURE_SIZE * 0.6}px serif`,
+      fill: css(PALETTE.blood),
+      halo: css(PALETTE.ink),
+      width: OUTLINE * 1.5,
+    });
+  },
   chest: (context, base) =>
     drawSprite(context, CHEST, base, CHEST_SIZE, PALETTE),
   player: (context, base, heading) =>
