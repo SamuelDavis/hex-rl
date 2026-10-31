@@ -24,6 +24,10 @@ Order is declared in `src/pico.css`.
 - `woodcut` (ink, bone and blood on paper; IM Fell English, loaded in `index.html`) overrides `--pico-*` in `src/index.css`'s `theme` layer. Colors are `light-dark()` pairs, so one declaration serves Pico's light, dark and `data-theme` cases; Lightning CSS polyfills it from Pico's `color-scheme` rules. Its canvas ignores the color scheme: unexplored ground is ink, as an uncarved block prints.
 - Per-theme values Tailwind classes need are custom properties (e.g. `--mana-color`).
 
+## Dropdown
+
+`details.dropdown` is vendored into `src/pico.css`'s `pico` layer from Pico's class-based build, which the classless build omits; re-copy it when upgrading Pico. Its `--pico-dropdown-*` colors derive from theme variables in `defaults`, so app themes restyle it. In `ul[dir="rtl"]` (right-aligned), give items `dir="ltr"` so trailing punctuation keeps its place.
+
 ## `data-icon`
 
 `HTMLIcon` is sized to the surrounding line height, including under Pico's `role="button"`.

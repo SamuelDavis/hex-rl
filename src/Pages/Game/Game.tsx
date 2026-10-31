@@ -96,8 +96,9 @@ const ARROWS: Record<Direction, string> = {
   se: "↘︎",
 };
 
-const TABS = ["Play", "Slots", "Pack", "Spells", "Other"] as const;
-type Tab = (typeof TABS)[number];
+const MENU = ["Slots", "Pack", "Spells", "Log", "Other"] as const;
+type MenuItem = (typeof MENU)[number];
+type Panel = Exclude<MenuItem, "Pack">;
 
 const CONDITION_NAMES: Record<ConditionId, string> = {
   bleed: "Bleeding",
@@ -125,7 +126,7 @@ const randomPosition = (): Hex => {
 export default function Game() {
   const { getTheme } = useAppState();
   const [getSession, setSession] = createSignal(newSession(randomSeed(), 0));
-  const [getTab, setTab] = createSignal<Tab>("Play");
+  const [getPanel, setPanel] = createSignal<Panel>();
   const [getSize, setSize] = createSignal({ width: 0, height: 0 });
   const [getCanvas, setCanvas] = createSignal<HTMLCanvasElement>();
   const [getEditing, setEditing] = createSignal<{ slot: number }>();
@@ -204,6 +205,12 @@ export default function Game() {
     dispatch({ kind: "speed", speed: getSpeed() });
     setLoadout(STARTING_LOADOUT);
     setStarting(false);
+    setPanel(undefined);
+  }
+
+  function open(item: MenuItem) {
+    if (item === "Pack") dispatch({ kind: "inventory" });
+    else setPanel(item);
   }
 
   const restart = () => setStarting(true);
@@ -211,6 +218,7 @@ export default function Game() {
   function onKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (
+      getPanel() ||
       getEditing() ||
       isRemapping() ||
       getSession().isInventoryOpen ||
@@ -283,76 +291,60 @@ export default function Game() {
   return (
     <article class="mx-auto max-w-lg">
       <header>
-        <div>
-          <div class="flex items-baseline justify-between gap-(--pico-spacing)">
-            <h1>{BIOME_NAMES[getTile().biome]}</h1>
-            <fieldset role="group" class="mb-0 w-auto">
-              <input
-                type="number"
-                aria-label="Ticks per second (0: turn-based)"
-                title="Ticks per second (0: turn-based)"
-                class="w-20"
-                min="0"
-                step="any"
-                value={getSpeed().ticksPerSecond}
-                onChange={(event) => {
-                  const ticksPerSecond = event.currentTarget.valueAsNumber;
-                  if (Number.isFinite(ticksPerSecond) && ticksPerSecond >= 0)
-                    setSpeed({ ...getSpeed(), ticksPerSecond });
-                }}
-              />
-              <button
-                type="button"
-                aria-pressed={getSpeed().isPaused}
-                aria-label={getSpeed().isPaused ? "Resume" : "Pause"}
-                onClick={() =>
-                  setSpeed({ ...getSpeed(), isPaused: !getSpeed().isPaused })
-                }
-              >
-                <HTMLIcon type={getSpeed().isPaused ? "play_arrow" : "pause"} />
-              </button>
-            </fieldset>
-          </div>
-          <p data-cap="end">
-            HP {Math.max(0, playerOf(getGame()).hp)}/{MAX_HP} · MP{" "}
-            {playerOf(getGame()).mp}/{MAX_MP} · Level{" "}
-            {levelOf(playerOf(getGame()))} (
-            {playerOf(getGame()).xp % XP_PER_LEVEL}/{XP_PER_LEVEL} XP) · Gold{" "}
-            {playerOf(getGame()).gold} · Turn {getGame().turn}
-            <Show when={getSession().queue.length}>
-              {(queued) => <> · Queued {queued()}</>}
-            </Show>
-            <For each={conditionsOf(getGame())}>
-              {([condition, turns]) => (
-                <>
-                  {" "}
-                  · {CONDITION_NAMES[condition]} {turns}
-                </>
-              )}
-            </For>
-          </p>
-          <Show when={playerOf(getGame()).bounty}>
-            {(bounty) => (
-              <p data-cap="end">
-                <small>
-                  Bounty:{" "}
-                  {bounty().isSlain
-                    ? "slain; return to a bailiff"
-                    : bountyOf(bounty().kind, bounty().at)}{" "}
-                  · you are at {placeOf(playerOf(getGame()).at)}
-                </small>
-              </p>
-            )}
+        <nav>
+          <ul>
+            <li>
+              <h1 class="mb-0">{BIOME_NAMES[getTile().biome]}</h1>
+            </li>
+          </ul>
+          <ul>
+            <li>
+              <Menu unlocks={unlocksOf(playerOf(getGame()))} open={open} />
+            </li>
+          </ul>
+        </nav>
+        <p data-cap="end">
+          Level {levelOf(playerOf(getGame()))} · Gold {playerOf(getGame()).gold}{" "}
+          · Turn {getGame().turn}
+          <Show when={getSession().queue.length}>
+            {(queued) => <> · Queued {queued()}</>}
           </Show>
-        </div>
+          <For each={conditionsOf(getGame())}>
+            {([condition, turns]) => (
+              <>
+                {" "}
+                · {CONDITION_NAMES[condition]} {turns}
+              </>
+            )}
+          </For>
+        </p>
+        <Show when={playerOf(getGame()).bounty}>
+          {(bounty) => (
+            <p data-cap="end">
+              <small>
+                Bounty:{" "}
+                {bounty().isSlain
+                  ? "slain; return to a bailiff"
+                  : bountyOf(bounty().kind, bounty().at)}{" "}
+                · you are at {placeOf(playerOf(getGame()).at)}
+              </small>
+            </p>
+          )}
+        </Show>
         <div class="grid grid-cols-3 gap-(--pico-spacing)">
-          <progress value={Math.max(0, playerOf(getGame()).hp)} max={MAX_HP} />
-          <progress
+          <Meter
+            label="HP"
+            value={Math.max(0, playerOf(getGame()).hp)}
+            max={MAX_HP}
+          />
+          <Meter
+            label="MP"
             class="[--pico-progress-color:var(--mana-color)]"
             value={playerOf(getGame()).mp}
             max={MAX_MP}
           />
-          <progress
+          <Meter
+            label="XP"
             class="[--pico-progress-color:var(--xp-color)]"
             value={playerOf(getGame()).xp % XP_PER_LEVEL}
             max={XP_PER_LEVEL}
@@ -366,58 +358,54 @@ export default function Game() {
         onClick={onTap}
       />
       <footer>
-        <div role="group">
-          <For each={TABS}>
-            {(tab) => (
-              <button
-                type="button"
-                class="relative"
-                aria-current={getTab() === tab}
-                onClick={() => setTab(tab)}
-              >
-                {tab}
-                <Show when={tab === "Spells" && unlocksOf(playerOf(getGame()))}>
-                  {(unlocks) => <Count>{unlocks()}</Count>}
-                </Show>
-              </button>
-            )}
-          </For>
-        </div>
-        <Switch>
-          <Match when={getTab() === "Play"}>
-            <PlayPanel
-              game={getGame()}
-              isAiming={isAiming()}
-              loadout={getLoadout()}
-              keymap={getKeymap()}
-              press={press}
-              restart={restart}
-            />
-          </Match>
-          <Match when={getTab() === "Slots"}>
-            <SlotsPanel
-              loadout={getLoadout()}
-              keymap={getKeymap()}
-              editSlot={(slot) => setEditing({ slot })}
-            />
-          </Match>
-          <Match when={getTab() === "Pack"}>
-            <InventoryPanel game={getGame()} dispatch={dispatch} />
-          </Match>
-          <Match when={getTab() === "Spells"}>
-            <SpellsPanel game={getGame()} dispatch={dispatch} />
-          </Match>
-          <Match when={getTab() === "Other"}>
-            <OtherPanel
-              game={getGame()}
-              log={getSession().log}
-              keymap={getKeymap()}
-              remap={() => setRemapping(true)}
-              restart={restart}
-            />
-          </Match>
-        </Switch>
+        <PlayPanel
+          game={getGame()}
+          isAiming={isAiming()}
+          loadout={getLoadout()}
+          keymap={getKeymap()}
+          press={press}
+          restart={restart}
+        />
       </footer>
+      <HTMLDialog open={getPanel()} onClose={() => setPanel(undefined)}>
+        {(panel) => (
+          <article>
+            <header>
+              <h3>{panel()}</h3>
+            </header>
+            <Switch>
+              <Match when={panel() === "Slots"}>
+                <SlotsPanel
+                  loadout={getLoadout()}
+                  keymap={getKeymap()}
+                  editSlot={(slot) => setEditing({ slot })}
+                />
+              </Match>
+              <Match when={panel() === "Spells"}>
+                <SpellsPanel game={getGame()} dispatch={dispatch} />
+              </Match>
+              <Match when={panel() === "Log"}>
+                <LogPanel log={getSession().log} />
+              </Match>
+              <Match when={panel() === "Other"}>
+                <OtherPanel
+                  game={getGame()}
+                  keymap={getKeymap()}
+                  speed={getSpeed()}
+                  setSpeed={setSpeed}
+                  remap={() => setRemapping(true)}
+                  restart={restart}
+                />
+              </Match>
+            </Switch>
+            <footer>
+              <button type="button" onClick={() => setPanel(undefined)}>
+                Close
+              </button>
+            </footer>
+          </article>
+        )}
+      </HTMLDialog>
       <HTMLDialog open={getEditing()} onClose={() => setEditing(undefined)}>
         {(editing) => (
           <AbilityPicker
@@ -547,25 +535,19 @@ function PlayPanel(props: {
           </For>
         </div>
         <div class="col-span-2 col-start-5 grid grid-cols-2 gap-(--pico-spacing)">
+          <PadButton control="target" keymap={props.keymap} press={props.press}>
+            Target
+          </PadButton>
           <Show
             when={props.isAiming}
             fallback={
-              <>
-                <PadButton
-                  control="wait"
-                  keymap={props.keymap}
-                  press={props.press}
-                >
-                  Wait
-                </PadButton>
-                <PadButton
-                  control="interact"
-                  keymap={props.keymap}
-                  press={props.press}
-                >
-                  Interact
-                </PadButton>
-              </>
+              <PadButton
+                control="interact"
+                keymap={props.keymap}
+                press={props.press}
+              >
+                Interact
+              </PadButton>
             }
           >
             <PadButton
@@ -575,6 +557,20 @@ function PlayPanel(props: {
             >
               Cast
             </PadButton>
+          </Show>
+          <div />
+          <Show
+            when={props.isAiming}
+            fallback={
+              <PadButton
+                control="wait"
+                keymap={props.keymap}
+                press={props.press}
+              >
+                Wait
+              </PadButton>
+            }
+          >
             <PadButton
               control="cancel"
               keymap={props.keymap}
@@ -583,9 +579,6 @@ function PlayPanel(props: {
               Cancel
             </PadButton>
           </Show>
-          <PadButton control="target" keymap={props.keymap} press={props.press}>
-            Target
-          </PadButton>
         </div>
       </div>
     </Show>
@@ -752,7 +745,7 @@ function SpellsPanel(props: {
             fallback="Gain a level to learn or raise a spell."
           >
             Choose {getUnlocks()} more: each level learns a spell or raises one,
-            scaling its effect. Bind learned spells in the Slots tab.
+            scaling its effect. Bind learned spells in Slots.
           </Show>
         </small>
       </p>
@@ -1183,6 +1176,53 @@ function AbilityCard(props: { ability: AbilityId; children?: JSX.Element }) {
   );
 }
 
+function Menu(props: { unlocks: number; open: (item: MenuItem) => void }) {
+  const [getDetails, setDetails] = createSignal<HTMLDetailsElement>();
+  function choose(event: MouseEvent, item: MenuItem) {
+    event.preventDefault();
+    getDetails()?.removeAttribute("open");
+    props.open(item);
+  }
+  return (
+    <details ref={setDetails} class="dropdown">
+      <summary>
+        Menu
+        <Show when={props.unlocks}>{(unlocks) => <> ({unlocks()})</>}</Show>
+      </summary>
+      <ul dir="rtl">
+        <For each={MENU}>
+          {(item) => (
+            <li dir="ltr">
+              <a href="#" onClick={(event) => choose(event, item)}>
+                {item}
+                <Show when={item === "Spells" && props.unlocks}>
+                  {(unlocks) => <> ({unlocks()})</>}
+                </Show>
+              </a>
+            </li>
+          )}
+        </For>
+      </ul>
+    </details>
+  );
+}
+
+function Meter(props: {
+  label: string;
+  value: number;
+  max: number;
+  class?: string;
+}) {
+  return (
+    <div>
+      <small data-cap="start">
+        {props.label} {props.value}/{props.max}
+      </small>
+      <progress class={props.class} value={props.value} max={props.max} />
+    </div>
+  );
+}
+
 function Count(props: { children: JSX.Element }) {
   return <span class="absolute top-0.5 right-1 text-xs">{props.children}</span>;
 }
@@ -1264,16 +1304,52 @@ function LogPanel(props: { log: readonly GameEvent[] }) {
     }),
   );
   return (
-    <ul ref={setList} class="h-[5lh] overflow-y-auto">
+    <ul ref={setList} class="max-h-[60vh] overflow-y-auto">
       <For each={props.log}>{(event) => <li>{narrationOf(event)}</li>}</For>
     </ul>
   );
 }
 
+function SpeedControl(props: {
+  speed: Speed;
+  setSpeed: (speed: Speed) => void;
+}) {
+  return (
+    <>
+      <label for="speed">Ticks per second (0: turn-based)</label>
+      <fieldset role="group">
+        <input
+          id="speed"
+          type="number"
+          min="0"
+          step="any"
+          value={props.speed.ticksPerSecond}
+          onChange={(event) => {
+            const ticksPerSecond = event.currentTarget.valueAsNumber;
+            if (Number.isFinite(ticksPerSecond) && ticksPerSecond >= 0)
+              props.setSpeed({ ...props.speed, ticksPerSecond });
+          }}
+        />
+        <button
+          type="button"
+          aria-pressed={props.speed.isPaused}
+          aria-label={props.speed.isPaused ? "Resume" : "Pause"}
+          onClick={() =>
+            props.setSpeed({ ...props.speed, isPaused: !props.speed.isPaused })
+          }
+        >
+          <HTMLIcon type={props.speed.isPaused ? "play_arrow" : "pause"} />
+        </button>
+      </fieldset>
+    </>
+  );
+}
+
 function OtherPanel(props: {
   game: GameState;
-  log: readonly GameEvent[];
   keymap: Keymap;
+  speed: Speed;
+  setSpeed: (speed: Speed) => void;
   remap: () => void;
   restart: () => void;
 }) {
@@ -1281,31 +1357,30 @@ function OtherPanel(props: {
   const getTile = () => props.game.land.tileAt(playerOf(props.game).at);
   return (
     <>
-      <LogPanel log={props.log} />
+      <SpeedControl speed={props.speed} setSpeed={props.setSpeed} />
       <p>
-        Face a direction, then step that way: tap toward it, use the Play
-        buttons, or press {key("move-nw")} {key("move-n")} {key("move-ne")}{" "}
-        {key("move-sw")} {key("move-s")} {key("move-se")}; wait with{" "}
-        {key("wait")}. Bump monsters to attack, and their dens, camps, villages,
-        mines and caves to wreck them until they heal. Press {key("target")} to
-        cycle through monsters and townsfolk in view and see what each can see,
-        even while aiming. Press {key("slot-1")}–{key("slot-6")} to cast the
-        spell in that slot, or tap it; choose what each slot holds, spell or
-        potion, in the Slots tab (spends a turn); potions are drunk without
-        spending a turn. Step onto a chest, open the Pack tab, or press{" "}
-        {key("inventory")}, to equip gear and move loot between your pack and
-        the ground (each move spends a turn). Aimed spells move their reticle
-        with the movement keys; cast with {key("confirm")} or the slot's key
-        again, or cancel with {key("cancel")}. Slaying monsters earns
-        experience; each level learns or raises a spell in the Spells tab.
+        Face a direction, then step that way: tap toward it, use the buttons, or
+        press {key("move-nw")} {key("move-n")} {key("move-ne")} {key("move-sw")}{" "}
+        {key("move-s")} {key("move-se")}; wait with {key("wait")}. Bump monsters
+        to attack, and their dens, camps, villages, mines and caves to wreck
+        them until they heal. Press {key("target")} to cycle through monsters
+        and townsfolk in view and see what each can see, even while aiming.
+        Press {key("slot-1")}–{key("slot-6")} to cast the spell in that slot, or
+        tap it; choose what each slot holds, spell or potion, in Slots (spends a
+        turn); potions are drunk without spending a turn. Step onto a chest,
+        open Pack, or press {key("inventory")}, to equip gear and move loot
+        between your pack and the ground (each move spends a turn). Aimed spells
+        move their reticle with the movement keys; cast with {key("confirm")} or
+        the slot's key again, or cancel with {key("cancel")}. Slaying monsters
+        earns experience; each level learns or raises a spell in Spells.
         Monsters grow stronger, and their tricks (summoning, bleeding, stunning,
         paralysis) worse, farther from where you set out. Climb one block at a
-        time; swim freely. Set the speed beside the place name in ticks per
-        second (0 is turn-based: a tick on each action that spends one), or
-        pause; in real time, turn-spending actions queue (up to two) for the
-        next tick, and {key("cancel")} drops the last one queued. Towns spawn a
-        bailiff, a reeve and peasants, who fight monsters; bump one, or target
-        one beside you and press
+        time; swim freely. Set the speed above in ticks per second (0 is
+        turn-based: a tick on each action that spends one), or pause; in real
+        time, turn-spending actions queue (up to two) for the next tick, and{" "}
+        {key("cancel")} drops the last one queued. Towns spawn a bailiff, a
+        reeve and peasants, who fight monsters; bump one, or target one beside
+        you and press
         {key("interact")}, to interact: a reeve trades, a bailiff posts bounties
         on ever-farther lairs.
       </p>
