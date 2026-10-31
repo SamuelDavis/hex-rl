@@ -21,7 +21,7 @@ const targetsOf = (game: Game, range: number): Monster[] => {
     .sort((a, b) => distanceOf(a.at) - distanceOf(b.at));
 };
 
-const seen = (game: Game, { id, at }: Monster): Target => ({
+export const targetOf = (game: Game, { id, at }: Monster): Target => ({
   id,
   lastSeen: at,
   seenTurn: game.turn,
@@ -42,7 +42,7 @@ export const nextTarget = (
   const targets = targetsOf(game, range);
   const index = targets.findIndex(({ id }) => id === current?.id);
   const next = index === -1 ? targets[0] : targets[index + 1];
-  return next && seen(game, next);
+  return next && targetOf(game, next);
 };
 
 export const tracked = (
@@ -53,7 +53,7 @@ export const tracked = (
   const monster = game.monsters.find(({ id }) => id === target.id);
   if (!monster || hexDistance(monster.at, game.player.at) > range)
     return undefined;
-  if (targetInView(game, range, target)) return seen(game, monster);
+  if (targetInView(game, range, target)) return targetOf(game, monster);
   if (game.turn - target.seenTurn >= TARGET_MEMORY) return undefined;
   return target;
 };

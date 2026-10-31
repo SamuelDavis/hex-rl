@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { EXPLORE } from "./mode";
 import {
+  conversantOf,
   LOG_LENGTH,
   newSession,
   sessionOf,
@@ -36,6 +37,7 @@ describe("update", () => {
     const session = run(targeting(east), { kind: "move", direction: "se" });
     expect(session.log).toContainEqual({
       kind: "hitMonster",
+      actor: "player",
       monster: "troll",
     });
   });
@@ -152,5 +154,49 @@ describe("update", () => {
   test("the inventory opens anywhere on request", () => {
     const session = run(sessionOf(gameWith([]), RANGE), { kind: "inventory" });
     expect(session.isInventoryOpen).toBe(true);
+  });
+});
+
+describe("interacting", () => {
+  const town = { kind: "town", at: { q: -3, r: 0 } } as const;
+  const npc = (kind: "reeve" | "peasant") => ({
+    ...monster(east, kind, "nw", town),
+    readyAt: Infinity,
+  });
+  const beside = (kind: "reeve" | "peasant") =>
+    sessionOf(gameWith([npc(kind)]), RANGE);
+  const bump: Message = { kind: "move", direction: "se" };
+
+  test("bumping a friend targets them and opens their dialog", () => {
+    const session = run(beside("reeve"), bump);
+    expect(session.target?.id).toBe(npc("reeve").id);
+    expect(conversantOf(session)?.kind).toBe("reeve");
+  });
+
+  test("a friend without a service is still targeted, but no dialog opens", () => {
+    const session = run(beside("peasant"), bump);
+    expect(session.target?.id).toBe(npc("peasant").id);
+    expect(conversantOf(session)).toBeUndefined();
+    expect(session.game.turn).toBe(0);
+  });
+
+  test("the interact button aims, then interacts at the reticle", () => {
+    const session = run(
+      beside("reeve"),
+      { kind: "interact" },
+      { kind: "confirm" },
+    );
+    expect(conversantOf(session)?.kind).toBe("reeve");
+  });
+
+  test("dismissing or stepping away closes the dialog", () => {
+    const open = run(beside("reeve"), bump);
+    expect(conversantOf(run(open, { kind: "dismiss" }))).toBeUndefined();
+    const away = run(
+      open,
+      { kind: "move", direction: "nw" },
+      { kind: "move", direction: "nw" },
+    );
+    expect(conversantOf(away)).toBeUndefined();
   });
 });

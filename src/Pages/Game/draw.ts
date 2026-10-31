@@ -1,5 +1,5 @@
 import type { Bounds, Vec2 } from "procgen";
-import type { Monster, Player } from "../../game/game";
+import { factionOfMonster, type Monster, type Player } from "../../game/game";
 import {
   add,
   centerOf,
@@ -237,7 +237,7 @@ export const drawScene = (
         context,
         base,
         monster.kind,
-        monster.mind.state,
+        factionOfMonster(monster) === "town" ? "friendly" : monster.mind.state,
         headingOf(monster.facing),
       );
       theme.level(context, base, monster.level);

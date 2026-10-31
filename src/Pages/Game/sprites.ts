@@ -299,6 +299,47 @@ const CAVE: Sprite = [
   },
 ];
 
+const EYES = "M17.2 12 h1.6 v1.4 h-1.6 Z M14 12 h1.6 v1.4 h-1.6 Z";
+
+const PEASANT: Sprite = [
+  ...HOOD("leaf"),
+  { tone: "bone", path: EYES },
+  { tone: "bone", path: "M25 29 L26 9 L27.2 9 L26.4 29 Z" },
+  {
+    tone: "etch",
+    path: "M24 9 L29 9 M24.5 6 L24 9 M26.5 6 L26.6 9 M28.5 6 L29 9",
+  },
+];
+
+const REEVE: Sprite = [
+  ...HOOD("bone"),
+  { tone: "leaf", path: EYES },
+  {
+    tone: "blood",
+    path: "M20 21 C20 18.5 25 18.5 25 21 L26 25 C26 27.5 19 27.5 19 25 Z",
+  },
+  { tone: "etch", path: "M20.5 20.5 L24.5 20.5" },
+];
+
+const BAILIFF: Sprite = [
+  ...HOOD("leaf"),
+  { tone: "blood", path: EYES },
+  { tone: "bone", path: "M25 30 L26.5 4 L28 4 L26.5 30 Z" },
+  { tone: "blood", path: "M25.5 4.5 L27.2 1 L29 4.5 L27.2 6.5 Z" },
+];
+
+const TOWN: Sprite = [
+  { tone: "bone", path: "M5 16 L27 16 L27 30 L5 30 Z" },
+  { tone: "ink", path: "M14 30 L14 23 C14 21 18 21 18 23 L18 30 Z" },
+  { tone: "ink", path: "M8 19 h3 v3 h-3 Z M21 19 h3 v3 h-3 Z" },
+  { tone: "bone", path: "M21 4 h3.5 v8 h-3.5 Z" },
+  { tone: "leaf", path: "M1.5 17.5 L16 4.5 L30.5 17.5 Z" },
+  {
+    tone: "etch",
+    path: "M7 14.5 L25 14.5 M10.5 11.5 L21.5 11.5 M14 8.5 L18 8.5",
+  },
+];
+
 export const TREE: Sprite = [
   {
     tone: "bone",
@@ -354,6 +395,9 @@ export const MONSTER_FIGURES: Record<MonsterKind, Figure> = {
   "goblin chief": { sprite: GOBLIN_CHIEF, scale: 1.15 },
   "kobold foreman": { sprite: KOBOLD_FOREMAN, scale: 1 },
   "troll elder": { sprite: TROLL_ELDER, scale: 1.4 },
+  bailiff: { sprite: BAILIFF, scale: 1.05 },
+  reeve: { sprite: REEVE, scale: 0.95 },
+  peasant: { sprite: PEASANT, scale: 0.9 },
 };
 
 export const SPAWNER_SPRITES: Record<SpawnerKind, Sprite> = {
@@ -362,4 +406,5 @@ export const SPAWNER_SPRITES: Record<SpawnerKind, Sprite> = {
   village: VILLAGE,
   mine: MINE,
   cave: CAVE,
+  town: TOWN,
 };

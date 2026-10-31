@@ -6,14 +6,14 @@ Contract for turning any actor's choice into authoritative game events. One voca
 
 | Term | Meaning | In code (`src/game/`) |
 |---|---|---|
-| Actor | Takes turns: the player or a monster. | `ActorId` (`PLAYER` or monster id); `ActorKind` names it in events |
+| Actor | Takes turns: the player or a monster (wild or townsfolk, [towns.md](towns.md)). | `ActorId` (`PLAYER` or monster id); `ActorKind` names it in events |
 | Intent | What an actor wants: a Deed, or `move` (go a direction). The pipeline's sole input. | `Intent` |
 | Deed | Something a Rule can perform, dispatchable alone: `turn`, `step`, `attack`, `wait`, `use`, ... | `Deed` |
 | Rule | One Deed's checks and effects; knows no other Deed. | `RULES`, `Rule` |
 | Outcome | A Rule's verdict: performed (and whether a turn passes) or rejected. | `Outcome` |
 | Rejection | Typed reason a Deed did nothing. | `Rejection` |
 | Plan | The actor's decision tree for an Intent: a Deed to attempt, and per rejection reason the Plan to try next. | `Plan`, `planOf` |
-| Policy | How an actor turns an Intent into a Plan. Situational choice lives here, per actor, not in Rules. | `bold` |
+| Policy | How an actor turns an Intent into a Plan. Situational choice lives here, per actor, not in Rules. | `bold`, `courteous` |
 | Ability | Data row: MP, cooldown, whether it spends a turn, item consumed, aim, effects. Spells and potions alike. | `ABILITIES`, `abilities.ts` |
 | Effect | Primitive state change: face, damage over an `Area`, restore. One applier. | `Effect`, `applied` |
 | Event | Authoritative record of one consequence. The pipeline's sole output. | `GameEvent` |
@@ -31,12 +31,12 @@ Intent ─planOf(actor)→ Plan ─attempted→ Rule ─┬─ performed → Eve
 - `RULES` is a mapped type over `Deed["kind"]`: a Deed without a Rule, or a narration verb or rejection reason without text, is a type error.
 - Rules are isolated: `turn` only faces, `step` only moves the way faced (rejecting `not-facing`, `blocked`, `occupied`), `attack` only hits a faced, adjacent foe. Combined behaviours are Abilities (strike faces and attacks in one turn).
 - Alternatives belong to the actor, not to Deeds or the pipeline: `planOf` builds the actor's Plan; `attempted` walks it generically and knows no Deed. A Plan is a finite tree value, so walking it always ends. A Deed alone is a one-node Plan. [Behavior-tree fallback node; contrast Hauberk, where the Action returns its alternate: [hauberk-actions.md](hauberk-actions.md)]
-- Today every actor's `move` uses the `bold` policy: `step`; on `not-facing`, `turn`; on `occupied`, `attack` that hex. A kind that won't attack when blocked is a policy without the `occupied` branch.
+- Every actor's `move` steps; on `not-facing`, turns; on `occupied`, bumps by its policy. Monsters are `bold`: `attack` that hex. The player is `courteous`: `attack`, and on `friendly`, `interact`.
 - One rule set for every actor. Monster Minds choose Intents (`move` toward a goal, or `wait`), as the player does.
 - A rejected Plan spends nothing, for any actor; it records one `rejected` Event naming the last Deed attempted and its reason. A monster decides once per world turn, so a rejected Plan leaves it idle that turn.
 - Every consequence is an Event naming its actor (`turned`, `stepped`, `rejected`, ...). The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
 - `use` pays its Ability's costs (MP, cooldown, item) itself; only it has costs beyond the turn.
-- Player-only for now: `use`, `transfer`, `prepare`, `destroy`, `learn` act on the player's resources. Monster-only: `summon`, attempted first by a ready, hostile summoner's Plan, falling back to its move when `blocked`. Foes: the player attacks monsters and spawners; monsters attack only the player.
+- Player-only for now: `use`, `transfer`, `prepare`, `destroy`, `learn`, `interact`, `trade` act on the player's resources. Monster-only: `summon` (hostile, falling back to its move when `blocked`) and `restock` (idle, falling back when `full`), attempted first by a ready caster's Plan. Foes are actors of different factions; only the player attacks spawners, and only lairs.
 - Afflictions are player state, not Deeds: stun rejects every Intent but `wait` before planning (`incapacityOf`); paralysis is a rejection inside `turn` and `step`, after their own checks, so a bump attack still lands.
 
 ## Extension points

@@ -7,13 +7,21 @@ import {
   type Game,
   type GameEvent,
   type Learn,
+  type Monster,
   type Prepare,
   type TakeAll,
+  type Trade,
   type Transfer,
 } from "../../game/game";
-import { hexKey, type Hex } from "../../game/hex";
+import { directionBetween, hexKey, sameHex, type Hex } from "../../game/hex";
 import { EXPLORE, transition, type Command, type Mode } from "./mode";
-import { nextTarget, targetInView, tracked, type Target } from "./target";
+import {
+  nextTarget,
+  targetInView,
+  targetOf,
+  tracked,
+  type Target,
+} from "./target";
 import { createTerrain } from "../../game/terrain";
 
 export const LOG_LENGTH = 50;
@@ -24,6 +32,8 @@ export interface Session {
   readonly target: Target | undefined;
   /** Opens on stepping onto a chest; once dismissed, stays shut until the next step. */
   readonly isInventoryOpen: boolean;
+  /** Who the player last interacted with; their dialog shows while they stay beside the player. */
+  readonly conversant: Monster["id"] | undefined;
   /** How far, in hexes, the view shows; targets beyond it can't be chosen. */
   readonly range: number;
   readonly log: readonly GameEvent[];
@@ -35,6 +45,7 @@ export type Message =
   | { readonly kind: "inventory" }
   | { readonly kind: "dismiss" }
   | Transfer
+  | Trade
   | TakeAll
   | Prepare
   | Destroy
@@ -46,6 +57,7 @@ export const sessionOf = (game: Game, range: number): Session => ({
   mode: EXPLORE,
   target: undefined,
   isInventoryOpen: false,
+  conversant: undefined,
   range,
   log: game.events,
 });
@@ -56,19 +68,47 @@ export const newSession = (seed: number, range: number): Session =>
 export const targetedAt = ({ game, range, target }: Session): Hex | undefined =>
   target && targetInView(game, range, target)?.at;
 
+export const conversantOf = ({
+  game,
+  conversant,
+}: Session): Monster | undefined => {
+  const monster = game.monsters.find(({ id }) => id === conversant);
+  return monster && directionBetween(game.player.at, monster.at)
+    ? monster
+    : undefined;
+};
+
+/** Whom the player tried to interact with this action, whether or not they could. */
+const addresseeOf = ({ events, monsters }: Game): Monster | undefined => {
+  for (const event of events) {
+    if (event.kind === "interacted")
+      return monsters.find(({ id }) => id === event.id);
+    if (event.kind === "rejected" && event.action.kind === "interact") {
+      const { at } = event.action;
+      return monsters.find((monster) => sameHex(monster.at, at));
+    }
+  }
+  return undefined;
+};
+
 const performed = (session: Session, action: Intent): Session => {
   const { range, target, log } = session;
   const game = act(session.game, action);
   const hasStepped = game.events.some(
     (event) => event.kind === "stepped" && event.actor === PLAYER,
   );
+  const interacted = game.events.find((event) => event.kind === "interacted");
+  const addressee = addresseeOf(game);
   return {
     ...session,
     game,
     isInventoryOpen: hasStepped
       ? game.chests.has(hexKey(game.player.at))
       : session.isInventoryOpen,
-    target: target && tracked(game, range, target),
+    conversant: interacted?.id ?? (hasStepped ? undefined : session.conversant),
+    target: addressee
+      ? targetOf(game, addressee)
+      : target && tracked(game, range, target),
     log: [...log, ...game.events].slice(-LOG_LENGTH),
   };
 };
@@ -91,6 +131,7 @@ export const update = (session: Session, message: Message): Session => {
       return { ...session, target: nextTarget(game, range, target) };
     }
     case "transfer":
+    case "trade":
     case "take-all":
     case "prepare":
     case "destroy":
@@ -99,7 +140,7 @@ export const update = (session: Session, message: Message): Session => {
     case "inventory":
       return { ...session, isInventoryOpen: true };
     case "dismiss":
-      return { ...session, isInventoryOpen: false };
+      return { ...session, isInventoryOpen: false, conversant: undefined };
     case "view":
       return { ...session, range: message.range };
     default:

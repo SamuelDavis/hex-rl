@@ -42,21 +42,25 @@ import {
   XP_PER_LEVEL,
   type Game as GameState,
   type GameEvent,
+  type Monster,
   type Where,
 } from "../../game/game";
 import { directionToward, hexKey, type Direction } from "../../game/hex";
-import { narrationOf } from "./narration";
+import { bountyOf, narrationOf, placeOf } from "./narration";
 import {
   capacityOf,
   loadOf,
   nameOf,
+  offerOf,
   PLACE_NAMES,
+  priceOf,
   placeFor,
   sizeOf,
   type Item,
   type PotionKind,
 } from "../../game/items";
-import { newSession, update, type Message } from "./session";
+import { conversantOf, newSession, update, type Message } from "./session";
+import type { Aimed } from "./mode";
 import {
   ABILITY_IDS,
   abilityOf,
@@ -65,7 +69,7 @@ import {
   SPELL_IDS,
   type AbilityId,
 } from "../../game/abilities";
-import type { Affliction } from "../../game/monsters";
+import { SERVICES, type Affliction } from "../../game/monsters";
 import { sightOf, targetInView } from "./target";
 import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 
@@ -118,7 +122,11 @@ export default function Game() {
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() => visibleOf(getGame()));
   const getRange = createMemo(() => screenRadiusOf(getSize()));
-  const isAiming = () => getSession().mode.kind === "aim";
+  const getAimed = () => {
+    const { mode } = getSession();
+    return mode.kind === "aim" ? mode.aimed : undefined;
+  };
+  const getConversant = () => conversantOf(getSession());
   const getTargetMark = createMemo(() => {
     const { game, range, target } = getSession();
     if (!target) return undefined;
@@ -132,9 +140,15 @@ export default function Game() {
     const { mode, game } = getSession();
     if (mode.kind !== "aim") return undefined;
     const { at, facing } = game.player;
-    const area = abilityOf(mode.ability).effects.flatMap((effect) =>
-      effect.kind === "damage" ? areaOf(effect.area, at, facing, mode.at) : [],
-    );
+    const { aimed } = mode;
+    const area =
+      aimed.kind === "use"
+        ? abilityOf(aimed.ability).effects.flatMap((effect) =>
+            effect.kind === "damage"
+              ? areaOf(effect.area, at, facing, mode.at)
+              : [],
+          )
+        : [mode.at];
     return { at: mode.at, area: new Set(area.map(hexKey)) };
   });
 
@@ -153,7 +167,13 @@ export default function Game() {
 
   function onKeyDown(event: KeyboardEvent) {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (getEditing() || isRemapping() || getSession().isInventoryOpen) return;
+    if (
+      getEditing() ||
+      isRemapping() ||
+      getSession().isInventoryOpen ||
+      getConversant()
+    )
+      return;
     const input = inputOf(getKeymap(), event.key);
     if (!input) return;
     event.preventDefault();
@@ -233,6 +253,19 @@ export default function Game() {
               )}
             </For>
           </p>
+          <Show when={getGame().player.bounty}>
+            {(bounty) => (
+              <p data-cap="end">
+                <small>
+                  Bounty:{" "}
+                  {bounty().isSlain
+                    ? "slain; return to a bailiff"
+                    : bountyOf(bounty().kind, bounty().at)}{" "}
+                  · you are at {placeOf(getGame().player.at)}
+                </small>
+              </p>
+            )}
+          </Show>
         </div>
         <div class="grid grid-cols-3 gap-(--pico-spacing)">
           <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
@@ -276,7 +309,7 @@ export default function Game() {
           <Match when={getTab() === "Play"}>
             <PlayPanel
               game={getGame()}
-              isAiming={isAiming()}
+              aimed={getAimed()}
               loadout={getLoadout()}
               keymap={getKeymap()}
               press={press}
@@ -333,6 +366,38 @@ export default function Game() {
           </footer>
         </article>
       </HTMLDialog>
+      <HTMLDialog
+        open={getConversant()}
+        onClose={() => dispatch({ kind: "dismiss" })}
+      >
+        {(conversant) => (
+          <article>
+            <header>
+              <h3 class="capitalize">{conversant().kind}</h3>
+            </header>
+            <Switch>
+              <Match when={SERVICES[conversant().kind] === "trade"}>
+                <TradePanel
+                  game={getGame()}
+                  trader={conversant()}
+                  dispatch={dispatch}
+                />
+              </Match>
+              <Match when={SERVICES[conversant().kind] === "bounty"}>
+                <BountyPanel game={getGame()} />
+              </Match>
+            </Switch>
+            <footer>
+              <button
+                type="button"
+                onClick={() => dispatch({ kind: "dismiss" })}
+              >
+                Farewell
+              </button>
+            </footer>
+          </article>
+        )}
+      </HTMLDialog>
       <HTMLDialog open={isRemapping()} onClose={() => setRemapping(false)}>
         <KeymapEditor
           keymap={getKeymap()}
@@ -347,7 +412,7 @@ export default function Game() {
 
 function PlayPanel(props: {
   game: GameState;
-  isAiming: boolean;
+  aimed: Aimed | undefined;
   keymap: Keymap;
   loadout: Loadout;
   press: (input: Input) => void;
@@ -388,7 +453,7 @@ function PlayPanel(props: {
         </div>
         <div class="col-span-2 col-start-5 grid grid-cols-2 gap-(--pico-spacing)">
           <Show
-            when={props.isAiming}
+            when={props.aimed}
             fallback={
               <>
                 <PadButton
@@ -398,24 +463,34 @@ function PlayPanel(props: {
                 >
                   Wait
                 </PadButton>
-                <div />
+                <PadButton
+                  control="interact"
+                  keymap={props.keymap}
+                  press={props.press}
+                >
+                  Interact
+                </PadButton>
               </>
             }
           >
-            <PadButton
-              control="confirm"
-              keymap={props.keymap}
-              press={props.press}
-            >
-              Cast
-            </PadButton>
-            <PadButton
-              control="cancel"
-              keymap={props.keymap}
-              press={props.press}
-            >
-              Cancel
-            </PadButton>
+            {(aimed) => (
+              <>
+                <PadButton
+                  control="confirm"
+                  keymap={props.keymap}
+                  press={props.press}
+                >
+                  {aimed().kind === "use" ? "Cast" : "Interact"}
+                </PadButton>
+                <PadButton
+                  control="cancel"
+                  keymap={props.keymap}
+                  press={props.press}
+                >
+                  Cancel
+                </PadButton>
+              </>
+            )}
           </Show>
           <PadButton control="target" keymap={props.keymap} press={props.press}>
             Target
@@ -771,6 +846,109 @@ function InventoryPanel(props: {
   );
 }
 
+function TradePanel(props: {
+  game: GameState;
+  trader: Monster;
+  dispatch: (message: Message) => void;
+}) {
+  const getPlayer = () => props.game.player;
+  const trade = (item: Item) =>
+    props.dispatch({ kind: "trade", trader: props.trader.id, item: item.id });
+
+  function Deal(dealProps: {
+    item: Item;
+    icon: string;
+    verb: string;
+    price: number;
+  }) {
+    const label = () =>
+      `${dealProps.verb} ${nameOf(dealProps.item)} for ${dealProps.price} gold`;
+    return (
+      <li>
+        <span>
+          {nameOf(dealProps.item)}
+          <Show when={sizeOf(dealProps.item) > 0}>
+            {" "}
+            ({sizeOf(dealProps.item)})
+          </Show>{" "}
+          · {dealProps.price} gold
+        </span>
+        <HTMLIcon
+          type={dealProps.icon}
+          data-cap="end"
+          aria-label={label()}
+          title={label()}
+          onClick={() => trade(dealProps.item)}
+        />
+      </li>
+    );
+  }
+
+  return (
+    <>
+      <p>
+        <small>Each trade spends a turn.</small>
+      </p>
+      <section>
+        <h4>
+          Pack {loadOf(getPlayer().pack)}/{capacityOf(getPlayer().equipment)} ·{" "}
+          {getPlayer().gold} gold
+        </h4>
+        <ul class="max-h-[33vh] overflow-y-auto">
+          <For each={getPlayer().pack}>
+            {(item) => (
+              <Deal
+                item={item}
+                icon="arrow_downward"
+                verb="Sell"
+                price={offerOf(item)}
+              />
+            )}
+          </For>
+        </ul>
+      </section>
+      <section>
+        <h4>Wares</h4>
+        <ul class="max-h-[33vh] overflow-y-auto">
+          <For each={props.trader.wares}>
+            {(item) => (
+              <Deal
+                item={item}
+                icon="arrow_upward"
+                verb="Buy"
+                price={priceOf(item)}
+              />
+            )}
+          </For>
+        </ul>
+      </section>
+    </>
+  );
+}
+
+function BountyPanel(props: { game: GameState }) {
+  const getReward = () =>
+    props.game.events.find((event) => event.kind === "rewarded");
+  return (
+    <>
+      <Show when={getReward()}>
+        {(reward) => <p>Well done. Here is {reward().gold} gold.</p>}
+      </Show>
+      <Show
+        when={props.game.player.bounty}
+        fallback={<p>I have no work for you.</p>}
+      >
+        {(bounty) => (
+          <p>
+            Go and {bountyOf(bounty().kind, bounty().at)}, then return to me or
+            any bailiff. You are at {placeOf(props.game.player.at)}.
+          </p>
+        )}
+      </Show>
+    </>
+  );
+}
+
 const hotkeyOf = (keymap: Keymap, id: ControlId) => keyLabelOf(keymap[id]);
 
 const ABILITY_ICONS: Record<AbilityId, string> = {
@@ -925,7 +1103,10 @@ function OtherPanel(props: {
         {key("cancel")}. Slaying monsters earns experience; each level learns or
         raises a spell in the Spells tab. Monsters grow stronger, and their
         tricks (summoning, bleeding, stunning, paralysis) worse, farther from
-        where you set out. Climb one block at a time; swim freely.
+        where you set out. Climb one block at a time; swim freely. Towns spawn a
+        bailiff, a reeve and peasants, who fight monsters; bump one, or press{" "}
+        {key("interact")} and aim, to interact: a reeve trades, a bailiff posts
+        bounties on ever-farther lairs.
       </p>
       <button type="button" onClick={() => props.remap()}>
         Controls

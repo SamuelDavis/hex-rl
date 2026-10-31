@@ -1,7 +1,6 @@
 import type { Vec2 } from "procgen";
-import type { Monster } from "../../../game/game";
 import { Biome, CONIFEROUS, SEA_LEVEL } from "../../../game/terrain";
-import type { CanvasTheme } from "../canvasTheme";
+import type { CanvasTheme, Disposition } from "../canvasTheme";
 import {
   css,
   drawChevron,
@@ -79,7 +78,8 @@ const PALETTE: Palette = {
   leaf: CANOPY[Biome.Forest],
 };
 
-const RINGS: Record<Monster["mind"]["state"], Hsl> = {
+const RINGS: Record<Disposition, Hsl> = {
+  friendly: [200, 45, 55],
   idle: PALETTE.bone,
   hostile: PALETTE.blood,
   hunting: [40, 80, 55],
@@ -247,8 +247,14 @@ export const WOODCUT: CanvasTheme = {
     drawSprite(context, CHEST, base, CHEST_SIZE, PALETTE),
   player: (context, base, heading) =>
     drawFigure(context, PLAYER_FIGURE, base, heading),
-  monster: (context, base, kind, state, heading) =>
-    drawFigure(context, MONSTER_FIGURES[kind], base, heading, RINGS[state]),
+  monster: (context, base, kind, disposition, heading) =>
+    drawFigure(
+      context,
+      MONSTER_FIGURES[kind],
+      base,
+      heading,
+      RINGS[disposition],
+    ),
   unknown: (context, base) => {
     drawFootprint(context, base, TOKEN_SIZE);
     drawLabel(context, base, "?", {

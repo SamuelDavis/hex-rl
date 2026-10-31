@@ -5,6 +5,7 @@ import type { Message } from "./session";
 export type ControlId =
   | `move-${Direction}`
   | "wait"
+  | "interact"
   | "target"
   | "confirm"
   | "cancel"
@@ -46,14 +47,9 @@ const BINDINGS: readonly (readonly [Control, string])[] = [
       ] as const,
   ),
   [{ id: "wait", label: "Wait", input: { kind: "wait" } }, " "],
-  [
-    { id: "target", label: "Next target", input: { kind: "cycleTarget" } },
-    "t",
-  ],
-  [
-    { id: "confirm", label: "Cast aimed", input: { kind: "confirm" } },
-    "enter",
-  ],
+  [{ id: "interact", label: "Interact", input: { kind: "interact" } }, "f"],
+  [{ id: "target", label: "Next target", input: { kind: "cycleTarget" } }, "t"],
+  [{ id: "confirm", label: "Cast aimed", input: { kind: "confirm" } }, "enter"],
   [{ id: "cancel", label: "Cancel aim", input: { kind: "cancel" } }, "escape"],
   [{ id: "inventory", label: "Inventory", input: { kind: "inventory" } }, "i"],
   ...SLOTS.map(

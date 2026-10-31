@@ -1,8 +1,7 @@
 import type { Vec2 } from "procgen";
-import type { Monster } from "../../../game/game";
 import type { MonsterKind, SpawnerKind } from "../../../game/monsters";
 import { Biome, CONIFEROUS, SEA_LEVEL } from "../../../game/terrain";
-import type { CanvasTheme } from "../canvasTheme";
+import type { CanvasTheme, Disposition } from "../canvasTheme";
 import {
   css,
   drawChevron,
@@ -27,7 +26,8 @@ const GOLD: Hsl = [48, 95, 55];
 const WOOD: Hsl = [28, 55, 32];
 const TRUNK: Hsl = [25, 40, 28];
 
-const RINGS: Record<Monster["mind"]["state"], Hsl> = {
+const RINGS: Record<Disposition, Hsl> = {
+  friendly: [210, 80, 60],
   idle: WHITE,
   hostile: [0, 90, 55],
   hunting: [40, 95, 55],
@@ -46,6 +46,9 @@ const TOKENS: Record<MonsterKind, { glyph: string; hue: number }> = {
   "goblin chief": { glyph: "G", hue: 100 },
   "kobold foreman": { glyph: "K", hue: 50 },
   "troll elder": { glyph: "E", hue: 270 },
+  bailiff: { glyph: "§", hue: 220 },
+  reeve: { glyph: "$", hue: 45 },
+  peasant: { glyph: "p", hue: 140 },
 };
 
 const SPAWNER_HUES: Record<SpawnerKind, number> = {
@@ -54,6 +57,7 @@ const SPAWNER_HUES: Record<SpawnerKind, number> = {
   village: 90,
   mine: 60,
   cave: 280,
+  town: 210,
 };
 
 const GROUND: Record<Biome, Hsl> = {
@@ -208,12 +212,12 @@ export const CLASSIC: CanvasTheme = {
   },
   player: (context, base, heading) =>
     drawToken(context, base, { fill: PLAYER_TOKEN, glyph: "@", heading }),
-  monster: (context, base, kind, state, heading) => {
+  monster: (context, base, kind, disposition, heading) => {
     const { glyph, hue } = TOKENS[kind];
     drawToken(context, base, {
       fill: [hue, 60, 30],
       glyph,
-      ring: RINGS[state],
+      ring: RINGS[disposition],
     });
     drawChevron(context, tokenCenterOf(base), heading, {
       line: css(WHITE),

@@ -7,6 +7,9 @@ import type { Hsl, Tint } from "./paint";
 import { CLASSIC } from "./themes/classic";
 import { WOODCUT } from "./themes/woodcut";
 
+/** How a creature regards the player: friendly townsfolk, else a monster's mind state. */
+export type Disposition = Monster["mind"]["state"] | "friendly";
+
 export interface Marks {
   readonly watched: string;
   readonly watchedEdge: string;
@@ -53,7 +56,7 @@ export interface CanvasTheme {
     context: CanvasRenderingContext2D,
     base: Vec2,
     kind: MonsterKind,
-    state: Monster["mind"]["state"],
+    disposition: Disposition,
     heading: Vec2,
   ) => void;
   readonly unknown: (context: CanvasRenderingContext2D, base: Vec2) => void;

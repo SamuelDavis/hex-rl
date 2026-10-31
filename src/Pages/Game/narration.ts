@@ -10,7 +10,13 @@ import {
   type Where,
 } from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
-import { SPAWNERS, type Affliction } from "../../game/monsters";
+import {
+  bossOf,
+  SPAWNERS,
+  type Affliction,
+  type SpawnerKind,
+} from "../../game/monsters";
+import type { Hex } from "../../game/hex";
 
 const REASONS: Record<Rejection, string> = {
   blocked: "the way is blocked",
@@ -32,6 +38,9 @@ const REASONS: Record<Rejection, string> = {
   "no-unlocks": "no level to spend",
   stunned: "stunned",
   paralyzed: "paralyzed",
+  friendly: "they are a friend",
+  uninterested: "they have nothing to offer",
+  "no-gold": "not enough gold",
   unable: "unable",
 };
 
@@ -47,6 +56,9 @@ const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
   destroy: "destroy",
   learn: "learn",
   summon: "summon",
+  restock: "restock",
+  interact: "interact",
+  trade: "trade that",
 };
 
 const usingOf = (ability: AbilityId, verbs: readonly [string, string]) =>
@@ -98,6 +110,12 @@ const movingOf = (from: Where, to: Where) => {
   return from === "ground" ? "takes" : "takes off";
 };
 
+export const placeOf = ({ q, r }: Hex) => `(${q}, ${r})`;
+
+/** What a bounty asks: "slay the alpha wolf of the wolf den at (6, 0)". */
+export const bountyOf = (spawner: SpawnerKind, at: Hex) =>
+  `slay the ${bossOf(spawner)} of the ${SPAWNERS[spawner].name} at ${placeOf(at)}`;
+
 export const narrationOf = (event: GameEvent): string => {
   switch (event.kind) {
     case "began":
@@ -111,9 +129,9 @@ export const narrationOf = (event: GameEvent): string => {
     case "used":
       return `${PLAYER_NAME} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
     case "hitMonster":
-      return `${PLAYER_NAME} hits the ${event.monster}.`;
+      return `${actorNameOf(event.actor)} hits the ${event.monster}.`;
     case "killed":
-      return `${PLAYER_NAME} kills the ${event.monster}.`;
+      return `${actorNameOf(event.actor)} kills the ${event.monster}.`;
     case "dropped":
       return `The ${event.monster} drops a chest.`;
     case "moved":
@@ -144,5 +162,19 @@ export const narrationOf = (event: GameEvent): string => {
       return `${PLAYER_NAME} bleeds.`;
     case "died":
       return `${PLAYER_NAME} dies.`;
+    case "restocked":
+      return `The ${event.monster} restocks their wares.`;
+    case "interacted":
+      return `${PLAYER_NAME} hails the ${event.monster}.`;
+    case "bought":
+      return `${PLAYER_NAME} buys the ${nameOf(event.item)} for ${event.price} gold.`;
+    case "sold":
+      return `${PLAYER_NAME} sells the ${nameOf(event.item)} for ${event.price} gold.`;
+    case "bountied":
+      return `The bailiff posts a bounty: ${bountyOf(event.spawner, event.at)}.`;
+    case "bountySlain":
+      return `${PLAYER_NAME} slays the bounty; a bailiff will pay.`;
+    case "rewarded":
+      return `The bailiff pays ${PLAYER_NAME.toLowerCase()} ${event.gold} gold.`;
   }
 };
