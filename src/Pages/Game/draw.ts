@@ -1,6 +1,5 @@
 import type { Bounds, Vec2 } from "procgen";
 import type { Monster, Player } from "../../game/game";
-import { MONSTERS, SPAWNERS } from "../../game/monsters";
 import {
   add,
   centerOf,
@@ -20,6 +19,19 @@ import {
   type Spawner,
   type Tile,
 } from "../../game/terrain";
+import {
+  CHEST,
+  CONIFER,
+  MONSTER_FIGURES,
+  PLAYER_FIGURE,
+  SPAWNER_SPRITES,
+  SPRITE_BOX,
+  SPRITE_FOOT,
+  TREE,
+  type Figure,
+  type Sprite,
+  type Tone,
+} from "./sprites";
 
 const PIXELS_PER_UNIT = 20;
 const TILT = 0.7;
@@ -27,24 +39,19 @@ const PIXELS_PER_BLOCK = 7;
 const MAX_RELIEF = 40;
 const SIDE_SHADE = -14;
 const EDGE_SHADE = -6;
-const TOKEN_LIFT = 0.9;
 const SHADOW = "rgb(0 0 0 / 0.35)";
 const WATCHED = "hsl(0 90% 50% / 0.15)";
 const WATCHED_EDGE = "hsl(0 90% 60% / 0.7)";
 const WATCHED_EDGE_WIDTH = 2;
-const REMEMBERED_TOKEN: Hsl = [0, 0, 40];
-const WHITE: Hsl = [0, 0, 100];
-const HOSTILE: Hsl = [0, 90, 55];
 const TARGETED: Hsl = [110, 100, 55];
 const AIMED: Hsl = [25, 100, 55];
 const AIM_AREA = "hsl(25 100% 55% / 0.3)";
-const GOLD: Hsl = [48, 95, 55];
-const WOOD: Hsl = [28, 55, 32];
-const RINGS: Record<Monster["mind"]["state"], Hsl> = {
-  idle: WHITE,
-  hostile: HOSTILE,
-  hunting: [40, 95, 55],
-};
+const OUTLINE = 2.4;
+const ETCH = 1.2;
+const FIGURE_SIZE = PIXELS_PER_UNIT * 1.5;
+const TREE_SIZE = PIXELS_PER_UNIT * 1.5;
+const SPAWNER_SIZE = PIXELS_PER_UNIT * 1.8;
+const CHEST_SIZE = PIXELS_PER_UNIT * 0.9;
 const EDGES = CORNERS.map((from, i) => {
   const to = CORNERS[(i + 1) % CORNERS.length]!;
   const facing = directionToward({ x: from.x + to.x, y: from.y + to.y });
@@ -56,6 +63,7 @@ const FRONT = [DIRECTIONS.sw, DIRECTIONS.s, DIRECTIONS.se];
 const FRONT_CORNERS = [0, 1, 2, 3];
 
 type Hsl = readonly [hue: number, saturation: number, lightness: number];
+type Palette = Readonly<Record<Tone, Hsl>>;
 
 const GROUND: Record<Biome, Hsl> = {
   [Biome.Ocean]: [40, 30, 55],
@@ -89,6 +97,19 @@ const CONIFERS: ReadonlySet<Biome> = new Set([
 
 const FOG: Hsl = [220, 15, 12];
 
+const PALETTE: Palette = {
+  ink: [15, 25, 9],
+  bone: [43, 58, 80],
+  blood: [5, 63, 53],
+  leaf: CANOPY[Biome.Forest],
+};
+
+const RINGS: Record<Monster["mind"]["state"], Hsl> = {
+  idle: PALETTE.bone,
+  hostile: PALETTE.blood,
+  hunting: [40, 80, 55],
+};
+
 export const screenRadiusOf = ({
   width,
   height,
@@ -106,6 +127,13 @@ export const groundOffsetOf = ({ x, y }: Vec2): Vec2 => ({
 });
 
 const remembered = ([h, s, l]: Hsl): Hsl => [h, s * 0.3, l * 0.55];
+
+const ashen = ([h, , l]: Hsl): Hsl => [h, 0, l];
+
+const recolor = (palette: Palette, recolor: (color: Hsl) => Hsl): Palette =>
+  Object.fromEntries(
+    Object.entries(palette).map(([tone, color]) => [tone, recolor(color)]),
+  ) as Palette;
 
 const css = ([h, s, l]: Hsl, shade = 0) =>
   `hsl(${h} ${s}% ${Math.min(100, Math.max(0, l + shade))}%)`;
@@ -268,106 +296,42 @@ export const drawScene = (
 
     const base = project(center, top);
     if (tile.tree)
-      drawTree(
+      drawSprite(
         context,
+        CONIFERS.has(tile.biome) ? CONIFER : TREE,
         base,
-        lit(CANOPY[tile.biome]),
-        CONIFERS.has(tile.biome),
+        TREE_SIZE,
+        recolor({ ...PALETTE, leaf: CANOPY[tile.biome] }, lit),
       );
     const spawner = spawnerAt.get(hexKey(hex));
     if (spawner)
-      drawSpawner(
+      drawSprite(
         context,
+        SPAWNER_SPRITES[spawner.kind],
         base,
-        lit([SPAWNERS[spawner.kind].hue, isWrecked(spawner) ? 0 : 35, 30]),
+        SPAWNER_SIZE,
+        recolor(PALETTE, (color) =>
+          lit(isWrecked(spawner) ? ashen(color) : color),
+        ),
       );
-    if (isVisible && chests.has(hexKey(hex))) drawChest(context, base);
+    if (isVisible && chests.has(hexKey(hex)))
+      drawSprite(context, CHEST, base, CHEST_SIZE, PALETTE);
     if (target && sameHex(hex, target.at)) drawReticle(context, base, TARGETED);
     if (aim && sameHex(hex, aim.at)) drawReticle(context, base, AIMED);
     const monster = monsterAt.get(hexKey(hex));
-    if (monster) {
-      const { hue, glyph } = MONSTERS[monster.kind];
-      drawToken(context, base, {
-        fill: [hue, 60, 30],
-        glyph,
-        ring: RINGS[monster.mind.state],
-      });
-      drawChevron(context, base, headingOf(monster.facing));
-    } else if (target?.kind === "remembered" && sameHex(hex, target.at))
-      drawToken(context, base, { fill: REMEMBERED_TOKEN, glyph: "?" });
+    if (monster)
+      drawFigure(
+        context,
+        MONSTER_FIGURES[monster.kind],
+        base,
+        headingOf(monster.facing),
+        RINGS[monster.mind.state],
+      );
+    else if (target?.kind === "remembered" && sameHex(hex, target.at))
+      drawUnknown(context, base);
     if (sameHex(hex, player.at))
-      drawToken(context, base, {
-        fill: [0, 80, 55],
-        glyph: "@",
-        heading: headingOf(player.facing),
-      });
+      drawFigure(context, PLAYER_FIGURE, base, headingOf(player.facing));
   }
-};
-
-const drawTree = (
-  context: CanvasRenderingContext2D,
-  { x, y }: Vec2,
-  canopy: Hsl,
-  isConifer: boolean,
-) => {
-  const size = PIXELS_PER_UNIT * 0.6;
-  context.fillStyle = css([25, 40, 28]);
-  context.fillRect(x - 1.5, y - size, 3, size);
-  context.fillStyle = css(canopy);
-  context.strokeStyle = css(canopy, -10);
-  if (isConifer) {
-    context.beginPath();
-    context.moveTo(x, y - size * 2.6);
-    context.lineTo(x + size * 0.7, y - size * 0.6);
-    context.lineTo(x - size * 0.7, y - size * 0.6);
-    context.closePath();
-  } else {
-    context.beginPath();
-    context.arc(x, y - size * 1.4, size * 0.75, 0, 2 * Math.PI);
-  }
-  context.fill();
-  context.stroke();
-};
-
-const drawSpawner = (
-  context: CanvasRenderingContext2D,
-  { x, y }: Vec2,
-  color: Hsl,
-) => {
-  const size = PIXELS_PER_UNIT * 0.8;
-  polyline(context, [
-    { x: x - size, y },
-    { x, y: y - size * 1.2 },
-    { x: x + size, y },
-  ]);
-  context.closePath();
-  context.fillStyle = css(color);
-  context.strokeStyle = css(color, -15);
-  context.fill();
-  context.stroke();
-  context.beginPath();
-  context.arc(x, y, size * 0.35, Math.PI, 0);
-  context.fillStyle = css(color, -20);
-  context.fill();
-};
-
-const drawChest = (context: CanvasRenderingContext2D, { x, y }: Vec2) => {
-  const width = PIXELS_PER_UNIT * 0.7;
-  const height = width * TILT;
-  const left = x - width / 2;
-  const top = y - height / 2;
-  context.fillStyle = css(WOOD);
-  context.strokeStyle = css(WOOD, -20);
-  context.fillRect(left, top, width, height);
-  context.strokeRect(left, top, width, height);
-  context.fillStyle = css(GOLD);
-  context.fillRect(left, top + height * 0.35, width, height * 0.15);
-  context.fillRect(
-    x - width * 0.08,
-    top + height * 0.3,
-    width * 0.16,
-    height * 0.3,
-  );
 };
 
 const headingOf = (direction: Direction): Vec2 => {
@@ -378,11 +342,6 @@ const headingOf = (direction: Direction): Vec2 => {
 };
 
 const TOKEN_SIZE = PIXELS_PER_UNIT * 0.5;
-
-const tokenCenterOf = ({ x, y }: Vec2): Vec2 => ({
-  x,
-  y: y - TOKEN_SIZE * TOKEN_LIFT,
-});
 
 const drawReticle = (
   context: CanvasRenderingContext2D,
@@ -400,10 +359,9 @@ const drawReticle = (
 
 const drawChevron = (
   context: CanvasRenderingContext2D,
-  base: Vec2,
+  center: Vec2,
   heading: Vec2,
 ) => {
-  const center = tokenCenterOf(base);
   const at = (along: number, across: number) => ({
     x: center.x + TOKEN_SIZE * (heading.x * along - heading.y * across),
     y: center.y + TOKEN_SIZE * (heading.y * along + heading.x * across),
@@ -411,10 +369,10 @@ const drawChevron = (
   polyline(context, [at(1.25, -0.55), at(1.75, 0), at(1.25, 0.55)]);
   context.lineJoin = "round";
   context.lineCap = "round";
-  context.strokeStyle = SHADOW;
+  context.strokeStyle = css(PALETTE.ink);
   context.lineWidth = 5;
   context.stroke();
-  context.strokeStyle = css(WHITE);
+  context.strokeStyle = css(PALETTE.bone);
   context.lineWidth = 2.5;
   context.stroke();
   context.lineWidth = 0.6;
@@ -428,46 +386,90 @@ const polyline = (
   points.forEach(({ x, y }) => context.lineTo(x, y));
 };
 
-interface Token {
-  readonly fill: Hsl;
-  readonly glyph: string;
-  readonly ring?: Hsl;
-  readonly heading?: Vec2;
-}
+const paths = new Map<string, Path2D>();
 
-const drawToken = (
+const pathOf = (data: string): Path2D =>
+  paths.get(data) ?? paths.set(data, new Path2D(data)).get(data)!;
+
+const drawSprite = (
   context: CanvasRenderingContext2D,
-  base: Vec2,
-  { fill, glyph, ring = WHITE, heading = { x: 1, y: 0 } }: Token,
+  sprite: Sprite,
+  { x, y }: Vec2,
+  size: number,
+  palette: Palette,
+  isMirrored = false,
 ) => {
-  const { x, y } = base;
-  const size = TOKEN_SIZE;
-  const center = tokenCenterOf(base);
+  const scale = size / SPRITE_BOX;
+  context.save();
+  context.translate(x, y);
+  context.scale(isMirrored ? -scale : scale, scale);
+  context.translate(-SPRITE_BOX / 2, -SPRITE_FOOT);
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  context.strokeStyle = css(palette.ink);
+  for (const { tone, path } of sprite) {
+    const shape = pathOf(path);
+    if (tone === "etch") {
+      context.lineWidth = ETCH;
+      context.stroke(shape);
+      continue;
+    }
+    if (tone !== "ink") {
+      context.lineWidth = OUTLINE;
+      context.stroke(shape);
+    }
+    context.fillStyle = css(palette[tone]);
+    context.fill(shape);
+  }
+  context.restore();
+};
+
+const drawFootprint = (
+  context: CanvasRenderingContext2D,
+  { x, y }: Vec2,
+  radius: number,
+  ring?: Hsl,
+) => {
+  context.beginPath();
+  context.ellipse(x, y, radius, radius * TILT, 0, 0, 2 * Math.PI);
   context.fillStyle = SHADOW;
-  context.beginPath();
-  context.ellipse(x, y, size, size * TILT, 0, 0, 2 * Math.PI);
   context.fill();
-  context.fillStyle = css(fill);
+  if (!ring) return;
   context.strokeStyle = css(ring);
-  context.lineWidth = 2.5;
-  context.beginPath();
-  context.arc(center.x, center.y, size, 0, 2 * Math.PI);
-  context.fill();
+  context.lineWidth = WATCHED_EDGE_WIDTH;
   context.stroke();
   context.lineWidth = 0.6;
-  context.fillStyle = css(WHITE);
-  context.font = `bold ${size * 1.3}px monospace`;
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.save();
-  context.transform(
-    heading.x,
-    heading.y,
-    -heading.y,
-    heading.x,
-    center.x,
-    center.y,
+};
+
+const drawFigure = (
+  context: CanvasRenderingContext2D,
+  { sprite, scale }: Figure,
+  base: Vec2,
+  heading: Vec2,
+  ring?: Hsl,
+) => {
+  drawFootprint(context, base, TOKEN_SIZE * scale, ring);
+  drawSprite(
+    context,
+    sprite,
+    base,
+    FIGURE_SIZE * scale,
+    PALETTE,
+    heading.x < 0,
   );
-  context.fillText(glyph, 0, 0);
-  context.restore();
+  drawChevron(context, base, heading);
+};
+
+const drawUnknown = (context: CanvasRenderingContext2D, base: Vec2) => {
+  drawFootprint(context, base, TOKEN_SIZE);
+  context.font = `bold ${FIGURE_SIZE * 0.8}px serif`;
+  context.textAlign = "center";
+  context.textBaseline = "alphabetic";
+  context.lineJoin = "round";
+  context.lineWidth = OUTLINE * 1.5;
+  context.strokeStyle = css(PALETTE.ink);
+  context.fillStyle = css(remembered(PALETTE.bone));
+  context.strokeText("?", base.x, base.y);
+  context.fillText("?", base.x, base.y);
+  context.lineWidth = 0.6;
 };
