@@ -125,6 +125,14 @@ describe("factions", () => {
     expect(next.kills).toBe(0);
   });
 
+  test("a creature slain earlier in the turn takes no turn", () => {
+    const at = { q: 4, r: 0 };
+    const goblin = { ...creature(at, "goblin", "n"), hp: 1 };
+    const bailiff = townsfolk({ q: 4, r: -1 }, "bailiff", "s");
+    const next = act(gameWith([bailiff, goblin]), WAIT);
+    expect(next.creatures.map(({ kind }) => kind)).toEqual(["bailiff"]);
+  });
+
   test("the player's spells spare townsfolk", () => {
     const game = gameWith([townsfolk(east, "peasant")]);
     const next = act(game, { kind: "use", ability: "cleave" });

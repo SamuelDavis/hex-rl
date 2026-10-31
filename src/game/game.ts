@@ -1386,11 +1386,12 @@ const creatureTurn = (game: Game, creature: Creature): Game => {
   return settled(minded, aware.id, creaturePlanOf(minded, aware)).game;
 };
 
+/** Each creature alive at the start of the turn acts, unless slain before its turn comes. */
 const creaturesTurn = (game: Game): Game =>
-  game.creatures.reduce(
-    (state, { id }) => creatureTurn(state, creatureOf(state, id)),
-    game,
-  );
+  game.creatures.reduce((state, { id }) => {
+    const living = state.creatures.find((creature) => creature.id === id);
+    return living ? creatureTurn(state, living) : state;
+  }, game);
 
 const restored = (
   value: number,
