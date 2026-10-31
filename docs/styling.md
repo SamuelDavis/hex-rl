@@ -15,7 +15,7 @@ Order is declared in `src/pico.css`.
 - Root font size is fixed: below 16px, iOS zooms focused inputs.
 - `pointer: coarse` raises controls to Apple's 44pt touch-target minimum.
 - Pico pads `[role="group"]` buttons `2rem` inline, so groups of four or more overflow phone widths; the `theme` layer makes them inherit the theme's form spacing.
-- Pico's dialog-footer `margin-bottom: 0` loses to its own `[type=button]` margin on specificity; the `theme` layer restores it.
+- One gap between controls: `--pico-spacing`. Pico spaces buttons only by inter-element whitespace, which JSX strips, so the `theme` layer lays dialog footers out as a wrapping flex row with that gap (dropping Pico's footer button margins, whose `margin-bottom: 0` also loses to its own `[type=button]` margin). Other button rows wrap in `flex flex-wrap gap-(--pico-spacing)`, as button grids use `gap-(--pico-spacing)`.
 
 ## App themes
 

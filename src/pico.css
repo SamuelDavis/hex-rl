@@ -20,8 +20,16 @@ layer(icons);
     );
   }
 
-  dialog > article > footer :is(button, [role="button"]) {
-    margin-bottom: 0;
+  dialog > article > footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--pico-spacing);
+
+    > :is(button, [role="button"]) {
+      margin: 0;
+    }
   }
 
   [role="group"]

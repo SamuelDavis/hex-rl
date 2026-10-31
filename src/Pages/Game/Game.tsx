@@ -996,26 +996,25 @@ function NewWorld(props: {
         <h3>New world</h3>
       </header>
       <form id="new-world" onSubmit={submit}>
-        <label>
-          Seed
-          <fieldset role="group">
-            <input
-              type="number"
-              name="seed"
-              required
-              value={getSeed()}
-              onInput={(event) => setSeed(Number(event.currentTarget.value))}
-            />
-            <button
-              type="button"
-              class="secondary"
-              onClick={() => setSeed(randomSeed())}
-            >
-              Random
-            </button>
-          </fieldset>
-        </label>
+        <label for="new-world-seed">Seed</label>
         <fieldset role="group">
+          <input
+            id="new-world-seed"
+            type="number"
+            name="seed"
+            required
+            value={getSeed()}
+            onInput={(event) => setSeed(Number(event.currentTarget.value))}
+          />
+          <button
+            type="button"
+            class="secondary"
+            onClick={() => setSeed(randomSeed())}
+          >
+            Random
+          </button>
+        </fieldset>
+        <div class="grid grid-cols-2 gap-(--pico-spacing)">
           <label>
             q
             <input type="number" name="q" required value={at.q} />
@@ -1024,7 +1023,7 @@ function NewWorld(props: {
             r
             <input type="number" name="r" required value={at.r} />
           </label>
-        </fieldset>
+        </div>
         <small>
           Starts on the nearest dry, treeless hex to the position. Monsters
           still grow stronger with distance from where the world begins.
@@ -1202,12 +1201,14 @@ function OtherPanel(props: {
         {key("interact")}, to interact: a reeve trades, a bailiff posts bounties
         on ever-farther lairs.
       </p>
-      <button type="button" onClick={() => props.remap()}>
-        Controls
-      </button>
-      <button type="button" onClick={() => props.restart()}>
-        New world
-      </button>
+      <div class="flex flex-wrap gap-(--pico-spacing)">
+        <button type="button" onClick={() => props.remap()}>
+          Controls
+        </button>
+        <button type="button" onClick={() => props.restart()}>
+          New world
+        </button>
+      </div>
       <details>
         <summary>Debug</summary>
         <dl>
