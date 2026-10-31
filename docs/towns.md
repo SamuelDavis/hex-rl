@@ -26,6 +26,6 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 
 ## UI
 
-- `interact` is a remappable control that aims like a hex spell (`Aimed`, `INTERACT_RANGE` in `src/Pages/Game/mode.ts`), starting on the target if adjacent.
+- `interact` is a remappable control that acts at once on the target, like a creature-aimed spell (strike); with no adjacent target it is rejected.
 - Whoever the player tries to interact with, by bump or button, becomes the target, even if uninterested (`addresseeOf`, `src/Pages/Game/session.ts`).
 - `Session.conversant` opens the creature's dialog (trade or bounty) while it stays adjacent (`conversantOf`); dismissing or stepping closes it.

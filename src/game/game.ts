@@ -229,7 +229,7 @@ export interface Restock {
 
 export interface Interact {
   readonly kind: "interact";
-  readonly at: Hex;
+  readonly at?: Hex | undefined;
 }
 
 /** Sells `item` from the pack to `trader`, or buys it from the trader's wares. */
@@ -1408,6 +1408,7 @@ const attack: Rule<Attack> = (game, { at }, actor) => {
 
 const interact: Rule<Interact> = (game, { at }, actor) => {
   if (actor !== PLAYER) return refused("unable");
+  if (!at) return refused("no-target");
   const problem = reachProblemOf(game, game.player.at, at);
   if (problem) return refused(problem);
   const npc = creatureAt(game, at);

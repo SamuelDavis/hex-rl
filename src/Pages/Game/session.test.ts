@@ -180,13 +180,14 @@ describe("interacting", () => {
     expect(session.game.turn).toBe(0);
   });
 
-  test("the interact button aims, then interacts at the reticle", () => {
+  test("the interact button interacts with the target at once", () => {
     const session = run(
       beside("reeve"),
+      { kind: "cycleTarget" },
       { kind: "interact" },
-      { kind: "confirm" },
     );
     expect(conversantOf(session)?.kind).toBe("reeve");
+    expect(session.game.turn).toBe(1);
   });
 
   test("dismissing or stepping away closes the dialog", () => {

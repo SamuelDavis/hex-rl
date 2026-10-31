@@ -60,7 +60,6 @@ import {
   type PotionKind,
 } from "../../game/items";
 import { conversantOf, newSession, update, type Message } from "./session";
-import type { Aimed } from "./mode";
 import {
   ABILITY_IDS,
   abilityOf,
@@ -122,10 +121,7 @@ export default function Game() {
   const getTile = () => getGame().land.tileAt(getGame().player.at);
   const getVisible = createMemo(() => visibleOf(getGame()));
   const getRange = createMemo(() => screenRadiusOf(getSize()));
-  const getAimed = () => {
-    const { mode } = getSession();
-    return mode.kind === "aim" ? mode.aimed : undefined;
-  };
+  const isAiming = () => getSession().mode.kind === "aim";
   const getConversant = () => conversantOf(getSession());
   const getTargetMark = createMemo(() => {
     const { game, range, target } = getSession();
@@ -144,15 +140,9 @@ export default function Game() {
     const { mode, game } = getSession();
     if (mode.kind !== "aim") return undefined;
     const { at, facing } = game.player;
-    const { aimed } = mode;
-    const area =
-      aimed.kind === "use"
-        ? abilityOf(aimed.ability).effects.flatMap((effect) =>
-            effect.kind === "damage"
-              ? areaOf(effect.area, at, facing, mode.at)
-              : [],
-          )
-        : [mode.at];
+    const area = abilityOf(mode.ability).effects.flatMap((effect) =>
+      effect.kind === "damage" ? areaOf(effect.area, at, facing, mode.at) : [],
+    );
     return { at: mode.at, area: new Set(area.map(hexKey)) };
   });
 
@@ -313,7 +303,7 @@ export default function Game() {
           <Match when={getTab() === "Play"}>
             <PlayPanel
               game={getGame()}
-              aimed={getAimed()}
+              isAiming={isAiming()}
               loadout={getLoadout()}
               keymap={getKeymap()}
               press={press}
@@ -416,7 +406,7 @@ export default function Game() {
 
 function PlayPanel(props: {
   game: GameState;
-  aimed: Aimed | undefined;
+  isAiming: boolean;
   keymap: Keymap;
   loadout: Loadout;
   press: (input: Input) => void;
@@ -457,7 +447,7 @@ function PlayPanel(props: {
         </div>
         <div class="col-span-2 col-start-5 grid grid-cols-2 gap-(--pico-spacing)">
           <Show
-            when={props.aimed}
+            when={props.isAiming}
             fallback={
               <>
                 <PadButton
@@ -477,24 +467,20 @@ function PlayPanel(props: {
               </>
             }
           >
-            {(aimed) => (
-              <>
-                <PadButton
-                  control="confirm"
-                  keymap={props.keymap}
-                  press={props.press}
-                >
-                  {aimed().kind === "use" ? "Cast" : "Interact"}
-                </PadButton>
-                <PadButton
-                  control="cancel"
-                  keymap={props.keymap}
-                  press={props.press}
-                >
-                  Cancel
-                </PadButton>
-              </>
-            )}
+            <PadButton
+              control="confirm"
+              keymap={props.keymap}
+              press={props.press}
+            >
+              Cast
+            </PadButton>
+            <PadButton
+              control="cancel"
+              keymap={props.keymap}
+              press={props.press}
+            >
+              Cancel
+            </PadButton>
           </Show>
           <PadButton control="target" keymap={props.keymap} press={props.press}>
             Target
@@ -1109,9 +1095,9 @@ function OtherPanel(props: {
         Monsters grow stronger, and their tricks (summoning, bleeding, stunning,
         paralysis) worse, farther from where you set out. Climb one block at a
         time; swim freely. Towns spawn a bailiff, a reeve and peasants, who
-        fight monsters; bump one, or press {key("interact")} and aim, to
-        interact: a reeve trades, a bailiff posts bounties on ever-farther
-        lairs.
+        fight monsters; bump one, or target one beside you and press
+        {key("interact")}, to interact: a reeve trades, a bailiff posts bounties
+        on ever-farther lairs.
       </p>
       <button type="button" onClick={() => props.remap()}>
         Controls

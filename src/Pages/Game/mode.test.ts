@@ -1,22 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { EXPLORE, INTERACT_RANGE, transition, type Mode } from "./mode";
+import { EXPLORE, transition, type Mode } from "./mode";
 import { ABILITIES } from "../../game/abilities";
 import { east, facingEast } from "../../game/testing";
 
 const game = facingEast();
 const range = ABILITIES.fireball.aim.range;
-const aiming: Mode = {
-  kind: "aim",
-  aimed: { kind: "use", ability: "fireball" },
-  range,
-  at: east,
-};
-const interacting: Mode = {
-  kind: "aim",
-  aimed: { kind: "interact" },
-  range: INTERACT_RANGE,
-  at: east,
-};
+const aiming: Mode = { kind: "aim", ability: "fireball", range, at: east };
 const ahead = { q: 2, r: 0 };
 
 describe("explore", () => {
@@ -114,42 +103,23 @@ describe("aim", () => {
 });
 
 describe("interact", () => {
-  const north = { q: 0, r: -1 };
-
-  test("starts aiming at an adjacent target, else the hex faced", () => {
-    expect(transition(EXPLORE, { kind: "interact" }, game, north)).toEqual({
-      mode: { ...interacting, at: north },
-    });
-    expect(transition(EXPLORE, { kind: "interact" }, game, ahead)).toEqual({
-      mode: interacting,
-    });
-  });
-
-  test("steers within reach", () => {
-    expect(
-      transition(interacting, { kind: "move", direction: "se" }, game),
-    ).toEqual({ mode: interacting });
-  });
-
-  test("confirm, or interact again, interacts at the reticle", () => {
+  test("acts at once at the target, like a creature-aimed spell", () => {
     const interacted = {
       mode: EXPLORE,
       action: { kind: "interact", at: east },
     };
-    expect(transition(interacting, { kind: "confirm" }, game)).toEqual(
+    expect(transition(EXPLORE, { kind: "interact" }, game, east)).toEqual(
       interacted,
     );
-    expect(transition(interacting, { kind: "interact" }, game)).toEqual(
+    expect(transition(aiming, { kind: "interact" }, game, east)).toEqual(
       interacted,
     );
   });
 
-  test("switches between aiming a spell and interacting", () => {
-    expect(transition(aiming, { kind: "interact" }, game, east)).toEqual({
-      mode: interacting,
+  test("without a target, interacts with no one, to be rejected", () => {
+    expect(transition(EXPLORE, { kind: "interact" }, game)).toEqual({
+      mode: EXPLORE,
+      action: { kind: "interact", at: undefined },
     });
-    expect(
-      transition(interacting, { kind: "use", ability: "fireball" }, game, east),
-    ).toEqual({ mode: aiming });
   });
 });

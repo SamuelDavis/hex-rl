@@ -3,17 +3,9 @@ import { unreadinessOf, type Intent, type Game } from "../../game/game";
 import type { Direction, Hex } from "../../game/hex";
 import { abilityOf, type AbilityId } from "../../game/abilities";
 
-/** Reach of `interact`: an adjacent hex. */
-export const INTERACT_RANGE = 1;
-
-/** What an aim releases, once given its hex. */
-export type Aimed =
-  | { readonly kind: "use"; readonly ability: AbilityId }
-  | { readonly kind: "interact" };
-
 export interface Aiming {
   readonly kind: "aim";
-  readonly aimed: Aimed;
+  readonly ability: AbilityId;
   readonly range: number;
   readonly at: Hex;
 }
@@ -35,18 +27,9 @@ export interface Transition {
   readonly action?: Intent;
 }
 
-const released = ({ aimed, at }: Aiming): Transition => ({
+const released = ({ ability, at }: Aiming): Transition => ({
   mode: EXPLORE,
-  action: { ...aimed, at },
-});
-
-const aiming = (
-  game: Game,
-  aimed: Aimed,
-  range: number,
-  target: Hex | undefined,
-): Transition => ({
-  mode: { kind: "aim", aimed, range, at: startAim(game, range, target) },
+  action: { kind: "use", ability, at },
 });
 
 const chosen = (
@@ -57,10 +40,15 @@ const chosen = (
   const { aim } = abilityOf(ability);
   if (aim.kind !== "hex" || unreadinessOf(game, ability))
     return { mode: EXPLORE, action: { kind: "use", ability, at: target } };
-  return aiming(game, { kind: "use", ability }, aim.range, target);
+  const at = startAim(game, aim.range, target);
+  return { mode: { kind: "aim", ability, range: aim.range, at } };
 };
 
-const INTERACTING: Aimed = { kind: "interact" };
+/** Like a creature-aimed spell: at once, at the target. */
+const interacting = (target: Hex | undefined): Transition => ({
+  mode: EXPLORE,
+  action: { kind: "interact", at: target },
+});
 
 const explore = (
   command: Command,
@@ -78,7 +66,7 @@ const explore = (
     case "use":
       return chosen(game, command.ability, target);
     case "interact":
-      return aiming(game, INTERACTING, INTERACT_RANGE, target);
+      return interacting(target);
     case "confirm":
     case "cancel":
       return { mode: EXPLORE };
@@ -101,18 +89,13 @@ const aim = (
       };
     case "wait":
       return { mode };
-    case "use": {
-      const { aimed } = mode;
-      if (aimed.kind === "use" && command.ability === aimed.ability)
-        return released(mode);
+    case "use":
+      if (command.ability === mode.ability) return released(mode);
       if (!abilityOf(command.ability).spendsTurn)
         return { mode, action: { kind: "use", ability: command.ability } };
       return chosen(game, command.ability, target);
-    }
     case "interact":
-      return mode.aimed.kind === "interact"
-        ? released(mode)
-        : aiming(game, INTERACTING, INTERACT_RANGE, target);
+      return interacting(target);
     case "confirm":
       return released(mode);
     case "cancel":

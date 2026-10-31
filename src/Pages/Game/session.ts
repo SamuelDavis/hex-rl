@@ -85,7 +85,7 @@ const addresseeOf = ({ events, creatures }: Game): Creature | undefined => {
       return creatures.find(({ id }) => id === event.id);
     if (event.kind === "rejected" && event.action.kind === "interact") {
       const { at } = event.action;
-      return creatures.find((creature) => sameHex(creature.at, at));
+      return at && creatures.find((creature) => sameHex(creature.at, at));
     }
   }
   return undefined;
