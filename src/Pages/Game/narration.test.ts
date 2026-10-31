@@ -1,5 +1,7 @@
-import { expect, test } from "vitest";
-import { narrationOf } from "./narration";
+import { describe, expect, test } from "vitest";
+import { creatureNameOf, narrationOf } from "./narration";
+import { creature } from "../../game/testing";
+import { Biome } from "../../game/terrain";
 
 test("rejections name the actor, the action and the reason", () => {
   expect(
@@ -74,4 +76,16 @@ test("summons and afflictions are counted", () => {
       turns: 1,
     }),
   ).toBe("The adventurer is stunned for 1 turn.");
+});
+
+describe("creatureNameOf", () => {
+  test("names townsfolk by their town's biome, monsters by kind", () => {
+    const town = { kind: "town", at: { q: 0, r: 0 } } as const;
+    expect(
+      creatureNameOf(creature({ q: 1, r: 0 }, "reeve", "n", town), Biome.Beach),
+    ).toBe("coastal reeve");
+    expect(creatureNameOf(creature({ q: 1, r: 0 }, "wolf"), Biome.Beach)).toBe(
+      "wolf",
+    );
+  });
 });

@@ -60,6 +60,20 @@ const SPAWNER_HUES: Record<SpawnerKind, number> = {
   town: 210,
 };
 
+/** Towns take on their biome's look. */
+const TOWN_COLORS: Record<Biome, Hsl> = {
+  [Biome.Ocean]: [200, 35, 40],
+  [Biome.Beach]: [200, 35, 40],
+  [Biome.Desert]: [25, 50, 42],
+  [Biome.Plains]: [45, 50, 38],
+  [Biome.Forest]: [100, 30, 28],
+  [Biome.Taiga]: [20, 30, 25],
+  [Biome.Tundra]: [200, 15, 65],
+  [Biome.Mountain]: [220, 10, 35],
+  [Biome.Peak]: [200, 15, 65],
+  [Biome.Marsh]: [65, 30, 30],
+};
+
 const GROUND: Record<Biome, Hsl> = {
   [Biome.Ocean]: [40, 30, 55],
   [Biome.Beach]: [45, 60, 75],
@@ -174,9 +188,11 @@ export const CLASSIC: CanvasTheme = {
     context.fill();
     context.stroke();
   },
-  spawner: (context, { x, y }, kind, tint) => {
+  spawner: (context, { x, y }, kind, biome, tint) => {
     const size = PIXELS_PER_UNIT * 0.8;
-    const color = tint([SPAWNER_HUES[kind], 35, 30]);
+    const color = tint(
+      kind === "town" ? TOWN_COLORS[biome] : [SPAWNER_HUES[kind], 35, 30],
+    );
     polyline(context, [
       { x: x - size, y },
       { x, y: y - size * 1.2 },

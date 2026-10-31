@@ -83,6 +83,10 @@ export const SPAWNER_CLEARANCE = 8;
 const SPAWNER_DENSITY = 0.003;
 const DANGER_RING = 40;
 export const WET_REACH = 2;
+/** Radius a town levels and clears of trees around itself. */
+export const TOWN_CLEARING = 2;
+/** Most a town's clearing may rise or fall before leveling, in blocks. */
+const TOWN_RELIEF = 1;
 
 /** 1 near spawn, rising by one per `DANGER_RING` hexes outward; also the level of monsters spawned there. */
 export const dangerOf = (at: Hex, spawn: Hex): number =>
@@ -94,6 +98,8 @@ const HABITAT: Record<
     readonly minDanger: number;
     readonly biomes: Partial<Record<Biome, number>>;
     readonly wet?: number;
+    /** Needs dry ground within `TOWN_CLEARING` no more than `TOWN_RELIEF` off level. */
+    readonly isSettler?: boolean;
   }
 > = {
   den: {
@@ -138,8 +144,13 @@ const HABITAT: Record<
       [Biome.Plains]: 3,
       [Biome.Forest]: 1,
       [Biome.Taiga]: 1,
+      [Biome.Desert]: 1,
+      [Biome.Tundra]: 1,
+      [Biome.Mountain]: 1,
+      [Biome.Marsh]: 1,
     },
     wet: 2,
+    isSettler: true,
   },
 };
 
@@ -152,9 +163,18 @@ export const habitatWeightOf = (
   return (biomes[biome] ?? 0) + (isWet ? wet : 0);
 };
 
-const habitatWeightsAt = (biome: Biome, isWet: boolean, danger: number) =>
+const habitatWeightsAt = (
+  biome: Biome,
+  isWet: boolean,
+  isLevel: boolean,
+  danger: number,
+) =>
   (Object.keys(HABITAT) as SpawnerKind[])
-    .filter((kind) => HABITAT[kind].minDanger <= danger)
+    .filter(
+      (kind) =>
+        HABITAT[kind].minDanger <= danger &&
+        (isLevel || !HABITAT[kind].isSettler),
+    )
     .map((kind) => [kind, habitatWeightOf(kind, biome, isWet)] as const)
     .filter(([, weight]) => weight > 0);
 
@@ -306,11 +326,11 @@ export const createTerrain = (seed: number) => {
   });
 
   const world = createWorld(seed);
-  const tileAt = (hex: Hex): Tile =>
+  const wildTileAt = (hex: Hex): Tile =>
     world.readAt(chunkAt, centerOf(hex)).get(hexKey(hex))!;
 
   const isSpawnable = (p: Vec2) => {
-    const tile = tileAt(hexAt(p));
+    const tile = wildTileAt(hexAt(p));
     return tile.water === undefined && !tile.tree;
   };
   const spawnPoint = spawnNear({
@@ -333,6 +353,16 @@ export const createTerrain = (seed: number) => {
           const tile = tileNear(add(at, offset));
           return tile.water !== undefined && tile.biome !== Biome.Ocean;
         });
+      const isLevel = (at: Hex) => {
+        const { ground } = tileNear(at);
+        return hexesWithin(TOWN_CLEARING).every((offset) => {
+          const tile = tileNear(add(at, offset));
+          return (
+            tile.water === undefined &&
+            Math.abs(tile.ground - ground) <= TOWN_RELIEF
+          );
+        });
+      };
       return hexesIn(cell).flatMap((at) => {
         const tile = tileNear(at);
         if (
@@ -345,6 +375,7 @@ export const createTerrain = (seed: number) => {
         const weights = habitatWeightsAt(
           tile.biome,
           isWet(at),
+          isLevel(at),
           dangerOf(at, spawn),
         );
         if (weights.length === 0) return [];
@@ -354,7 +385,58 @@ export const createTerrain = (seed: number) => {
   });
   const spawnersIn = (bounds: Bounds) => world.gather(spawnersAt, bounds);
 
-  return { seed, chunks, chunkAt, tileAt, spawn, spawnersAt, spawnersIn };
+  const settledAt = stage({
+    name: "settled chunks",
+    grid: chunks,
+    cache: 1024,
+    reads: [
+      { stage: chunkAt, radius: 1 },
+      { stage: spawnersAt, radius: 1 },
+    ],
+    compute: (cell, { read }): ReadonlyMap<string, Tile> => {
+      const wild = read(chunkAt, cell);
+      const towns = chunks
+        .cellsAround(cell, 1)
+        .flatMap((near) => read(spawnersAt, near))
+        .filter(({ kind }) => kind === "town")
+        .map(({ at }) => ({
+          at,
+          ground: read(chunkAt, chunks.cellOf(centerOf(at))).get(hexKey(at))!
+            .ground,
+        }));
+      return new Map(
+        hexesIn(cell).map((hex) => {
+          const tile = wild.get(hexKey(hex))!;
+          const town = towns
+            .filter(({ at }) => hexDistance(at, hex) <= TOWN_CLEARING)
+            .sort(
+              (a, b) =>
+                hexDistance(a.at, hex) - hexDistance(b.at, hex) ||
+                a.at.q - b.at.q ||
+                a.at.r - b.at.r,
+            )[0];
+          const settled = town
+            ? { ...tile, ground: town.ground, tree: false }
+            : tile;
+          return [hexKey(hex), settled];
+        }),
+      );
+    },
+  });
+
+  const tileAt = (hex: Hex): Tile =>
+    world.readAt(settledAt, centerOf(hex)).get(hexKey(hex))!;
+
+  return {
+    seed,
+    chunks,
+    chunkAt,
+    settledAt,
+    tileAt,
+    spawn,
+    spawnersAt,
+    spawnersIn,
+  };
 };
 
 export type Terrain = ReturnType<typeof createTerrain>;

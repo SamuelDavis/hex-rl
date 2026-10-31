@@ -1,7 +1,9 @@
 import { abilityOf, type AbilityId } from "../../game/abilities";
 import type { Direction } from "../../game/hex";
 import {
+  factionOfCreature,
   PLAYER,
+  type Creature,
   type Intent,
   type ActorKind,
   type Cargo,
@@ -17,6 +19,7 @@ import {
   type SpawnerKind,
 } from "../../game/creatures";
 import type { Hex } from "../../game/hex";
+import { Biome } from "../../game/terrain";
 
 const REASONS: Record<Rejection, string> = {
   blocked: "the way is blocked",
@@ -109,6 +112,25 @@ const movingOf = (from: Where, to: Where) => {
   if (to !== "pack") return "equips";
   return from === "ground" ? "takes" : "takes off";
 };
+
+const TOWN_STYLES: Record<Biome, string> = {
+  [Biome.Ocean]: "coastal",
+  [Biome.Beach]: "coastal",
+  [Biome.Desert]: "desert",
+  [Biome.Plains]: "meadow",
+  [Biome.Forest]: "forest",
+  [Biome.Taiga]: "pinewood",
+  [Biome.Tundra]: "tundra",
+  [Biome.Mountain]: "mountain",
+  [Biome.Peak]: "highland",
+  [Biome.Marsh]: "fen",
+};
+
+/** Townsfolk take their town's biome: "coastal reeve"; monsters are their kind. */
+export const creatureNameOf = (creature: Creature, homeBiome: Biome) =>
+  factionOfCreature(creature) === "town"
+    ? `${TOWN_STYLES[homeBiome]} ${creature.kind}`
+    : creature.kind;
 
 export const placeOf = ({ q, r }: Hex) => `(${q}, ${r})`;
 

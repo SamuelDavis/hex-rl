@@ -227,7 +227,7 @@ export const drawScene = (
     if (tile.tree) theme.tree(context, base, tile.biome, lit);
     const spawner = spawnerAt.get(hexKey(hex));
     if (spawner)
-      theme.spawner(context, base, spawner.kind, (color) =>
+      theme.spawner(context, base, spawner.kind, tile.biome, (color) =>
         lit(isWrecked(spawner) ? ashen(color) : color),
       );
     if (bounty && sameHex(hex, bounty)) theme.bounty(context, base);

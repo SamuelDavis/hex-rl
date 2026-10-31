@@ -14,6 +14,12 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 | Wares, purse | A trader's items and gold, on the creature; lost when it is forgotten. | `Creature.wares`, `Creature.purse` |
 | Bounty | Player state: a lair whose boss to slay, its level, whether slain. | `Bounty`, `Player.bounty` |
 
+## Siting
+
+- Towns are a `HABITAT` kind in `src/game/terrain.ts` like any spawner (biome weights, a bonus near fresh water), and `isSettler`: only sited where every hex within `TOWN_CLEARING` is dry and within `TOWN_RELIEF` blocks of the center.
+- The `settledAt` stage levels each town's clearing to its ground and clears its trees; where clearings meet, the nearest town wins. `tileAt` reads it; spawner siting and the spawn point read the unsettled `chunkAt`, so settling can't feed back into them.
+- A town takes its biome's identity: townsfolk are named for it (`creatureNameOf`, "coastal reeve", `src/Pages/Game/narration.ts`) and themes draw the same town sprite in biome colors (`CanvasTheme.spawner` receives the biome).
+
 ## Rules
 
 - Minds notice the nearest foe (`mindOf`), so townsfolk and wild monsters hunt each other; townsfolk never target the player. Kills by townsfolk grant the player nothing.
@@ -28,4 +34,5 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 
 - `interact` is a remappable control that acts at once on the target, like a creature-aimed spell (strike); with no adjacent target it is rejected.
 - Whoever the player tries to interact with, by bump or button, becomes the target, even if uninterested (`addresseeOf`, `src/Pages/Game/session.ts`).
+- The outstanding bounty's lair is marked on the map (`CanvasTheme.bounty`).
 - `Session.conversant` opens the creature's dialog (trade or bounty) while it stays adjacent (`conversantOf`); dismissing or stepping closes it.

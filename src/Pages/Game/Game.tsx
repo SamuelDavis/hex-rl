@@ -46,7 +46,7 @@ import {
   type Where,
 } from "../../game/game";
 import { directionToward, hexKey, type Direction } from "../../game/hex";
-import { bountyOf, narrationOf, placeOf } from "./narration";
+import { bountyOf, creatureNameOf, narrationOf, placeOf } from "./narration";
 import {
   capacityOf,
   loadOf,
@@ -368,7 +368,12 @@ export default function Game() {
         {(conversant) => (
           <article>
             <header>
-              <h3 class="capitalize">{conversant().kind}</h3>
+              <h3 class="capitalize">
+                {creatureNameOf(
+                  conversant(),
+                  getGame().land.tileAt(conversant().home.at).biome,
+                )}
+              </h3>
             </header>
             <Switch>
               <Match when={SERVICES[conversant().kind] === "trade"}>

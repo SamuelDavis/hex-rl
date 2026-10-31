@@ -7,6 +7,7 @@ import {
   hexesCovering,
   hexesWithin,
   hexKey,
+  type Hex,
 } from "./hex";
 import {
   Biome,
@@ -14,6 +15,7 @@ import {
   habitatWeightOf,
   SPAWNER_CLEARANCE,
   SEA_LEVEL,
+  TOWN_CLEARING,
   surfaceOf,
   WET_REACH,
 } from "./terrain";
@@ -127,6 +129,27 @@ describe("createTerrain", () => {
       }
     });
 
+    test("towns sit in a level, dry, treeless clearing, shared where they meet", () => {
+      const towns = spawners.filter(({ kind }) => kind === "town");
+      expect(towns.length).toBeGreaterThan(0);
+      const isNearest = (at: Hex, hex: Hex) =>
+        towns.every(
+          (other) =>
+            other.at === at ||
+            hexDistance(other.at, hex) > hexDistance(at, hex),
+        );
+      for (const { at } of towns) {
+        const { ground } = terrain.tileAt(at);
+        for (const offset of hexesWithin(TOWN_CLEARING))
+          if (isNearest(at, add(at, offset)))
+            expect(terrain.tileAt(add(at, offset))).toMatchObject({
+              ground,
+              water: undefined,
+              tree: false,
+            });
+      }
+    });
+
     test("are a pure function of seed and place", () => {
       expect(createTerrain(SEED).spawnersIn(bounds)).toEqual(spawners);
     });
@@ -136,6 +159,15 @@ describe("createTerrain", () => {
         seed: SEED,
         stage: terrain.spawnersAt,
         cells: terrain.chunks.cellsAround({ col: 0, row: 0 }, 2),
+      });
+    });
+
+    test("clearings are independent of generation order", () => {
+      expectOrderIndependent({
+        seed: SEED,
+        stage: terrain.settledAt,
+        cells: terrain.chunks.cellsAround({ col: 0, row: 0 }, 2),
+        summary: (chunk) => JSON.stringify([...chunk]),
       });
     });
   });

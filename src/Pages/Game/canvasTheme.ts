@@ -40,10 +40,12 @@ export interface CanvasTheme {
     biome: Biome,
     tint: Tint,
   ) => void;
+  /** `biome` is where it stands; towns take on its look. */
   readonly spawner: (
     context: CanvasRenderingContext2D,
     base: Vec2,
     kind: SpawnerKind,
+    biome: Biome,
     tint: Tint,
   ) => void;
   readonly chest: (context: CanvasRenderingContext2D, base: Vec2) => void;

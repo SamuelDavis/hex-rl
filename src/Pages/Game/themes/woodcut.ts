@@ -71,6 +71,20 @@ const CANOPY: Record<Biome, Hsl> = {
   [Biome.Marsh]: [70, 20, 22],
 };
 
+/** Town roofs (the town sprite's `leaf`) take on their biome's look. */
+const ROOFS: Record<Biome, Hsl> = {
+  [Biome.Ocean]: [200, 20, 45],
+  [Biome.Beach]: [200, 20, 45],
+  [Biome.Desert]: [22, 45, 48],
+  [Biome.Plains]: [42, 45, 52],
+  [Biome.Forest]: [85, 26, 30],
+  [Biome.Taiga]: [18, 30, 26],
+  [Biome.Tundra]: [40, 20, 86],
+  [Biome.Mountain]: [25, 6, 38],
+  [Biome.Peak]: [40, 20, 86],
+  [Biome.Marsh]: [60, 25, 34],
+};
+
 const PALETTE: Palette = {
   ink: [15, 25, 9],
   bone: [43, 58, 80],
@@ -235,13 +249,16 @@ export const WOODCUT: CanvasTheme = {
       TREE_SIZE,
       tinted({ ...PALETTE, leaf: CANOPY[biome] }, tint),
     ),
-  spawner: (context, base, kind, tint) =>
+  spawner: (context, base, kind, biome, tint) =>
     drawSprite(
       context,
       SPAWNER_SPRITES[kind],
       base,
       SPAWNER_SIZE,
-      tinted(PALETTE, tint),
+      tinted(
+        kind === "town" ? { ...PALETTE, leaf: ROOFS[biome] } : PALETTE,
+        tint,
+      ),
     ),
   bounty: (context, base) => {
     drawFootprint(context, base, TOKEN_SIZE * 2, PALETTE.blood);
