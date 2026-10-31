@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  messageOf,
-  slotted,
-  SLOT_COUNT,
-  STARTING_LOADOUT,
-} from "./loadout";
+import { messageOf, slotted, SLOT_COUNT, STARTING_LOADOUT } from "./loadout";
 
 describe("STARTING_LOADOUT", () => {
   test("has every slot empty, as no spell is known yet", () => {

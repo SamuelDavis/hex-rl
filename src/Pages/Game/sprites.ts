@@ -1,4 +1,4 @@
-import type { CreatureKind, SpawnerKind } from "../../game/creatures";
+import type { CreatureKind, SpawnerKind } from "../../game/content/creatures";
 
 export const SPRITE_BOX = 32;
 export const SPRITE_FOOT = 30;

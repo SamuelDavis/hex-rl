@@ -1,39 +1,5 @@
-import {
-  add,
-  DIRECTIONS,
-  flanksOf,
-  neighborsOf,
-  type Direction,
-  type Hex,
-} from "./hex";
-import type { PotionKind } from "./items";
-
-export type Aim =
-  | { readonly kind: "none" }
-  | { readonly kind: "creature" }
-  | { readonly kind: "hex"; readonly range: number };
-
-export type Area = "target" | "ahead" | "flanks" | "ring";
-
-export type Effect =
-  | { readonly kind: "face" }
-  | { readonly kind: "damage"; readonly area: Area; readonly amount: number }
-  | {
-      readonly kind: "restore";
-      readonly stat: "hp" | "mp";
-      readonly amount: number;
-    };
-
-export interface Ability {
-  readonly mp: number;
-  /** Turns after use before it can be used again. */
-  readonly cooldown: number;
-  readonly spendsTurn: boolean;
-  readonly consumes?: PotionKind;
-  readonly aim: Aim;
-  readonly effects: readonly Effect[];
-  readonly summary: string;
-}
+import type { Ability, Aim } from "../actions/abilities";
+import type { PotionKind } from "../items";
 
 export const PLAYER_DAMAGE = 2;
 export const CLEAVE_SPLASH = 0.5;
@@ -62,6 +28,7 @@ const potion = (
   summary: `Restore ${amount} ${stat.toUpperCase()}.`,
 });
 
+/** Learnable by levelling. */
 export const SPELLS = {
   cleave: {
     mp: 3,
@@ -114,8 +81,49 @@ export const SPELLS = {
   },
 } as const satisfies Record<string, Ability>;
 
+const inflicting = (
+  condition: "bleed" | "stun" | "paralysis",
+  turns: number,
+  cooldown: number,
+  chance: number,
+): Ability => ({
+  mp: 0,
+  cooldown,
+  spendsTurn: false,
+  aim: NO_AIM,
+  effects: [{ kind: "condition", area: "target", condition, turns }],
+  trigger: { on: "hit", chance },
+  summary: `Inflict ${condition} on a landed hit.`,
+});
+
+/** Creatures' abilities: each triggers by itself, at its chance, when its `trigger` occurs. Effects scale with the caster's level. */
+const KNACKS = {
+  "summon cubs": {
+    mp: 0,
+    cooldown: 15,
+    spendsTurn: true,
+    aim: NO_AIM,
+    effects: [{ kind: "summon", creature: "cub", count: 1 }],
+    trigger: { on: "hostile", chance: 0.3 },
+    summary: "Summon a cub per level.",
+  },
+  bleed: inflicting("bleed", 1, 4, 0.35),
+  stun: inflicting("stun", 0.5, 5, 0.15),
+  paralyze: inflicting("paralysis", 1, 5, 0.15),
+  restock: {
+    mp: 0,
+    cooldown: [100, 200],
+    spendsTurn: true,
+    aim: NO_AIM,
+    effects: [{ kind: "restock", stock: 6, gold: 60 }],
+    trigger: { on: "idle", chance: 0.2 },
+    summary: "Refill wares and purse.",
+  },
+} as const satisfies Record<string, Ability>;
+
 export const ABILITIES = {
   ...SPELLS,
+  ...KNACKS,
   health: potion("health", "hp", HEALTH_POTION_HP),
   mana: potion("mana", "mp", MANA_POTION_MP),
 } as const satisfies Record<string, Ability>;
@@ -131,24 +139,3 @@ export type AbilityId = keyof typeof ABILITIES;
 export const ABILITY_IDS = Object.keys(ABILITIES) as readonly AbilityId[];
 
 export const abilityOf = (id: AbilityId): Ability => ABILITIES[id];
-
-export const MELEE_AREAS: ReadonlySet<Area> = new Set(["ahead", "flanks"]);
-
-export const areaOf = (
-  area: Area,
-  from: Hex,
-  facing: Direction,
-  at: Hex | undefined,
-): readonly Hex[] => {
-  const toward = (direction: Direction) => add(from, DIRECTIONS[direction]);
-  switch (area) {
-    case "target":
-      return at ? [at] : [];
-    case "ahead":
-      return [toward(facing)];
-    case "flanks":
-      return flanksOf(facing).map(toward);
-    case "ring":
-      return at ? neighborsOf(at) : [];
-  }
-};

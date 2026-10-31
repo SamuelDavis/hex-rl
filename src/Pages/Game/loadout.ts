@@ -1,4 +1,4 @@
-import type { AbilityId } from "../../game/abilities";
+import type { AbilityId } from "../../game/content/abilities";
 import type { Input } from "./controls";
 import type { Message } from "./session";
 
@@ -17,7 +17,10 @@ export const slotted = (
   ability: AbilityId | undefined,
 ): Loadout => loadout.map((bound, at) => (at === slot ? ability : bound));
 
-export const messageOf = (loadout: Loadout, input: Input): Message | undefined => {
+export const messageOf = (
+  loadout: Loadout,
+  input: Input,
+): Message | undefined => {
   if (input.kind !== "slot") return input;
   const ability = loadout[input.slot];
   return ability && { kind: "use", ability };

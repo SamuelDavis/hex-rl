@@ -33,7 +33,7 @@ import {
   hexKey,
   type Hex,
 } from "./hex";
-import type { SpawnerKind } from "./creatures";
+import type { SpawnerKind } from "./content/creatures";
 
 export const Biome = {
   Ocean: 0,
@@ -78,7 +78,7 @@ const MOUNTAIN_HEIGHT = 11;
 const PEAK_HEIGHT = 17;
 const LAPSE_PER_BLOCK = 0.03;
 const TILES_PER_LANDFORM_UNIT = 0.15;
-const CHUNK = 16;
+export const CHUNK = 16;
 export const SPAWNER_CLEARANCE = 8;
 const SPAWNER_DENSITY = 0.003;
 const DANGER_RING = 40;

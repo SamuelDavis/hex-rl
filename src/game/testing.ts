@@ -1,19 +1,22 @@
+import { creatureOf } from "./archetypes";
+import { PLAYER, type Entity, type Fields } from "./components";
+import { SPELL_IDS } from "./content/abilities";
+import type { CreatureKind } from "./content/creatures";
+import type { Intent } from "./actions/deeds";
+import type { GameEvent, Who } from "./events";
+import { hexKey, type Direction, type Hex } from "./hex";
+import { newGame } from "./tick";
+import { Biome, type Spawner, type Tile } from "./terrain";
 import {
-  factionOfCreature,
-  newGame,
-  PLAYER,
-  type Who,
-  type Intent,
+  creaturesOf,
+  inserted,
+  removed,
+  updated,
+  whoIs,
+  type Creature,
   type Game,
   type Land,
-  type Creature,
-} from "./game";
-import { IDLE } from "./mind";
-import { NONE } from "./afflictions";
-import { hexKey, type Direction, type Hex } from "./hex";
-import { CREATURES } from "./creatures";
-import { SPELL_IDS } from "./abilities";
-import { Biome, type Spawner, type Tile } from "./terrain";
+} from "./world";
 
 export const land = (ground: number, tree = false): Tile => ({
   ground,
@@ -35,51 +38,56 @@ export const landOf = (
   spawnersIn: () => spawners,
 });
 
+/** A creature of `level`, its id its hex, at home on a village where it stands unless given. */
 export const creature = (
   at: Hex,
-  kind: Creature["kind"] = "goblin",
+  kind: CreatureKind = "goblin",
   facing: Direction = "nw",
   home: Spawner = { kind: "village", at },
-): Creature => ({
-  id: hexKey(at),
-  kind,
-  home,
-  at,
-  facing,
-  hp: CREATURES[kind].hp,
-  mind: IDLE,
-  level: 1,
-  readyAt: 0,
-  wares: [],
-  purse: 0,
-  afflictions: NONE,
-});
+  level = 1,
+): Creature =>
+  ({
+    ...creatureOf(kind, { id: hexKey(at), home, at, facing, level }),
+    seq: 0,
+  }) as Creature;
 
 const EVERY_SPELL = new Map(SPELL_IDS.map((spell) => [spell, 1]));
 
-/** A player facing south-east who knows every spell at level 1. */
-export const facingEast = (world = landOf()): Game => {
-  const game = newGame(world);
-  return {
-    ...game,
-    player: { ...game.player, facing: "se", spells: EVERY_SPELL },
-  };
-};
+export const withPlayer = (game: Game, change: Partial<Fields>): Game =>
+  updated(game, PLAYER, change);
 
-export const gameWith = (creatures: Creature[], world = landOf()): Game => ({
-  ...facingEast(world),
-  creatures,
-});
+/** `game` with exactly `creatures`, spawned in order after everything else. */
+export const withCreatures = (game: Game, creatures: readonly Entity[]): Game =>
+  creatures.reduce(
+    (state, creature) => inserted(state, creature),
+    creaturesOf(game).reduce((state, { id }) => removed(state, id), game),
+  );
+
+/** A player facing south-east who knows every spell at level 1. */
+export const facingEast = (world = landOf()): Game =>
+  withPlayer(newGame(world), { facing: "se", abilities: EVERY_SPELL });
+
+export const gameWith = (
+  creatures: readonly Entity[],
+  world = landOf(),
+): Game => withCreatures(facingEast(world), creatures);
 
 export const ADVENTURER: Who = { id: PLAYER, kind: PLAYER, faction: "town" };
 
 /** How events name `creature`, at home on `landOf`'s default plains. */
 export const who = (creature: Creature, biome: Biome = Biome.Plains): Who => ({
-  id: creature.id,
-  kind: creature.kind,
-  faction: factionOfCreature(creature),
+  ...whoIs({ land: landOf() } as Game, creature),
   biome,
 });
+
+/** Events without their causes, for comparing what happened. */
+export const eventsOf = ({ events }: Game): readonly GameEvent[] =>
+  events.map(
+    (event) =>
+      Object.fromEntries(
+        Object.entries(event).filter(([key]) => key !== "cause"),
+      ) as GameEvent,
+  );
 
 export const WAIT: Intent = { kind: "wait" };
 

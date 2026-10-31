@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { EXPLORE, transition, type Mode } from "./mode";
-import { ABILITIES } from "../../game/abilities";
-import { east, facingEast } from "../../game/testing";
+import { ABILITIES } from "../../game/content/abilities";
+import { east, facingEast, withPlayer } from "../../game/testing";
 
 const game = facingEast();
 const range = ABILITIES.fireball.aim.range;
@@ -50,7 +50,7 @@ describe("explore", () => {
   });
 
   test("hex-aimed spells that are unready cast at once, to be rejected", () => {
-    const drained = { ...game, player: { ...game.player, mp: 0 } };
+    const drained = withPlayer(game, { mp: 0 });
     expect(
       transition(EXPLORE, { kind: "use", ability: "fireball" }, drained),
     ).toEqual({

@@ -1,18 +1,18 @@
 # Towns
 
-Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/game/creatures.ts`, rules in `src/game/game.ts`, tests in `src/game/towns.test.ts`.
+Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/game/content/creatures.ts` and `content/factions.ts`, rules in `src/game/actions/towns.ts` and `src/game/quests.ts`, tests in `src/game/towns.test.ts`.
 
 ## Vocabulary
 
 | Term | Meaning | In code |
 |---|---|---|
-| Faction | Side an actor fights for. Actors of different factions are foes; the player is `town`. A monster's faction is its home spawner's. | `Faction`, `factionOfCreature` |
+| Faction | Side an entity fights for; `relationOf` says who are foes. The player is `town`; a creature takes its home spawner's. | `allegiance` component, `FACTIONS`, `relationOf` |
 | Lair | Wild spawner: weighted `pool` up to `cap`, `boss` when wrecked. | `Lair` |
 | Town | Town spawner: spawns the first `roster` kind with fewer than its count alive, so a slain bailiff returns first, then the reeve, then peasants. Not attackable. | `Town` |
 | Townsfolk | Monsters from a town (`bailiff`, `reeve`, `peasant`). Same Minds, leash and rules as wild monsters. | `CREATURES` |
 | Service | What interacting with a kind does: `trade` (reeve) or `bounty` (bailiff). No service: `uninterested`. | `SERVICES` |
-| Wares, purse | A trader's items and gold, on the creature; lost when it is forgotten. | `Creature.wares`, `Creature.purse` |
-| Bounty | Player state: a lair whose boss to slay, its level, whether slain. | `Bounty`, `Player.bounty` |
+| Wares, purse | A trader's items and gold. | `wares`, `purse` components |
+| Bounty | A lair whose boss to slay, its level, whether slain. | `Bounty`, `questing` component |
 
 ## Siting
 
@@ -27,7 +27,7 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 - The player's damage (bump, spells) only hurts foes.
 - `interact` (player-only, adjacent, facing irrelevant) spends a turn only when the creature has a Service. The player's `move` policy is `courteous`: `bold`, but an `attack` rejected as `friendly` falls back to `interact`.
 - `trade` (player-only, adjacent reeve): a pack item sells for `offerOf`, paid from the reeve's purse, and joins the wares; a ware buys for `priceOf`, into the purse, if gold and pack room suffice. Each spends a turn.
-- `restock` (monster-only, `CREATURE_SPELLS.reeve`): while idle and ready, tops wares up to `stock` with fresh `waresOf` and its purse up to `purse`, then cools down for a random turn count in `cooldown`. Attempted first in the reeve's Plan, falling back to its move when `full`.
+- `restock` (the reeve's knack, `ABILITIES.restock`, triggered while idle): when ready, tops wares up to `stock` with fresh `waresOf` and gold up to `gold`, then cools down for a random turn count in `cooldown`. Attempted first in the reeve's Plan, falling back to its move when `full`.
 - Bounties: interacting with any bailiff pays a slain bounty (`BOUNTY_GOLD_PER_LEVEL` × its level, recorded as `bountyLevel`), then, if none is outstanding, posts the nearest lair to the bailiff whose `dangerOf` exceeds `bountyLevel` (searched in widening `BOUNTY_SEARCH` rings). Only the player slaying that lair's boss fulfils it.
 
 ## UI

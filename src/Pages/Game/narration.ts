@@ -1,4 +1,4 @@
-import { abilityOf, type AbilityId } from "../../game/abilities";
+import { abilityOf, type AbilityId } from "../../game/content/abilities";
 import type { Direction } from "../../game/hex";
 import {
   PLAYER,
@@ -10,9 +10,13 @@ import {
   type Who,
 } from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
-import { bossOf, SPAWNERS, type SpawnerKind } from "../../game/creatures";
+import {
+  bossOf,
+  SPAWNERS,
+  type SpawnerKind,
+} from "../../game/content/creatures";
 import type { Hex } from "../../game/hex";
-import type { Affliction } from "../../game/afflictions";
+import type { ConditionId } from "../../game/content/conditions";
 import { Biome } from "../../game/terrain";
 
 const REASONS: Record<Rejection, string> = {
@@ -33,7 +37,7 @@ const REASONS: Record<Rejection, string> = {
   "no-chest": "there is no chest here",
   unlearned: "not learned",
   "no-unlocks": "no level to spend",
-  paralyzed: "paralyzed",
+  gated: "held back",
   friendly: "they are a friend",
   uninterested: "they have nothing to offer",
   "no-gold": "not enough gold",
@@ -51,8 +55,6 @@ const VERBS: Record<Exclude<Intent["kind"], "use">, string> = {
   prepare: "prepare",
   destroy: "destroy",
   learn: "learn",
-  summon: "summon",
-  restock: "restock",
   interact: "interact",
   trade: "trade that",
 };
@@ -76,16 +78,23 @@ const DIRECTION_NAMES: Record<Direction, string> = {
   se: "south-east",
 };
 
-const AFFLICTION_NOUNS: Record<Affliction, string> = {
+const CONDITION_NOUNS: Record<ConditionId, string> = {
   bleed: "bleeding",
   stun: "the stun",
   paralysis: "paralysis",
+  vigor: "vigor",
+  focus: "focus",
+  mending: "mending",
 };
 
-const AFFLICTION_VERBS: Record<Affliction, string> = {
+/** "The adventurer bleeds for up to 2 turns." */
+const CONDITION_VERBS: Record<ConditionId, string> = {
   bleed: "bleeds",
   stun: "is stunned",
   paralysis: "is paralyzed",
+  vigor: "is invigorated",
+  focus: "is focused",
+  mending: "mends",
 };
 
 const counted = (count: number, noun: string) =>
@@ -120,12 +129,16 @@ const TOWN_STYLES: Record<Biome, string> = {
   [Biome.Marsh]: "fen",
 };
 
-/** "adventurer"; townsfolk take their town's biome, "coastal reeve"; monsters are their kind. */
+const isSpawnerKind = (kind: Who["kind"]): kind is SpawnerKind =>
+  kind in SPAWNERS;
+
+/** "adventurer"; townsfolk and towns take their biome, "coastal reeve"; spawners their name, "wolf den"; monsters their kind. */
 export const whoNameOf = ({ kind, faction, biome }: Who): string => {
   if (kind === PLAYER) return "adventurer";
+  const name = isSpawnerKind(kind) ? SPAWNERS[kind].name : kind;
   return faction === "town" && biome !== undefined
-    ? `${TOWN_STYLES[biome]} ${kind}`
-    : kind;
+    ? `${TOWN_STYLES[biome]} ${name}`
+    : name;
 };
 
 /** "the coastal reeve" */
@@ -141,7 +154,7 @@ export const bountyOf = (spawner: SpawnerKind, at: Hex) =>
   `slay the ${bossOf(spawner)} of the ${SPAWNERS[spawner].name} at ${placeOf(at)}`;
 
 export const narrationOf = (event: GameEvent): string => {
-  const actor = The(event.actor);
+  const actor = The(event.source);
   switch (event.kind) {
     case "began":
       return `${actor} sets out into the wilds.`;
@@ -153,8 +166,10 @@ export const narrationOf = (event: GameEvent): string => {
       return `${actor} steps ${DIRECTION_NAMES[event.direction]}.`;
     case "used":
       return `${actor} ${usingOf(event.ability, ["quaffs", "casts"])}.`;
-    case "hit":
-      return `${actor} hits ${the(event.target)}.`;
+    case "hurt":
+      return event.cause?.kind === "condition"
+        ? `${The(event.target)} ${CONDITION_VERBS[event.cause.condition]}.`
+        : `${actor} hits ${the(event.target)}.`;
     case "killed":
       return `${actor} kills ${the(event.target)}.`;
     case "dropped":
@@ -162,15 +177,13 @@ export const narrationOf = (event: GameEvent): string => {
     case "moved":
       return `${actor} ${movingOf(event.from, event.to)} ${cargoNameOf(event.cargo)}.`;
     case "spilled":
-      return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from ${the(event.actor)}'s pack.`;
+      return `${listOf(event.items)} ${event.items.length > 1 ? "spill" : "spills"} from ${the(event.source)}'s pack.`;
     case "prepared":
       return `${actor} prepares themselves.`;
     case "destroyed":
       return `${actor} destroys the chest.`;
-    case "hitSpawner":
-      return `${actor} hits the ${SPAWNERS[event.spawner].name}.`;
     case "wrecked":
-      return `${actor} wrecks the ${SPAWNERS[event.spawner].name}.`;
+      return `${actor} wrecks ${the(event.target)}.`;
     case "emerged":
       return `${actor} emerges!`;
     case "leveled":
@@ -179,16 +192,12 @@ export const narrationOf = (event: GameEvent): string => {
       return `${actor} learns ${event.spell} (level ${event.level}).`;
     case "summoned":
       return `${actor} summons ${counted(event.count, event.summoned)}.`;
-    case "afflicted":
-      return `${The(event.target)} ${AFFLICTION_VERBS[event.affliction]} for up to ${counted(event.turns, "turn")}.`;
-    case "bled":
-      return `${actor} bleeds.`;
+    case "conditioned":
+      return `${The(event.target)} ${CONDITION_VERBS[event.condition]} for up to ${counted(event.turns, "turn")}.`;
     case "struggled":
-      return `${actor} struggles against ${AFFLICTION_NOUNS[event.affliction]}.`;
+      return `${actor} struggles against ${CONDITION_NOUNS[event.condition]}.`;
     case "recovered":
-      return `${actor} shakes off ${AFFLICTION_NOUNS[event.affliction]}.`;
-    case "died":
-      return `${actor} dies.`;
+      return `${actor} shakes off ${CONDITION_NOUNS[event.condition]}.`;
     case "restocked":
       return `${actor} restocks their wares.`;
     case "interacted":

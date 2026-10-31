@@ -1,5 +1,8 @@
 import type { Vec2 } from "procgen";
-import type { CreatureKind, SpawnerKind } from "../../../game/creatures";
+import type {
+  CreatureKind,
+  SpawnerKind,
+} from "../../../game/content/creatures";
 import { Biome, CONIFEROUS, SEA_LEVEL } from "../../../game/terrain";
 import type { CanvasTheme, Disposition } from "../canvasTheme";
 import {

@@ -27,8 +27,12 @@ import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
 import { CANVAS_THEMES } from "./canvasTheme";
 import { useAppState } from "../../AppState";
 import {
-  afflictionOf,
   cooldownOf,
+  creaturesOf,
+  has,
+  masteryOf,
+  playerOf,
+  remainingOf,
   GOLD,
   isWrecked,
   isOver,
@@ -45,6 +49,7 @@ import {
   type GameEvent,
   type Creature,
   type Where,
+  type With,
 } from "../../game/game";
 import {
   directionToward,
@@ -69,13 +74,13 @@ import { conversantOf, newSession, update, type Message } from "./session";
 import {
   ABILITY_IDS,
   abilityOf,
-  areaOf,
   isSpell,
   SPELL_IDS,
   type AbilityId,
-} from "../../game/abilities";
-import { SERVICES } from "../../game/creatures";
-import type { Affliction } from "../../game/afflictions";
+} from "../../game/content/abilities";
+import { SERVICES } from "../../game/content/creatures";
+import type { ConditionId } from "../../game/content/conditions";
+import { areaOf } from "../../game/effects";
 import { sightOf, targetInView } from "./target";
 import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 
@@ -93,10 +98,13 @@ const ARROWS: Record<Direction, string> = {
 const TABS = ["Play", "Slots", "Pack", "Spells", "Other"] as const;
 type Tab = (typeof TABS)[number];
 
-const AFFLICTION_NAMES: Record<Affliction, string> = {
+const CONDITION_NAMES: Record<ConditionId, string> = {
   bleed: "Bleeding",
   stun: "Stunned",
   paralysis: "Paralyzed",
+  vigor: "Vigorous",
+  focus: "Focused",
+  mending: "Mending",
 };
 
 const BIOME_NAMES = Object.fromEntries(
@@ -134,7 +142,7 @@ export default function Game() {
     if (message) dispatch(message);
   };
   const getGame = () => getSession().game;
-  const getTile = () => getGame().land.tileAt(getGame().player.at);
+  const getTile = () => getGame().land.tileAt(playerOf(getGame()).at);
   const getVisible = createMemo(() => visibleOf(getGame()));
   const getRange = createMemo(() => screenRadiusOf(getSize()));
   const isAiming = () => getSession().mode.kind === "aim";
@@ -155,9 +163,10 @@ export default function Game() {
   const getAimMark = createMemo(() => {
     const { mode, game } = getSession();
     if (mode.kind !== "aim") return undefined;
-    const { at, facing } = game.player;
     const area = abilityOf(mode.ability).effects.flatMap((effect) =>
-      effect.kind === "damage" ? areaOf(effect.area, at, facing, mode.at) : [],
+      effect.kind === "damage"
+        ? areaOf(effect.area, playerOf(game), mode.at)
+        : [],
     );
     return { at: mode.at, area: new Set(area.map(hexKey)) };
   });
@@ -232,7 +241,8 @@ export default function Game() {
     if (!canvas) return;
     const { width, height } = getSize();
     const game = getGame();
-    const { land, player, creatures, chests, seen } = game;
+    const { land, chests, seen } = game;
+    const player = playerOf(game);
     const ratio = window.devicePixelRatio;
     canvas.width = width * ratio;
     canvas.height = height * ratio;
@@ -244,7 +254,7 @@ export default function Game() {
       spawnersIn: land.spawnersIn,
       isWrecked: (spawner) => isWrecked(game, spawner),
       player,
-      creatures,
+      creatures: creaturesOf(game),
       chests,
       visible: getVisible(),
       target: getTargetMark(),
@@ -262,20 +272,21 @@ export default function Game() {
         <div>
           <h1>{BIOME_NAMES[getTile().biome]}</h1>
           <p data-cap="end">
-            HP {Math.max(0, getGame().player.hp)}/{MAX_HP} · MP{" "}
-            {getGame().player.mp}/{MAX_MP} · Level {levelOf(getGame().player)} (
-            {getGame().player.xp % XP_PER_LEVEL}/{XP_PER_LEVEL} XP) · Gold{" "}
-            {getGame().player.gold} · Turn {getGame().turn}
-            <For each={afflictionsOf(getGame())}>
-              {([affliction, turns]) => (
+            HP {Math.max(0, playerOf(getGame()).hp)}/{MAX_HP} · MP{" "}
+            {playerOf(getGame()).mp}/{MAX_MP} · Level{" "}
+            {levelOf(playerOf(getGame()))} (
+            {playerOf(getGame()).xp % XP_PER_LEVEL}/{XP_PER_LEVEL} XP) · Gold{" "}
+            {playerOf(getGame()).gold} · Turn {getGame().turn}
+            <For each={conditionsOf(getGame())}>
+              {([condition, turns]) => (
                 <>
                   {" "}
-                  · {AFFLICTION_NAMES[affliction]} {turns}
+                  · {CONDITION_NAMES[condition]} {turns}
                 </>
               )}
             </For>
           </p>
-          <Show when={getGame().player.bounty}>
+          <Show when={playerOf(getGame()).bounty}>
             {(bounty) => (
               <p data-cap="end">
                 <small>
@@ -283,22 +294,22 @@ export default function Game() {
                   {bounty().isSlain
                     ? "slain; return to a bailiff"
                     : bountyOf(bounty().kind, bounty().at)}{" "}
-                  · you are at {placeOf(getGame().player.at)}
+                  · you are at {placeOf(playerOf(getGame()).at)}
                 </small>
               </p>
             )}
           </Show>
         </div>
         <div class="grid grid-cols-3 gap-(--pico-spacing)">
-          <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
+          <progress value={Math.max(0, playerOf(getGame()).hp)} max={MAX_HP} />
           <progress
             class="[--pico-progress-color:var(--mana-color)]"
-            value={getGame().player.mp}
+            value={playerOf(getGame()).mp}
             max={MAX_MP}
           />
           <progress
             class="[--pico-progress-color:var(--xp-color)]"
-            value={getGame().player.xp % XP_PER_LEVEL}
+            value={playerOf(getGame()).xp % XP_PER_LEVEL}
             max={XP_PER_LEVEL}
           />
         </div>
@@ -320,7 +331,7 @@ export default function Game() {
                 onClick={() => setTab(tab)}
               >
                 {tab}
-                <Show when={tab === "Spells" && unlocksOf(getGame().player)}>
+                <Show when={tab === "Spells" && unlocksOf(playerOf(getGame()))}>
                   {(unlocks) => <Count>{unlocks()}</Count>}
                 </Show>
               </button>
@@ -400,12 +411,20 @@ export default function Game() {
               </h3>
             </header>
             <Switch>
-              <Match when={SERVICES[conversant().kind] === "trade"}>
-                <TradePanel
-                  game={getGame()}
-                  trader={conversant()}
-                  dispatch={dispatch}
-                />
+              <Match
+                when={
+                  SERVICES[conversant().kind] === "trade" &&
+                  has(conversant(), "wares", "purse") &&
+                  conversant()
+                }
+              >
+                {(trader) => (
+                  <TradePanel
+                    game={getGame()}
+                    trader={trader() as Creature & With<"wares" | "purse">}
+                    dispatch={dispatch}
+                  />
+                )}
               </Match>
               <Match when={SERVICES[conversant().kind] === "bounty"}>
                 <BountyPanel game={getGame()} />
@@ -528,19 +547,22 @@ function PlayPanel(props: {
   );
 }
 
-const afflictionsOf = (game: GameState) =>
-  [...game.player.afflictions.keys()]
-    .map((affliction) => [affliction, afflictionOf(game, affliction)] as const)
-    .filter(([, turns]) => turns > 0);
+/** Conditions that wear off, with the turns each lasts at most. */
+const conditionsOf = (game: GameState) => {
+  const { conditions } = playerOf(game);
+  return [...conditions.keys()]
+    .map((id) => [id, remainingOf(conditions, id, game.turn)] as const)
+    .filter(([, turns]) => turns > 0 && Number.isFinite(turns));
+};
 
 const stockOf = (game: GameState, potion: PotionKind | undefined) =>
-  game.player.pack.filter(
+  playerOf(game).pack.filter(
     (item) => item.kind === "potion" && item.potion === potion,
   ).length;
 
 const tallyOf = (game: GameState, ability: AbilityId) =>
   isSpell(ability)
-    ? String(spellLevelOf(game.player, ability))
+    ? String(spellLevelOf(playerOf(game), ability))
     : `×${stockOf(game, abilityOf(ability).consumes)}`;
 
 function SpellSlots(props: {
@@ -554,7 +576,7 @@ function SpellSlots(props: {
       <For each={props.loadout}>
         {(ability, slot) => {
           const getCooldown = () =>
-            ability ? cooldownOf(props.game, ability) : 0;
+            ability ? cooldownOf(props.game, playerOf(props.game), ability) : 0;
           const getHotkey = () => hotkeyOf(props.keymap, `slot-${slot() + 1}`);
           return (
             <button
@@ -564,7 +586,8 @@ function SpellSlots(props: {
               classList={{
                 "opacity-40 grayscale":
                   ability !== undefined &&
-                  unreadinessOf(props.game, ability) !== undefined,
+                  unreadinessOf(props.game, playerOf(props.game), ability) !==
+                    undefined,
               }}
               aria-label={`Slot ${slot() + 1} (${getHotkey()}): ${ability ?? "empty"}`}
               onClick={() => props.press({ kind: "slot", slot: slot() })}
@@ -631,7 +654,7 @@ const costOf = (ability: AbilityId) => {
 };
 
 const isKnown = (game: GameState, ability: AbilityId) =>
-  !isSpell(ability) || spellLevelOf(game.player, ability) > 0;
+  masteryOf(playerOf(game), ability) > 0;
 
 function AbilityPicker(props: {
   game: GameState;
@@ -674,7 +697,7 @@ function SpellsPanel(props: {
   game: GameState;
   dispatch: (message: Message) => void;
 }) {
-  const getUnlocks = () => unlocksOf(props.game.player);
+  const getUnlocks = () => unlocksOf(playerOf(props.game));
   return (
     <>
       <p>
@@ -690,7 +713,7 @@ function SpellsPanel(props: {
       </p>
       <For each={SPELL_IDS}>
         {(spell) => {
-          const getLevel = () => spellLevelOf(props.game.player, spell);
+          const getLevel = () => spellLevelOf(playerOf(props.game), spell);
           return (
             <button
               type="button"
@@ -715,7 +738,7 @@ function InventoryPanel(props: {
   game: GameState;
   dispatch: (message: Message) => void;
 }) {
-  const getPlayer = () => props.game.player;
+  const getPlayer = () => playerOf(props.game);
   const getChest = () => props.game.chests.get(hexKey(getPlayer().at));
 
   function Move(moveProps: {
@@ -875,10 +898,10 @@ function InventoryPanel(props: {
 
 function TradePanel(props: {
   game: GameState;
-  trader: Creature;
+  trader: Creature & With<"wares" | "purse">;
   dispatch: (message: Message) => void;
 }) {
-  const getPlayer = () => props.game.player;
+  const getPlayer = () => playerOf(props.game);
   const trade = (item: Item) =>
     props.dispatch({ kind: "trade", trader: props.trader.id, item: item.id });
 
@@ -935,7 +958,7 @@ function TradePanel(props: {
         </ul>
       </section>
       <section>
-        <h4>Wares · {props.trader.purse} gold</h4>
+        <h4>Wares · {props.trader.gold} gold</h4>
         <ul class="max-h-[33vh] overflow-y-auto">
           <For each={props.trader.wares}>
             {(item) => (
@@ -962,13 +985,13 @@ function BountyPanel(props: { game: GameState }) {
         {(reward) => <p>Well done. Here is {reward().gold} gold.</p>}
       </Show>
       <Show
-        when={props.game.player.bounty}
+        when={playerOf(props.game).bounty}
         fallback={<p>I have no work for you.</p>}
       >
         {(bounty) => (
           <p>
             Go and {bountyOf(bounty().kind, bounty().at)}, then return to me or
-            any bailiff. You are at {placeOf(props.game.player.at)}.
+            any bailiff. You are at {placeOf(playerOf(props.game).at)}.
           </p>
         )}
       </Show>
@@ -1081,6 +1104,11 @@ const ABILITY_ICONS: Record<AbilityId, string> = {
   strike: "bolt",
   health: "medication_liquid",
   mana: "science",
+  "summon cubs": "pets",
+  bleed: "water_drop",
+  stun: "star",
+  paralyze: "lock",
+  restock: "inventory_2",
 };
 
 function AbilityIcon(props: { ability: AbilityId; cap?: "start" }) {
@@ -1205,7 +1233,7 @@ function OtherPanel(props: {
   restart: () => void;
 }) {
   const key = (id: ControlId) => <kbd>{hotkeyOf(props.keymap, id)}</kbd>;
-  const getTile = () => props.game.land.tileAt(props.game.player.at);
+  const getTile = () => props.game.land.tileAt(playerOf(props.game).at);
   return (
     <>
       <LogPanel log={props.log} />
@@ -1247,14 +1275,14 @@ function OtherPanel(props: {
           <dd>{surfaceOf(getTile()) - SEA_LEVEL}</dd>
           <dt>Position</dt>
           <dd>
-            {props.game.player.at.q}, {props.game.player.at.r}
+            {playerOf(props.game).at.q}, {playerOf(props.game).at.r}
           </dd>
           <dt>Seed</dt>
           <dd>{props.game.land.seed}</dd>
           <dt>Monsters awake</dt>
-          <dd>{props.game.creatures.length}</dd>
+          <dd>{creaturesOf(props.game).length}</dd>
           <dt>Monsters slain</dt>
-          <dd>{props.game.kills}</dd>
+          <dd>{playerOf(props.game).kills}</dd>
         </dl>
       </details>
     </>

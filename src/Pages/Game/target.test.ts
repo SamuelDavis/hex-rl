@@ -8,7 +8,14 @@ import {
   tracked,
   type Target,
 } from "./target";
-import { gameWith, land, landOf, creature, origin } from "../../game/testing";
+import {
+  gameWith,
+  land,
+  landOf,
+  creature,
+  origin,
+  withPlayer,
+} from "../../game/testing";
 
 const RANGE = 5;
 const near = creature({ q: 2, r: 0 }, "goblin", "se");
@@ -43,7 +50,7 @@ describe("tracked", () => {
   const target = nextTarget(gameWith([far]), RANGE, undefined)!;
   const turnedAway = (turn: number): Game => {
     const game = gameWith([far]);
-    return { ...game, turn, player: { ...game.player, facing: "nw" } };
+    return { ...withPlayer(game, { facing: "nw" }), turn };
   };
 
   test("follows a target in view", () => {

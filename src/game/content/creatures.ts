@@ -1,4 +1,6 @@
-import type { Affliction } from "./afflictions";
+import type { AbilityId } from "./abilities";
+import type { FactionId } from "./factions";
+
 export const CREATURES = {
   wolf: {
     hp: 3,
@@ -94,81 +96,22 @@ export const CREATURES = {
 
 export type CreatureKind = keyof typeof CREATURES;
 
-/** Creatures of different factions fight; the player is `town`. */
-export type Faction = "wild" | "town";
+const SUMMONS_CUBS: readonly AbilityId[] = ["summon cubs"];
+const BLEEDS: readonly AbilityId[] = ["bleed"];
+const PARALYZES: readonly AbilityId[] = ["paralyze"];
+const STUNS: readonly AbilityId[] = ["stun"];
 
-/** `perLevel` scales potency (cubs summoned, turns afflicted) linearly with the caster's level, rounded down. `chance` is how likely it triggers when ready: each turn for summons and restocks, each landed hit for afflictions. */
-export type CreatureSpell = { readonly chance: number } & (
-  | {
-      /** Refills wares to `stock` items and its purse to `purse` gold while idle. */
-      readonly kind: "restock";
-      readonly stock: number;
-      readonly purse: number;
-      /** Turns after restocking before it can restock again, drawn from this range. */
-      readonly cooldown: readonly [min: number, max: number];
-    }
-  | {
-      readonly kind: "summon";
-      readonly creature: CreatureKind;
-      readonly perLevel: number;
-      /** Turns after casting before it can be cast again. */
-      readonly cooldown: number;
-    }
-  | {
-      readonly kind: "afflict";
-      readonly affliction: Affliction;
-      readonly perLevel: number;
-      /** Turns after the affliction would wear off before it can be inflicted again. */
-      readonly cooldown: number;
-    }
-);
-
-const SUMMON_CUBS: CreatureSpell = {
-  kind: "summon",
-  creature: "cub",
-  perLevel: 1,
-  cooldown: 15,
-  chance: 0.3,
-};
-const BLEED: CreatureSpell = {
-  kind: "afflict",
-  affliction: "bleed",
-  perLevel: 1,
-  cooldown: 3,
-  chance: 0.35,
-};
-const STUN: CreatureSpell = {
-  kind: "afflict",
-  affliction: "stun",
-  perLevel: 0.5,
-  cooldown: 4,
-  chance: 0.15,
-};
-const PARALYZE: CreatureSpell = {
-  kind: "afflict",
-  affliction: "paralysis",
-  perLevel: 1,
-  cooldown: 4,
-  chance: 0.15,
-};
-
-/** Summons are cast while hostile, restocks while idle; afflictions ride on a landed attack. */
-export const CREATURE_SPELLS: Partial<Record<CreatureKind, CreatureSpell>> = {
-  wolf: SUMMON_CUBS,
-  "alpha wolf": SUMMON_CUBS,
-  bandit: BLEED,
-  "bandit chief": BLEED,
-  goblin: PARALYZE,
-  "goblin chief": PARALYZE,
-  troll: STUN,
-  "troll elder": STUN,
-  reeve: {
-    kind: "restock",
-    stock: 6,
-    purse: 60,
-    cooldown: [100, 200],
-    chance: 0.2,
-  },
+/** Abilities each kind knows, at its level. */
+export const KNACKS: Partial<Record<CreatureKind, readonly AbilityId[]>> = {
+  wolf: SUMMONS_CUBS,
+  "alpha wolf": SUMMONS_CUBS,
+  bandit: BLEEDS,
+  "bandit chief": BLEEDS,
+  goblin: PARALYZES,
+  "goblin chief": PARALYZES,
+  troll: STUNS,
+  "troll elder": STUNS,
+  reeve: ["restock"],
 };
 
 export type Service = "trade" | "bounty";
@@ -179,11 +122,6 @@ export const SERVICES: Partial<Record<CreatureKind, Service>> = {
   reeve: "trade",
 };
 
-export const potencyOf = (
-  { perLevel }: { readonly perLevel: number },
-  level: number,
-): number => Math.floor(perLevel * level);
-
 interface Spawning {
   readonly name: string;
   readonly leash: number;
@@ -193,7 +131,7 @@ interface Spawning {
 
 /** Spawns weighted draws from `pool` up to `cap`; wrecked, it unleashes `boss`. */
 export interface Lair extends Spawning {
-  readonly faction: "wild";
+  readonly faction: Extract<FactionId, "wild">;
   readonly pool: readonly (readonly [CreatureKind, number])[];
   readonly boss: CreatureKind;
   readonly cap: number;
@@ -201,7 +139,7 @@ export interface Lair extends Spawning {
 
 /** Spawns the first `roster` kind with fewer than its count alive. */
 export interface Town extends Spawning {
-  readonly faction: "town";
+  readonly faction: Extract<FactionId, "town">;
   readonly roster: readonly (readonly [CreatureKind, number])[];
 }
 

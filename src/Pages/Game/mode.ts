@@ -1,7 +1,12 @@
 import { aimed, startAim } from "./aim";
-import { unreadinessOf, type Intent, type Game } from "../../game/game";
+import {
+  playerOf,
+  unreadinessOf,
+  type Intent,
+  type Game,
+} from "../../game/game";
 import type { Direction, Hex } from "../../game/hex";
-import { abilityOf, type AbilityId } from "../../game/abilities";
+import { abilityOf, type AbilityId } from "../../game/content/abilities";
 
 export interface Aiming {
   readonly kind: "aim";
@@ -38,7 +43,7 @@ const chosen = (
   target: Hex | undefined,
 ): Transition => {
   const { aim } = abilityOf(ability);
-  if (aim.kind !== "hex" || unreadinessOf(game, ability))
+  if (aim.kind !== "hex" || unreadinessOf(game, playerOf(game), ability))
     return { mode: EXPLORE, action: { kind: "use", ability, at: target } };
   const at = startAim(game, aim.range, target);
   return { mode: { kind: "aim", ability, range: aim.range, at } };

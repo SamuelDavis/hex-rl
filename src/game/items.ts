@@ -1,6 +1,6 @@
 import type { Rng } from "procgen";
 import { rngOf } from "procgen";
-import { CREATURES, type CreatureKind } from "./creatures";
+import { CREATURES, type CreatureKind } from "./content/creatures";
 
 export const BASE_CAPACITY = 6;
 

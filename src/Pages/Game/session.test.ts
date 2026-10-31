@@ -12,7 +12,8 @@ import {
 } from "./session";
 import { ADVENTURER, creature, east, gameWith, who } from "../../game/testing";
 import { hexDistance, hexKey } from "../../game/hex";
-import type { Game } from "../../game/game";
+import { playerOf } from "../../game/game";
+import { eventsOf, withPlayer } from "../../game/testing";
 
 const RANGE = 5;
 const near = { q: 3, r: 0 };
@@ -28,35 +29,36 @@ describe("newSession", () => {
     const session = newSession(7, RANGE);
     expect(session.game.land.seed).toBe(7);
     expect(session.mode).toEqual(EXPLORE);
-    expect(session.log).toEqual([{ kind: "began", actor: ADVENTURER }]);
+    expect(session.log).toEqual([{ kind: "began", source: ADVENTURER }]);
   });
 });
 
 describe("newSession at a position", () => {
   test("starts on the hex asked for when it can be stood on, else the nearest that can", () => {
     const at = newSession(7, RANGE, { q: -85, r: 20 }).game;
-    const tile = at.land.tileAt(at.player.at);
+    const tile = at.land.tileAt(playerOf(at).at);
     expect(tile.water).toBeUndefined();
     expect(tile.tree).toBe(false);
-    expect(hexDistance(at.player.at, { q: -85, r: 20 })).toBeLessThan(8);
+    expect(hexDistance(playerOf(at).at, { q: -85, r: 20 })).toBeLessThan(8);
     expect(at.land.spawn).toEqual(newSession(7, RANGE).game.land.spawn);
-    const exact = at.player.at;
-    expect(newSession(7, RANGE, exact).game.player.at).toEqual(exact);
+    const exact = playerOf(at).at;
+    expect(playerOf(newSession(7, RANGE, exact).game).at).toEqual(exact);
   });
 
   test("starts at the spawn by default", () => {
     const { game } = newSession(7, RANGE);
-    expect(game.player.at).toEqual(game.land.spawn);
+    expect(playerOf(game).at).toEqual(game.land.spawn);
   });
 });
 
 describe("update", () => {
   test("logs each action's events", () => {
     const session = run(targeting(east), { kind: "move", direction: "se" });
-    expect(session.log).toContainEqual({
-      kind: "hit",
-      actor: ADVENTURER,
+    expect(eventsOf({ ...session.game, events: session.log })).toContainEqual({
+      kind: "hurt",
+      source: ADVENTURER,
       target: who(creature(east, "troll")),
+      amount: 2,
     });
   });
 
@@ -64,8 +66,7 @@ describe("update", () => {
     const waits = Array.from<Message>({ length: LOG_LENGTH }).fill({
       kind: "wait",
     });
-    const game = gameWith([]);
-    const dead = sessionOf({ ...game, player: { ...game.player, hp: 0 } }, 1);
+    const dead = sessionOf(withPlayer(gameWith([]), { hp: 0 }), 1);
     const session = run(dead, ...waits, ...waits);
     expect(session.log).toHaveLength(LOG_LENGTH);
   });
@@ -89,9 +90,9 @@ describe("update", () => {
     );
     expect(session.mode).toEqual(EXPLORE);
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({
+    expect(eventsOf({ ...session.game, events: session.log })).toContainEqual({
       kind: "used",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       ability: "fireball",
     });
   });
@@ -111,9 +112,9 @@ describe("update", () => {
       kind: "use",
       ability: "strike",
     });
-    expect(session.log).toContainEqual({
+    expect(eventsOf({ ...session.game, events: session.log })).toContainEqual({
       kind: "used",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       ability: "strike",
     });
   });
@@ -129,19 +130,18 @@ describe("update", () => {
   test("preparing spends a turn", () => {
     const session = run(targeting(east), { kind: "prepare" });
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({ kind: "prepared", actor: ADVENTURER });
+    expect(eventsOf({ ...session.game, events: session.log })).toContainEqual({
+      kind: "prepared",
+      source: ADVENTURER,
+    });
   });
 
   test("using a potion quaffs it at once, even while aiming, spending no turn", () => {
     const base = targeting(near);
-    const game: Game = {
-      ...base.game,
-      player: {
-        ...base.game.player,
-        mp: 7,
-        pack: [{ id: "m", kind: "potion", potion: "mana" }],
-      },
-    };
+    const game = withPlayer(base.game, {
+      mp: 7,
+      pack: [{ id: "m", kind: "potion", potion: "mana" }],
+    });
     const session = run(
       { ...base, game },
       { kind: "prepare" },
@@ -150,9 +150,9 @@ describe("update", () => {
     );
     expect(session.mode.kind).toBe("aim");
     expect(session.game.turn).toBe(1);
-    expect(session.log).toContainEqual({
+    expect(eventsOf({ ...session.game, events: session.log })).toContainEqual({
       kind: "used",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       ability: "mana",
     });
   });
@@ -177,7 +177,7 @@ describe("update", () => {
     const dismissed = run(onChest, { kind: "dismiss" }, { kind: "wait" });
     expect(dismissed.isInventoryOpen).toBe(false);
     const back = run(dismissed, step("nw"), step("nw"), step("se"), step("se"));
-    expect(back.game.player.at).toEqual(east);
+    expect(playerOf(back.game).at).toEqual(east);
     expect(back.isInventoryOpen).toBe(true);
   });
 
@@ -191,7 +191,7 @@ describe("interacting", () => {
   const town = { kind: "town", at: { q: -3, r: 0 } } as const;
   const npc = (kind: "reeve" | "peasant") => ({
     ...creature(east, kind, "nw", town),
-    readyAt: Infinity,
+    readyAt: new Map([["restock", Infinity]] as const),
   });
   const beside = (kind: "reeve" | "peasant") =>
     sessionOf(gameWith([npc(kind)]), RANGE);

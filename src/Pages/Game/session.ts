@@ -1,6 +1,8 @@
 import {
   act,
+  creaturesOf,
   newGame,
+  playerOf,
   PLAYER,
   type Intent,
   type Destroy,
@@ -79,15 +81,16 @@ export const conversantOf = ({
   game,
   conversant,
 }: Session): Creature | undefined => {
-  const creature = game.creatures.find(({ id }) => id === conversant);
-  return creature && directionBetween(game.player.at, creature.at)
+  const creature = creaturesOf(game).find(({ id }) => id === conversant);
+  return creature && directionBetween(playerOf(game).at, creature.at)
     ? creature
     : undefined;
 };
 
 /** Whom the player tried to interact with this action, whether or not they could. */
-const addresseeOf = ({ events, creatures }: Game): Creature | undefined => {
-  for (const event of events) {
+const addresseeOf = (game: Game): Creature | undefined => {
+  const creatures = creaturesOf(game);
+  for (const event of game.events) {
     if (event.kind === "interacted")
       return creatures.find(({ id }) => id === event.target.id);
     if (event.kind === "rejected" && event.action.kind === "interact") {
@@ -102,7 +105,7 @@ const performed = (session: Session, action: Intent): Session => {
   const { range, target, log } = session;
   const game = act(session.game, action);
   const hasStepped = game.events.some(
-    (event) => event.kind === "stepped" && event.actor.id === PLAYER,
+    (event) => event.kind === "stepped" && event.source.id === PLAYER,
   );
   const interacted = game.events.find((event) => event.kind === "interacted");
   const addressee = addresseeOf(game);
@@ -110,7 +113,7 @@ const performed = (session: Session, action: Intent): Session => {
     ...session,
     game,
     isInventoryOpen: hasStepped
-      ? game.chests.has(hexKey(game.player.at))
+      ? game.chests.has(hexKey(playerOf(game).at))
       : session.isInventoryOpen,
     conversant:
       interacted?.target.id ?? (hasStepped ? undefined : session.conversant),

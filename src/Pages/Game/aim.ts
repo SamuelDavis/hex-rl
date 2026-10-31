@@ -1,8 +1,14 @@
-import type { Game } from "../../game/game";
-import { add, DIRECTIONS, hexDistance, type Direction, type Hex } from "../../game/hex";
+import { playerOf, type Game } from "../../game/game";
+import {
+  add,
+  DIRECTIONS,
+  hexDistance,
+  type Direction,
+  type Hex,
+} from "../../game/hex";
 
-const isInRange = ({ player }: Game, range: number, at: Hex) =>
-  hexDistance(player.at, at) <= range;
+const isInRange = (game: Game, range: number, at: Hex) =>
+  hexDistance(playerOf(game).at, at) <= range;
 
 export const startAim = (
   game: Game,
@@ -10,7 +16,7 @@ export const startAim = (
   target: Hex | undefined,
 ): Hex => {
   if (target && isInRange(game, range, target)) return target;
-  const { at, facing } = game.player;
+  const { at, facing } = playerOf(game);
   return add(at, DIRECTIONS[facing]);
 };
 

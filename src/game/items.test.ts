@@ -12,7 +12,7 @@ import {
   type Item,
 } from "./items";
 import { rngOf } from "procgen";
-import { CREATURES } from "./creatures";
+import { CREATURES } from "./content/creatures";
 import { creature, origin } from "./testing";
 
 const gear = (id: string, gear: GearKind): Item => ({

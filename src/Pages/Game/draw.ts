@@ -1,5 +1,6 @@
 import type { Bounds, Vec2 } from "procgen";
-import { factionOfCreature, type Creature, type Player } from "../../game/game";
+import type { Creature, Player } from "../../game/game";
+import { relationOf } from "../../game/content/factions";
 import {
   add,
   centerOf,
@@ -240,12 +241,12 @@ export const drawScene = (
         context,
         base,
         creature.kind,
-        factionOfCreature(creature) === "town"
+        relationOf(creature.faction, player.faction) === "friendly"
           ? "friendly"
           : creature.mind.state,
         headingOf(creature.facing),
       );
-      theme.level(context, base, creature.level);
+      theme.level(context, base, creature.power);
     } else if (target?.kind === "remembered" && sameHex(hex, target.at))
       theme.unknown(context, base);
     if (sameHex(hex, player.at))

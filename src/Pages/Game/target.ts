@@ -1,4 +1,10 @@
-import { visibleOf, type Game, type Creature } from "../../game/game";
+import {
+  creaturesOf,
+  playerOf,
+  visibleOf,
+  type Game,
+  type Creature,
+} from "../../game/game";
 import { hexDistance, hexKey, type Hex } from "../../game/hex";
 import { visibleFrom } from "../../game/sight";
 
@@ -13,10 +19,10 @@ export interface Target {
 export const sightOf = ({ land }: Game, { at, facing }: Creature) =>
   visibleFrom(land.tileAt, at, facing);
 
-const targetsOf = (game: Game, range: number): Creature[] => {
+const targetsOf = (game: Game, range: number): readonly Creature[] => {
   const visible = visibleOf(game);
-  const distanceOf = (at: Hex) => hexDistance(at, game.player.at);
-  return game.creatures
+  const distanceOf = (at: Hex) => hexDistance(at, playerOf(game).at);
+  return creaturesOf(game)
     .filter(({ at }) => visible.has(hexKey(at)) && distanceOf(at) <= range)
     .sort((a, b) => distanceOf(a.at) - distanceOf(b.at));
 };
@@ -50,8 +56,8 @@ export const tracked = (
   range: number,
   target: Target,
 ): Target | undefined => {
-  const creature = game.creatures.find(({ id }) => id === target.id);
-  if (!creature || hexDistance(creature.at, game.player.at) > range)
+  const creature = creaturesOf(game).find(({ id }) => id === target.id);
+  if (!creature || hexDistance(creature.at, playerOf(game).at) > range)
     return undefined;
   if (targetInView(game, range, target)) return targetOf(game, creature);
   if (game.turn - target.seenTurn >= TARGET_MEMORY) return undefined;

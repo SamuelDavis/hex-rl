@@ -1,25 +1,24 @@
 import { describe, expect, test } from "vitest";
 import {
   act,
-  ACTIVE_RADIUS,
-  GOLD,
   cooldownOf,
-  FORGET_RADIUS,
+  creaturesOf,
+  GOLD,
   isOver,
   isWrecked,
   MAX_HP,
   MAX_MP,
   newGame,
   HUNT_RADIUS,
-  SPAWNER_HEAL_INTERVAL,
   levelOf,
+  playerOf,
+  spawnerIdOf,
   unlocksOf,
   XP_PER_LEVEL,
   type Intent,
   type Game,
   type GameEvent,
   type Rejection,
-  type SpawnerState,
   type Where,
 } from "./game";
 import {
@@ -39,13 +38,12 @@ import {
   type Hex,
 } from "./hex";
 import {
-  CREATURE_SPELLS,
   membersOf,
   CREATURES,
   SPAWNERS,
   spawnerHpOf,
   type SpawnerKind,
-} from "./creatures";
+} from "./content/creatures";
 import {
   ABILITIES,
   CLEAVE_SPLASH,
@@ -54,13 +52,17 @@ import {
   HEAL_HP,
   HEALTH_POTION_HP,
   PLAYER_DAMAGE,
-} from "./abilities";
-import { dangerOf, type Spawner } from "./terrain";
-import { AFFLICTIONS } from "./afflictions";
+} from "./content/abilities";
+import { CONDITIONS } from "./content/conditions";
+import { Biome, CHUNK, dangerOf, type Spawner } from "./terrain";
 import { lootOf, type Chest, type GearKind, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
+import type { Fields } from "./components";
+import { SIMULATION_RADIUS } from "./systems/chunks";
+import { updated } from "./world";
 import {
   east,
+  eventsOf,
   facingEast,
   gameWith,
   land,
@@ -71,11 +73,13 @@ import {
   WAIT,
   ADVENTURER,
   who,
+  withCreatures,
+  withPlayer,
 } from "./testing";
 
 const rejection = (action: Intent, reason: Rejection): GameEvent => ({
   kind: "rejected",
-  actor: ADVENTURER,
+  source: ADVENTURER,
   action,
   reason,
 });
@@ -111,41 +115,26 @@ const huntingAt = (anchor: Hex, lastSeen: Hex): Hunting => ({
   huntedFor: 0,
 });
 
+/** `game` without creatures, `spawner`'s entity changed by `state`. */
 const withState = (
   game: Game,
   spawner: Spawner,
-  state: Partial<SpawnerState>,
-): Game => ({
-  ...game,
-  creatures: [],
-  spawners: new Map([
-    [
-      hexKey(spawner.at),
-      {
-        readyAt: 0,
-        hp: spawnerHpOf(spawner.kind),
-        hurtAt: 0,
-        isWrecked: false,
-        isBossDue: false,
-        ...state,
-      },
-    ],
-  ]),
-});
+  state: Partial<Fields>,
+): Game => withCreatures(updated(game, spawnerIdOf(spawner.at), state), []);
 
 const spawnsOf = (games: readonly Game[]) =>
-  games
-    .slice(1)
-    .flatMap((game, i) =>
-      game.creatures
-        .filter(({ id }) => !games[i]!.creatures.some((m) => m.id === id))
-        .map((creature) => ({ creature, turn: game.turn })),
-    );
+  games.slice(1).flatMap((game, i) =>
+    creaturesOf(game)
+      .filter(({ id }) => !creaturesOf(games[i]!).some((m) => m.id === id))
+      .map((creature) => ({ creature, turn: game.turn })),
+  );
+
+const MENDING = CONDITIONS.mending.every.interval;
 
 describe("newGame", () => {
   test("starts at the spawn with full health", () => {
     const game = newGame(landOf());
-    expect(game.player).toMatchObject({ at: origin, hp: MAX_HP });
+    expect(playerOf(game)).toMatchObject({ at: origin, hp: MAX_HP });
     expect(game.seen.has(hexKey(origin))).toBe(true);
   });
 
@@ -178,10 +167,11 @@ describe("spawners", () => {
     const at = { q: 6, r: 0 };
     const hostile = { ...creature(at), mind: hostileAt(at, blocker.at) };
     const world = landOf(out, [blocker]);
-    for (const { creatures } of history)
-      for (const { at } of creatures) expect(at).not.toEqual(mine.at);
-    for (const { creatures } of historyOf(gameWith([hostile], world), 20))
-      for (const { at } of creatures) expect(at).not.toEqual(blocker.at);
+    for (const game of history)
+      for (const { at } of creaturesOf(game)) expect(at).not.toEqual(mine.at);
+    for (const game of historyOf(gameWith([hostile], world), 20))
+      for (const { at } of creaturesOf(game))
+        expect(at).not.toEqual(blocker.at);
   });
 
   test("spawn nothing while hemmed in", () => {
@@ -208,20 +198,19 @@ describe("spawners", () => {
       mine,
       { hp: 0, isWrecked: true, isBossDue: true },
     );
-    const trapped = {
-      ...wrecked,
-      creatures: [creature(site, "goblin", "nw", mine)],
-    };
-    const bossOf = ({ creatures }: Game) =>
-      creatures.find(({ kind }) => kind === SPAWNERS.mine.boss);
+    const trapped = withCreatures(wrecked, [
+      creature(site, "goblin", "nw", mine),
+    ]);
+    const bossOf = (game: Game) =>
+      creaturesOf(game).find(({ kind }) => kind === SPAWNERS.mine.boss);
     const held = historyOf(trapped, 10);
     expect(held.filter(bossOf)).toEqual([]);
-    const freed = act({ ...held.at(-1)!, creatures: [] }, WAIT);
+    const freed = act(withCreatures(held.at(-1)!, []), WAIT);
     expect(bossOf(freed)?.at).toEqual(site);
   });
 
   test("fill up to their cap and no further", () => {
-    const counts = history.map(({ creatures }) => creatures.length);
+    const counts = history.map((game) => creaturesOf(game).length);
     expect(Math.max(...counts)).toBe(cap);
   });
 
@@ -233,8 +222,7 @@ describe("spawners", () => {
   });
 
   test("replace slain monsters", () => {
-    const full = history.at(-1)!;
-    const cleared = { ...full, creatures: [] };
+    const cleared = withCreatures(history.at(-1)!, []);
     expect(spawnsOf(historyOf(cleared)).length).toBeGreaterThan(0);
   });
 
@@ -244,30 +232,45 @@ describe("spawners", () => {
         expect(spawnerHpOf(kind)).toBeGreaterThan(CREATURES[spawned].hp);
   });
 
+  const adjacent = { kind: "mine", at: east } as const;
+  const bumping = () =>
+    historyOf(
+      withState(gameWith([], landOf(out, [adjacent])), adjacent, {
+        spawnsAt: Infinity,
+      }),
+      2 * spawnerHpOf("mine"),
+      step("se"),
+    );
+  const wreckedAt = (games: readonly Game[]) =>
+    games.findIndex((game) => isWrecked(game, adjacent));
+
   test("block the player, who wrecks them by striking off their hit points", () => {
-    const adjacent = { kind: "mine", at: east } as const;
-    const idle = withState(gameWith([], landOf(out, [adjacent])), adjacent, {
-      readyAt: Infinity,
+    const games = bumping();
+    const at = wreckedAt(games);
+    expect(at).toBeGreaterThanOrEqual(
+      Math.ceil(spawnerHpOf("mine") / PLAYER_DAMAGE),
+    );
+    for (const game of games) expect(playerOf(game).at).toEqual(origin);
+    expect(eventsOf(games[at]!)).toContainEqual({
+      kind: "wrecked",
+      source: ADVENTURER,
+      target: {
+        id: spawnerIdOf(east),
+        kind: "mine",
+        faction: "wild",
+        biome: Biome.Plains,
+      },
     });
-    const hits = Math.ceil(spawnerHpOf("mine") / PLAYER_DAMAGE);
-    const games = historyOf(idle, hits, step("se"));
-    expect(games.at(-1)!.player.at).toEqual(origin);
-    expect(isWrecked(games.at(-2)!, adjacent)).toBe(false);
-    expect(isWrecked(games.at(-1)!, adjacent)).toBe(true);
   });
 
   test("unleash their hostile boss when wrecked", () => {
-    const adjacent = { kind: "mine", at: east } as const;
-    const idle = withState(gameWith([], landOf(out, [adjacent])), adjacent, {
-      readyAt: Infinity,
-    });
-    const hits = Math.ceil(spawnerHpOf("mine") / PLAYER_DAMAGE);
-    const games = historyOf(idle, hits, step("se"));
-    expect(games.at(-2)!.creatures).toEqual([]);
-    expect(games.at(-1)!.creatures).toMatchObject([
+    const games = bumping();
+    const at = wreckedAt(games);
+    expect(creaturesOf(games[at - 1]!)).toEqual([]);
+    expect(creaturesOf(games[at]!)).toMatchObject([
       { kind: SPAWNERS.mine.boss, home: adjacent, mind: { state: "hostile" } },
     ]);
-    expect(hexDistance(games.at(-1)!.creatures[0]!.at, adjacent.at)).toBe(1);
+    expect(hexDistance(creaturesOf(games[at]!)[0]!.at, adjacent.at)).toBe(1);
   });
 
   test("have bosses stronger and richer than the monsters they spawn", () => {
@@ -283,55 +286,66 @@ describe("spawners", () => {
     }
   });
 
-  test("heal once wrecked, then spawn at once and restart their timer", () => {
+  test("mend once wrecked, then spawn at once and restart their timer", () => {
     const wrecked = withState(newGame(landOf(out, [mine])), mine, {
       hp: 0,
       isWrecked: true,
     });
-    const healedAt = spawnerHpOf("mine") * SPAWNER_HEAL_INTERVAL;
     const games = historyOf(wrecked);
-    expect(isWrecked(games[healedAt - 1]!, mine)).toBe(true);
-    expect(isWrecked(games[healedAt]!, mine)).toBe(false);
+    const healedAt = games.findIndex((game) => !isWrecked(game, mine));
+    expect(healedAt).toBe(MENDING * spawnerHpOf("mine"));
     const turns = spawnsOf(games).map(({ turn }) => turn);
     expect(turns[0]).toBe(healedAt);
     expect(turns[1]! - healedAt).toBeGreaterThanOrEqual(interval);
   });
 
-  test("stay dormant beyond the active radius", () => {
-    const far = { kind: "mine", at: { q: ACTIVE_RADIUS + 1, r: 0 } } as const;
+  test("stay dormant outside the active chunks", () => {
+    const far = {
+      kind: "mine",
+      at: { q: 2 * CHUNK * (SIMULATION_RADIUS + 1), r: 0 },
+    } as const;
     expect(spawnsOf(historyOf(newGame(landOf(out, [far]))))).toEqual([]);
+  });
+
+  test("are entities with health and conditions, like any other", () => {
+    const game = newGame(landOf(out, [mine]));
+    expect(game.entities.get(spawnerIdOf(mine.at))).toMatchObject({
+      hp: spawnerHpOf("mine"),
+      faction: "wild",
+      conditions: new Map([["mending", expect.anything()]]),
+    });
   });
 });
 
 describe("turn, step and attack", () => {
   test("turn faces a direction and spends a turn; facing it already is rejected", () => {
     const turned = act(facingEast(), { kind: "turn", direction: "n" });
-    expect(turned.player.facing).toBe("n");
+    expect(playerOf(turned).facing).toBe("n");
     expect(turned.turn).toBe(1);
     const again: Intent = { kind: "turn", direction: "se" };
-    expect(act(facingEast(), again).events).toEqual([
+    expect(eventsOf(act(facingEast(), again))).toEqual([
       rejection(again, "already-facing"),
     ]);
   });
 
   test("step moves the way faced, never turns, and never attacks", () => {
     const stepped = act(facingEast(), { kind: "step", direction: "se" });
-    expect(stepped.player.at).toEqual(east);
+    expect(playerOf(stepped).at).toEqual(east);
     const sideways: Intent = { kind: "step", direction: "n" };
-    expect(act(facingEast(), sideways).events).toEqual([
+    expect(eventsOf(act(facingEast(), sideways))).toEqual([
       rejection(sideways, "not-facing"),
     ]);
     const into: Intent = { kind: "step", direction: "se" };
     const blocked = act(gameWith([creature(east, "troll")]), into);
-    expect(blocked.creatures[0]!.hp).toBe(CREATURES.troll.hp);
-    expect(blocked.events).toEqual([rejection(into, "occupied")]);
+    expect(creaturesOf(blocked)[0]!.hp).toBe(CREATURES.troll.hp);
+    expect(eventsOf(blocked)).toEqual([rejection(into, "occupied")]);
   });
 
   test("attack needs the target faced", () => {
     const behind: Intent = { kind: "attack", at: { q: -1, r: 0 } };
-    expect(act(gameWith([creature({ q: -1, r: 0 })]), behind).events).toEqual([
-      rejection(behind, "not-facing"),
-    ]);
+    expect(
+      eventsOf(act(gameWith([creature({ q: -1, r: 0 })]), behind)),
+    ).toEqual([rejection(behind, "not-facing")]);
   });
 });
 
@@ -339,43 +353,40 @@ describe("act", () => {
   test("a step too high to climb spends no turn", () => {
     const game = facingEast(landOf({ "1,0": land(12) }));
     const next = act(game, step("se"));
-    expect(next).toEqual({
-      ...game,
-      events: [rejection({ kind: "step", direction: "se" }, "blocked")],
-    });
+    expect({ ...next, events: [] }).toEqual({ ...game, events: [] });
+    expect(eventsOf(next)).toEqual([
+      rejection({ kind: "step", direction: "se" }, "blocked"),
+    ]);
   });
 
   test("a step onto level ground moves and spends a turn", () => {
     const next = act(facingEast(), step("se"));
-    expect(next.player.at).toEqual(east);
+    expect(playerOf(next).at).toEqual(east);
     expect(next.turn).toBe(1);
   });
 
   test("a direction not faced turns in place and spends a turn", () => {
-    const game = {
-      ...newGame(landOf()),
-      creatures: [creature({ q: 4, r: 0 })],
-    };
+    const game = withCreatures(newGame(landOf()), [creature({ q: 4, r: 0 })]);
     const next = act(game, step("se"));
-    expect(next.player).toMatchObject({ at: origin, facing: "se" });
+    expect(playerOf(next)).toMatchObject({ at: origin, facing: "se" });
     expect(next.turn).toBe(1);
-    expect(next.creatures[0]!.at).toEqual({ q: 3, r: 0 });
+    expect(creaturesOf(next)[0]!.at).toEqual({ q: 3, r: 0 });
     expect(next.seen.has(hexKey({ q: SIGHT, r: 0 }))).toBe(true);
   });
 
   test("turning toward a cliff is allowed", () => {
     const next = act(newGame(landOf({ "1,0": land(12) })), step("se"));
-    expect(next.player.facing).toBe("se");
+    expect(playerOf(next).facing).toBe("se");
   });
 
   test("waiting keeps facing", () => {
-    expect(act(facingEast(), WAIT).player.facing).toBe("se");
+    expect(playerOf(act(facingEast(), WAIT)).facing).toBe("se");
   });
 
   test("bumping a monster attacks it", () => {
     const next = act(gameWith([creature(east, "troll")]), step("se"));
-    expect(next.player.at).toEqual(origin);
-    expect(next.creatures[0]!.hp).toBe(CREATURES.troll.hp - PLAYER_DAMAGE);
+    expect(playerOf(next).at).toEqual(origin);
+    expect(creaturesOf(next)[0]!.hp).toBe(CREATURES.troll.hp - PLAYER_DAMAGE);
   });
 
   test("attacking an adjacent monster hits it and spends a turn", () => {
@@ -383,25 +394,25 @@ describe("act", () => {
       kind: "attack",
       at: east,
     });
-    expect(next.creatures[0]!.hp).toBe(CREATURES.troll.hp - PLAYER_DAMAGE);
+    expect(creaturesOf(next)[0]!.hp).toBe(CREATURES.troll.hp - PLAYER_DAMAGE);
     expect(next.turn).toBe(1);
   });
 
   test("attacking where nothing stands, or out of reach, spends no turn", () => {
     const empty: Intent = { kind: "attack", at: east };
-    expect(act(facingEast(), empty).events).toEqual([
+    expect(eventsOf(act(facingEast(), empty))).toEqual([
       rejection(empty, "no-target"),
     ]);
     const far: Intent = { kind: "attack", at: { q: 2, r: 0 } };
-    expect(act(gameWith([creature({ q: 2, r: 0 })]), far).events).toEqual([
+    expect(eventsOf(act(gameWith([creature({ q: 2, r: 0 })]), far))).toEqual([
       rejection(far, "out-of-reach"),
     ]);
   });
 
   test("killing a monster removes and counts it", () => {
     const next = act(gameWith([{ ...creature(east), hp: 1 }]), step("se"));
-    expect(next.creatures).toEqual([]);
-    expect(next.kills).toBe(1);
+    expect(creaturesOf(next)).toEqual([]);
+    expect(playerOf(next).kills).toBe(1);
   });
 
   test("slain monsters drop their loot, if any, in a chest where they fell", () => {
@@ -435,23 +446,25 @@ describe("act", () => {
     const chest = { gold: 5, items: [] };
     const game = { ...facingEast(), chests: new Map([[hexKey(east), chest]]) };
     const next = act(game, step("se"));
-    expect(next.player.gold).toBe(0);
+    expect(playerOf(next).gold).toBe(0);
     expect(next.chests.get(hexKey(east))).toEqual(chest);
   });
 
   test("adjacent monsters attack after the player acts", () => {
     const next = act(gameWith([creature(east)]), WAIT);
-    expect(next.player.hp).toBe(MAX_HP - CREATURES.goblin.damage);
+    expect(playerOf(next).hp).toBe(MAX_HP - CREATURES.goblin.damage);
   });
 
   test("monsters can't strike up a cliff", () => {
     const world = landOf({ "1,0": land(4) });
-    expect(act(gameWith([creature(east)], world), WAIT).player.hp).toBe(MAX_HP);
+    expect(playerOf(act(gameWith([creature(east)], world), WAIT)).hp).toBe(
+      MAX_HP,
+    );
   });
 
   test("monsters in sight close in", () => {
     const next = act(gameWith([creature({ q: 4, r: 0 })]), WAIT);
-    expect(next.creatures[0]!.at).toEqual({ q: 3, r: 0 });
+    expect(creaturesOf(next)[0]!.at).toEqual({ q: 3, r: 0 });
   });
 
   test("monsters turn to face the way they head, then step, like the player", () => {
@@ -459,23 +472,23 @@ describe("act", () => {
       gameWith([creature({ q: 4, r: 0 }, "goblin", "n")]),
       WAIT,
     );
-    expect(turned.creatures[0]).toMatchObject({
+    expect(creaturesOf(turned)[0]).toMatchObject({
       at: { q: 4, r: 0 },
       facing: "nw",
     });
-    expect(turned.events).toContainEqual({
+    expect(eventsOf(turned)).toContainEqual({
       kind: "turned",
-      actor: who(creature({ q: 4, r: 0 }, "goblin")),
+      source: who(creature({ q: 4, r: 0 }, "goblin")),
       facing: "nw",
     });
     const stepped = act(turned, WAIT);
-    expect(stepped.creatures[0]).toMatchObject({
+    expect(creaturesOf(stepped)[0]).toMatchObject({
       at: { q: 3, r: 0 },
       facing: "nw",
     });
-    expect(stepped.events).toContainEqual({
+    expect(eventsOf(stepped)).toContainEqual({
       kind: "stepped",
-      actor: who(creature({ q: 4, r: 0 }, "goblin")),
+      source: who(creature({ q: 4, r: 0 }, "goblin")),
       direction: "nw",
       to: { q: 3, r: 0 },
     });
@@ -484,10 +497,10 @@ describe("act", () => {
   test("an adjacent hostile monster facing away turns before it strikes", () => {
     const beside = creature(east, "troll", "se");
     const turned = act(gameWith([beside]), WAIT);
-    expect(turned.player.hp).toBe(MAX_HP);
-    expect(turned.creatures[0]!.facing).toBe("nw");
+    expect(playerOf(turned).hp).toBe(MAX_HP);
+    expect(creaturesOf(turned)[0]!.facing).toBe("nw");
     const struck = act(turned, WAIT);
-    expect(struck.player.hp).toBe(MAX_HP - CREATURES.troll.damage);
+    expect(playerOf(struck).hp).toBe(MAX_HP - CREATURES.troll.damage);
   });
 
   test("monsters facing away don't notice the player beyond their awareness", () => {
@@ -495,7 +508,7 @@ describe("act", () => {
       gameWith([creature({ q: 4, r: 0 }, "goblin", "se")]),
       WAIT,
     );
-    expect(next.creatures[0]!.mind).toBe(IDLE);
+    expect(creaturesOf(next)[0]!.mind).toBe(IDLE);
   });
 
   test("monsters notice the player within their awareness, whatever their facing", () => {
@@ -503,13 +516,13 @@ describe("act", () => {
       gameWith([creature({ q: 2, r: 0 }, "goblin", "se")]),
       WAIT,
     );
-    expect(next.creatures[0]!.mind.state).toBe("hostile");
+    expect(creaturesOf(next)[0]!.mind.state).toBe("hostile");
   });
 
   test("monsters that notice the player turn hostile, anchored where they stood idle", () => {
     const at = { q: 4, r: 0 };
     const next = act(gameWith([creature(at)]), WAIT);
-    expect(next.creatures[0]!.mind).toMatchObject({
+    expect(creaturesOf(next)[0]!.mind).toMatchObject({
       state: "hostile",
       anchor: at,
       lastSeen: origin,
@@ -518,14 +531,16 @@ describe("act", () => {
 
   test("monsters that strike are hostile", () => {
     const next = act(gameWith([creature(east, "goblin", "se")]), WAIT);
-    expect(next.creatures[0]!.mind.state).toBe("hostile");
+    expect(creaturesOf(next)[0]!.mind.state).toBe("hostile");
   });
 
   test("hostile monsters head for where they last saw the player", () => {
     const at = { q: 6, r: 0 };
     const lastSeen = { q: 6, r: -4 };
     const hostile = { ...creature(at), mind: hostileAt(at, lastSeen) };
-    const next = historyOf(gameWith([hostile], pit), 2).at(-1)!.creatures[0]!;
+    const next = creaturesOf(
+      historyOf(gameWith([hostile], pit), 2).at(-1)!,
+    )[0]!;
     expect(hexDistance(next.at, lastSeen)).toBe(3);
   });
 
@@ -537,7 +552,7 @@ describe("act", () => {
       mind: hostileAt(home.at, lastSeen),
     };
     const states = historyOf(gameWith([hostile], pit), 60).map(
-      ({ creatures }) => creatures[0]!,
+      (game) => creaturesOf(game)[0]!,
     );
     const start = states.findIndex(({ mind }) => mind.state === "hunting");
     expect(start).toBeGreaterThan(0);
@@ -571,8 +586,8 @@ describe("act", () => {
     }));
     const games = historyOf(gameWith(hunters, pit), HUNT_TURNS - 1);
     const north = centerOf(DIRECTIONS.n);
-    const drift = games.slice(1).flatMap(({ creatures }) =>
-      creatures.map(({ at }, i) => {
+    const drift = games.slice(1).flatMap((game) =>
+      creaturesOf(game).map(({ at }, i) => {
         const from = centerOf(spots[i]!);
         const to = centerOf(at);
         return (to.x - from.x) * north.x + (to.y - from.y) * north.y;
@@ -589,7 +604,7 @@ describe("act", () => {
       gameWith([creature({ q: 4, r: 0 }, "goblin", "nw", home)]),
       10,
     );
-    expect(games.at(-1)!.player.hp).toBeLessThan(MAX_HP);
+    expect(playerOf(games.at(-1)!).hp).toBeLessThan(MAX_HP);
   });
 
   test("engaged monsters can't be drawn past their anchor's leash", () => {
@@ -600,13 +615,14 @@ describe("act", () => {
       mind: hostileAt(anchor, origin),
     };
     const games = historyOf(gameWith([chaser]), 10);
-    for (const { creatures } of games.slice(1)) {
-      expect(creatures[0]!.mind.state).toBe("hostile");
-      expect(hexDistance(creatures[0]!.at, anchor)).toBeLessThanOrEqual(
+    for (const game of games.slice(1)) {
+      const [chasing] = creaturesOf(game);
+      expect(chasing!.mind.state).toBe("hostile");
+      expect(hexDistance(chasing!.at, anchor)).toBeLessThanOrEqual(
         SPAWNERS.village.leash,
       );
     }
-    expect(games.at(-1)!.player.hp).toBe(MAX_HP);
+    expect(playerOf(games.at(-1)!).hp).toBe(MAX_HP);
   });
 
   test("engaged monsters keep their anchor when they find the player again", () => {
@@ -615,7 +631,7 @@ describe("act", () => {
       ...creature({ q: 4, r: 0 }),
       mind: huntingAt(anchor, { q: 4, r: -2 }),
     };
-    const next = act(gameWith([hunter]), WAIT).creatures[0]!;
+    const next = creaturesOf(act(gameWith([hunter]), WAIT))[0]!;
     expect(next.mind).toMatchObject({ state: "hostile", anchor });
   });
 
@@ -628,7 +644,7 @@ describe("act", () => {
     ];
     const games = historyOf(gameWith(strays, pit), 60);
     const [homebody, stray] = [0, 1].map((i) =>
-      games.map(({ creatures }) => creatures[i]!),
+      games.map((game) => creaturesOf(game)[i]!),
     );
     expect(new Set(homebody!.map(({ at }) => hexKey(at))).size).toBeGreaterThan(
       1,
@@ -640,25 +656,24 @@ describe("act", () => {
 
   test("monsters turn to face the player they strike", () => {
     const next = act(gameWith([creature(east, "goblin", "se")]), WAIT);
-    expect(next.creatures[0]!.facing).toBe("nw");
+    expect(creaturesOf(next)[0]!.facing).toBe("nw");
   });
 
   test("monsters out of sight don't notice the player", () => {
     const world = landOf({ "2,0": land(10, true) });
     const next = act(gameWith([creature({ q: 4, r: 0 })], world), WAIT);
-    expect(next.creatures[0]!.mind).toBe(IDLE);
+    expect(creaturesOf(next)[0]!.mind).toBe(IDLE);
   });
 
-  test("monsters beyond the forget radius are forgotten", () => {
-    const far = creature({ q: FORGET_RADIUS + 2, r: 0 });
-    expect(act(gameWith([far]), WAIT).creatures).toEqual([]);
+  test("monsters outside the active chunks persist, frozen", () => {
+    const far = creature({ q: 2 * CHUNK * (SIMULATION_RADIUS + 1), r: 0 });
+    const games = historyOf(gameWith([far]), 20);
+    for (const game of games)
+      expect(creaturesOf(game)).toEqual([{ ...far, seq: expect.any(Number) }]);
   });
 
   test("the game ends when the player dies, and accepts no more actions", () => {
-    const game = {
-      ...gameWith([creature(east)]),
-      player: { ...newGame(landOf()).player, hp: 1 },
-    };
+    const game = withPlayer(gameWith([creature(east)]), { hp: 1, facing: "n" });
     const dead = act(game, WAIT);
     expect(isOver(dead)).toBe(true);
     expect(act(dead, step("se"))).toEqual({
@@ -674,14 +689,16 @@ describe("use", () => {
   const trolls = (...at: Hex[]) =>
     at.map((hex) => creature(hex, "troll", "nw"));
   const hpAt = (game: Game, hex: Hex) =>
-    game.creatures.find(({ id }) => id === hexKey(hex))?.hp;
+    creaturesOf(game).find(({ id }) => id === hexKey(hex))?.hp;
   const TROLL = CREATURES.troll.hp;
 
   test("spends mana, a turn, and starts the cooldown", () => {
     const next = act(facingEast(), { kind: "use", ability: "heal" });
     expect(next.turn).toBe(1);
-    expect(next.player.mp).toBe(MAX_MP - ABILITIES.heal.mp);
-    expect(cooldownOf(next, "heal")).toBe(ABILITIES.heal.cooldown);
+    expect(playerOf(next).mp).toBe(MAX_MP - ABILITIES.heal.mp);
+    expect(cooldownOf(next, playerOf(next), "heal")).toBe(
+      ABILITIES.heal.cooldown,
+    );
   });
 
   test("cooldowns count down each turn until ready", () => {
@@ -691,37 +708,37 @@ describe("use", () => {
       at: east,
     });
     const waits = historyOf(cast, ABILITIES.fireball.cooldown);
-    expect(waits.map((game) => cooldownOf(game, "fireball"))).toEqual([
-      5, 4, 3, 2, 1, 0,
-    ]);
+    expect(
+      waits.map((game) => cooldownOf(game, playerOf(game), "fireball")),
+    ).toEqual([5, 4, 3, 2, 1, 0]);
   });
 
   test("can't be cast while cooling down, spending no turn", () => {
     const cast = act(facingEast(), { kind: "use", ability: "heal" });
     const again = act(cast, { kind: "use", ability: "heal" });
     expect(again.turn).toBe(cast.turn);
-    expect(again.player).toEqual(cast.player);
-    expect(again.events).toEqual([
+    expect(playerOf(again)).toEqual(playerOf(cast));
+    expect(eventsOf(again)).toEqual([
       rejection({ kind: "use", ability: "heal" }, "not-ready"),
     ]);
   });
 
   test("can't be cast without enough mana, spending no turn", () => {
     const game = facingEast();
-    const drained = { ...game, player: { ...game.player, mp: 1 } };
+    const drained = withPlayer(game, { mp: 1 });
     const next = act(drained, { kind: "use", ability: "heal" });
     expect(next.turn).toBe(0);
-    expect(next.events).toEqual([
+    expect(eventsOf(next)).toEqual([
       rejection({ kind: "use", ability: "heal" }, "no-mana"),
     ]);
   });
 
   test("mana regenerates over time, up to the maximum", () => {
     const game = facingEast();
-    const drained = { ...game, player: { ...game.player, mp: 0 } };
+    const drained = withPlayer(game, { mp: 0 });
     const history = historyOf(drained, 100);
-    expect(history.at(-1)!.player.mp).toBe(MAX_MP);
-    expect(history[1]!.player.mp).toBeLessThan(MAX_MP);
+    expect(playerOf(history.at(-1)!).mp).toBe(MAX_MP);
+    expect(playerOf(history[1]!).mp).toBeLessThan(MAX_MP);
   });
 
   test("cleave hits ahead fully and either side by half", () => {
@@ -744,7 +761,7 @@ describe("use", () => {
     });
     expect(hpAt(next, at)).toBe(TROLL - FIREBALL_DAMAGE);
     expect(hpAt(next, beside)).toBe(TROLL - FIREBALL_DAMAGE * FIREBALL_SPLASH);
-    expect(next.player.hp).toBe(MAX_HP);
+    expect(playerOf(next).hp).toBe(MAX_HP);
   });
 
   test("fireball can't reach beyond its range or out of sight", () => {
@@ -758,11 +775,13 @@ describe("use", () => {
 
   test("heal restores hit points, up to the maximum", () => {
     const game = facingEast();
-    const hurt = { ...game, player: { ...game.player, hp: 1 } };
-    expect(act(hurt, { kind: "use", ability: "heal" }).player.hp).toBe(
+    const hurt = withPlayer(game, { hp: 1 });
+    expect(playerOf(act(hurt, { kind: "use", ability: "heal" })).hp).toBe(
       1 + HEAL_HP,
     );
-    expect(act(game, { kind: "use", ability: "heal" }).player.hp).toBe(MAX_HP);
+    expect(playerOf(act(game, { kind: "use", ability: "heal" })).hp).toBe(
+      MAX_HP,
+    );
   });
 
   test("strike faces the adjacent target and attacks it in one turn", () => {
@@ -772,7 +791,7 @@ describe("use", () => {
       at: south,
     });
     expect(next.turn).toBe(1);
-    expect(next.player).toMatchObject({ at: origin, facing: "s" });
+    expect(playerOf(next)).toMatchObject({ at: origin, facing: "s" });
     expect(hpAt(next, south)).toBe(TROLL - PLAYER_DAMAGE);
   });
 
@@ -780,7 +799,7 @@ describe("use", () => {
     const far = { q: 3, r: 0 };
     const none = act(gameWith([]), { kind: "use", ability: "strike" });
     expect(none.turn).toBe(0);
-    expect(none.events).toEqual([
+    expect(eventsOf(none)).toEqual([
       rejection({ kind: "use", ability: "strike" }, "no-target"),
     ]);
     const distant = act(gameWith(trolls(far)), {
@@ -789,7 +808,7 @@ describe("use", () => {
       at: far,
     });
     expect(distant.turn).toBe(0);
-    expect(distant.events).toEqual([
+    expect(eventsOf(distant)).toEqual([
       rejection({ kind: "use", ability: "strike", at: far }, "out-of-reach"),
     ]);
   });
@@ -806,17 +825,13 @@ describe("transfer", () => {
   const here = hexKey(origin);
   const withLoot = (
     chest: Partial<Chest> | undefined,
-    player: Partial<Game["player"]> = {},
-  ): Game => {
-    const game = facingEast();
-    return {
-      ...game,
-      player: { ...game.player, ...player },
-      chests: chest
-        ? new Map([[here, { gold: 0, items: [], ...chest }]])
-        : new Map(),
-    };
-  };
+    player: Partial<Fields> = {},
+  ): Game => ({
+    ...withPlayer(facingEast(), player),
+    chests: chest
+      ? new Map([[here, { gold: 0, items: [], ...chest }]])
+      : new Map(),
+  });
   const move = (cargo: string, to: Where): Intent => ({
     kind: "transfer",
     cargo,
@@ -826,39 +841,39 @@ describe("transfer", () => {
   test("takes an item from the chest underfoot, spending a turn", () => {
     const next = act(withLoot({ items: [helm, potion] }), move("helm", "pack"));
     expect(next.turn).toBe(1);
-    expect(next.player.pack).toEqual([helm]);
+    expect(playerOf(next).pack).toEqual([helm]);
     expect(next.chests.get(here)?.items).toEqual([potion]);
   });
 
   test("takes gold, and an emptied chest is gone", () => {
     const next = act(withLoot({ gold: 7 }), move(GOLD, "pack"));
-    expect(next.player.gold).toBe(7);
+    expect(playerOf(next).gold).toBe(7);
     expect(next.chests.has(here)).toBe(false);
   });
 
   test("puts items and gold down into a chest underfoot", () => {
     const game = withLoot(undefined, { pack: [helm], gold: 3 });
     const next = act(act(game, move("helm", "ground")), move(GOLD, "ground"));
-    expect(next.player.pack).toEqual([]);
-    expect(next.player.gold).toBe(0);
+    expect(playerOf(next).pack).toEqual([]);
+    expect(playerOf(next).gold).toBe(0);
     expect(next.chests.get(here)).toEqual({ gold: 3, items: [helm] });
   });
 
   test("equips gear from the pack or the chest, and takes it off", () => {
     const game = withLoot({ items: [boots] }, { pack: [helm] });
     const worn = act(act(game, move("helm", "helm")), move("boots", "boots"));
-    expect(worn.player.equipment).toEqual({ helm, boots });
-    expect(worn.player.pack).toEqual([]);
+    expect(playerOf(worn).equipment).toEqual({ helm, boots });
+    expect(playerOf(worn).pack).toEqual([]);
     expect(worn.chests.has(here)).toBe(false);
     const off = act(worn, move("helm", "pack"));
-    expect(off.player.equipment).toEqual({ boots });
-    expect(off.player.pack).toEqual([helm]);
+    expect(playerOf(off).equipment).toEqual({ boots });
+    expect(playerOf(off).pack).toEqual([helm]);
   });
 
   test("equipping over worn gear swaps it to where the new gear came from", () => {
     const game = withLoot({ items: [coif] }, { equipment: { helm } });
     const next = act(game, move("coif", "helm"));
-    expect(next.player.equipment).toEqual({ helm: coif });
+    expect(playerOf(next).equipment).toEqual({ helm: coif });
     expect(next.chests.get(here)?.items).toEqual([helm]);
   });
 
@@ -881,10 +896,10 @@ describe("transfer", () => {
     ];
     for (const [action, reason] of attempts) {
       const next = act(full, action);
-      expect(next.events).toEqual([rejection(action, reason)]);
+      expect(eventsOf(next)).toEqual([rejection(action, reason)]);
       expect(next.turn).toBe(0);
     }
-    expect(act(full, move("potion", "pack")).player.pack).toContain(potion);
+    expect(playerOf(act(full, move("potion", "pack"))).pack).toContain(potion);
   });
 
   test("bags add capacity; taking one off spills the largest items underfoot", () => {
@@ -893,15 +908,17 @@ describe("transfer", () => {
       { pack: [shirt, pants, boots], equipment: { "bag 1": large } },
     );
     const packed = act(game, move("helm", "pack"));
-    expect(packed.player.pack).toHaveLength(4);
+    expect(playerOf(packed).pack).toHaveLength(4);
     const next = act(packed, move("large", "pack"));
-    expect(next.player.pack.map(({ id }) => id).sort()).toEqual(
-      ["boots", "helm", "large", "pants"].sort(),
-    );
+    expect(
+      playerOf(next)
+        .pack.map(({ id }) => id)
+        .sort(),
+    ).toEqual(["boots", "helm", "large", "pants"].sort());
     expect(next.chests.get(here)?.items).toEqual([shirt]);
-    expect(next.events).toContainEqual({
+    expect(eventsOf(next)).toContainEqual({
       kind: "spilled",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       items: [shirt],
     });
   });
@@ -913,8 +930,8 @@ describe("transfer", () => {
     );
     const next = act(game, { kind: "take-all" });
     expect(next.turn).toBe(1);
-    expect(next.player.gold).toBe(4);
-    expect(next.player.pack.map(({ id }) => id)).toEqual([
+    expect(playerOf(next).gold).toBe(4);
+    expect(playerOf(next).pack.map(({ id }) => id)).toEqual([
       "boots",
       "gloves",
       "potion",
@@ -922,9 +939,9 @@ describe("transfer", () => {
       "pants",
     ]);
     expect(next.chests.get(here)).toEqual({ gold: 0, items: [shirt] });
-    expect(next.events).toContainEqual({
+    expect(eventsOf(next)).toContainEqual({
       kind: "moved",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       cargo: { kind: "gold", amount: 4 },
       from: "ground",
       to: "pack",
@@ -939,7 +956,7 @@ describe("transfer", () => {
       [full, "full"],
     ] as const) {
       const next = act(game, takeAll);
-      expect(next.events).toEqual([rejection(takeAll, reason)]);
+      expect(eventsOf(next)).toEqual([rejection(takeAll, reason)]);
       expect(next.turn).toBe(0);
     }
   });
@@ -948,7 +965,7 @@ describe("transfer", () => {
     const next = act(withLoot({ gold: 9, items: [helm] }), { kind: "destroy" });
     expect(next.chests.has(here)).toBe(false);
     expect(next.turn).toBe(1);
-    expect(act(facingEast(), { kind: "destroy" }).events).toEqual([
+    expect(eventsOf(act(facingEast(), { kind: "destroy" }))).toEqual([
       rejection({ kind: "destroy" }, "no-chest"),
     ]);
   });
@@ -957,10 +974,8 @@ describe("transfer", () => {
 describe("use a potion", () => {
   const health: Item = { id: "h", kind: "potion", potion: "health" };
   const mana: Item = { id: "m", kind: "potion", potion: "mana" };
-  const holding = (game: Game, player: Partial<Game["player"]>): Game => ({
-    ...game,
-    player: { ...game.player, ...player },
-  });
+  const holding = (game: Game, player: Partial<Fields>): Game =>
+    withPlayer(game, player);
 
   test("restores up to the maximum and uses up one potion, spending no turn", () => {
     const game = holding(gameWith([creature(east, "troll")]), {
@@ -969,14 +984,14 @@ describe("use a potion", () => {
       pack: [health, mana, { ...health, id: "h2" }],
     });
     const healed = act(game, { kind: "use", ability: "health" });
-    expect(healed.player.hp).toBe(5 + HEALTH_POTION_HP);
-    expect(healed.player.pack).toEqual([mana, { ...health, id: "h2" }]);
+    expect(playerOf(healed).hp).toBe(5 + HEALTH_POTION_HP);
+    expect(playerOf(healed).pack).toEqual([mana, { ...health, id: "h2" }]);
     expect(healed.turn).toBe(0);
-    expect(healed.creatures).toEqual(game.creatures);
-    expect(healed.events).toEqual([
-      { kind: "used", actor: ADVENTURER, ability: "health" },
+    expect(creaturesOf(healed)).toEqual(creaturesOf(game));
+    expect(eventsOf(healed)).toEqual([
+      { kind: "used", source: ADVENTURER, ability: "health" },
     ]);
-    expect(act(healed, { kind: "use", ability: "mana" }).player.mp).toBe(
+    expect(playerOf(act(healed, { kind: "use", ability: "mana" })).mp).toBe(
       MAX_MP,
     );
   });
@@ -990,12 +1005,12 @@ describe("use a potion", () => {
       kind: "use",
       ability: "health",
     });
-    expect(twice.player.pack).toEqual([]);
+    expect(playerOf(twice).pack).toEqual([]);
   });
 
   test("can't quaff a potion not in the pack", () => {
     const action: Intent = { kind: "use", ability: "mana" };
-    expect(act(facingEast(), action).events).toEqual([
+    expect(eventsOf(act(facingEast(), action))).toEqual([
       rejection(action, "no-item"),
     ]);
   });
@@ -1006,48 +1021,49 @@ describe("prepare", () => {
     const game = facingEast();
     const prepared = act(game, { kind: "prepare" });
     expect(prepared.turn).toBe(game.turn + 1);
-    expect(prepared.player).toEqual(game.player);
-    expect(prepared.events).toEqual([{ kind: "prepared", actor: ADVENTURER }]);
+    expect(playerOf(prepared)).toEqual(playerOf(game));
+    expect(eventsOf(prepared)).toEqual([
+      { kind: "prepared", source: ADVENTURER },
+    ]);
   });
 });
 
 describe("levels", () => {
-  const withXp = (game: Game, xp: number): Game => ({
-    ...game,
-    player: { ...game.player, xp },
-  });
+  const withXp = (game: Game, xp: number): Game => withPlayer(game, { xp });
   const learning = (spell: "cleave" | "heal"): Intent => ({
     kind: "learn",
     spell,
   });
 
   test("the player starts at level 1 knowing no spells", () => {
-    const { player } = newGame(landOf());
+    const player = playerOf(newGame(landOf()));
     expect(levelOf(player)).toBe(1);
-    expect(player.spells.size).toBe(0);
+    expect(player.abilities.size).toBe(0);
     expect(unlocksOf(player)).toBe(0);
     const heal: Intent = { kind: "use", ability: "heal" };
-    expect(act(newGame(landOf()), heal).events).toEqual([
+    expect(eventsOf(act(newGame(landOf()), heal))).toEqual([
       rejection(heal, "unlearned"),
     ]);
   });
 
   test("level rises linearly with experience", () => {
-    const { player } = newGame(landOf());
     expect(
       [0, XP_PER_LEVEL - 1, XP_PER_LEVEL, 3 * XP_PER_LEVEL].map((xp) =>
-        levelOf({ ...player, xp }),
+        levelOf({ xp }),
       ),
     ).toEqual([1, 1, 2, 4]);
   });
 
   test("kills grant experience scaled by the monster's level", () => {
-    const weak = { ...creature(east, "cub", "nw"), level: XP_PER_LEVEL };
+    const weak = {
+      ...creature(east, "cub", "nw", undefined, XP_PER_LEVEL),
+      hp: 1,
+    };
     const next = act(gameWith([weak]), step("se"));
-    expect(next.player.xp).toBe(CREATURES.cub.hp * XP_PER_LEVEL);
-    expect(next.events).toContainEqual({
+    expect(playerOf(next).xp).toBe(CREATURES.cub.hp * XP_PER_LEVEL);
+    expect(eventsOf(next)).toContainEqual({
       kind: "leveled",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       level: 2,
     });
   });
@@ -1056,25 +1072,31 @@ describe("levels", () => {
     const game = withXp(newGame(landOf()), 2 * XP_PER_LEVEL);
     const once = act(game, learning("cleave"));
     expect(once.turn).toBe(0);
-    expect(once.events).toEqual([
-      { kind: "learned", actor: ADVENTURER, spell: "cleave", level: 1 },
+    expect(eventsOf(once)).toEqual([
+      { kind: "learned", source: ADVENTURER, spell: "cleave", level: 1 },
     ]);
     const twice = act(once, learning("cleave"));
-    expect(twice.player.spells.get("cleave")).toBe(2);
-    expect(unlocksOf(twice.player)).toBe(0);
-    expect(act(twice, learning("heal")).events).toEqual([
+    expect(playerOf(twice).abilities.get("cleave")).toBe(2);
+    expect(unlocksOf(playerOf(twice))).toBe(0);
+    expect(eventsOf(act(twice, learning("heal")))).toEqual([
       rejection(learning("heal"), "no-unlocks"),
     ]);
   });
 
   test("spell effects scale linearly with spell level", () => {
     const game = gameWith([creature(east, "troll", "nw")]);
-    const adept = {
-      ...game,
-      player: { ...game.player, spells: new Map([["cleave", 3] as const]) },
-    };
+    const adept = withPlayer(game, { abilities: new Map([["cleave", 3]]) });
     const next = act(adept, { kind: "use", ability: "cleave" });
-    expect(next.creatures[0]!.hp).toBe(CREATURES.troll.hp - 3 * PLAYER_DAMAGE);
+    expect(creaturesOf(next)[0]!.hp).toBe(
+      CREATURES.troll.hp - 3 * PLAYER_DAMAGE,
+    );
+  });
+
+  test("the player knows no creature's knacks", () => {
+    const summon: Intent = { kind: "use", ability: "summon cubs" };
+    expect(eventsOf(act(facingEast(), summon))).toEqual([
+      rejection(summon, "unlearned"),
+    ]);
   });
 });
 
@@ -1084,7 +1106,7 @@ describe("monster levels", () => {
   const spawnedLevels = (spawn: Hex) => {
     const world = landOf(out, [mine]);
     const game = { ...newGame(world), land: { ...world, spawn } };
-    return spawnsOf(historyOf(game, 40)).map(({ creature }) => creature.level);
+    return spawnsOf(historyOf(game, 40)).map(({ creature }) => creature.power);
   };
 
   test("rise with the spawner's distance from the spawn", () => {
@@ -1097,100 +1119,107 @@ describe("monster levels", () => {
   });
 
   test("scale monster damage linearly", () => {
-    const kobold = { ...creature(east, "kobold", "nw"), level: 3 };
-    expect(act(gameWith([kobold]), WAIT).player.hp).toBe(
+    const kobold = creature(east, "kobold", "nw", undefined, 3);
+    expect(playerOf(act(gameWith([kobold]), WAIT)).hp).toBe(
       MAX_HP - 3 * CREATURES.kobold.damage,
     );
   });
 });
 
-describe("monster spells", () => {
-  const leveled = (kind: Parameters<typeof creature>[1], level: number) => ({
-    ...creature(east, kind, "nw"),
-    level,
-  });
-  const alone = (game: Game): Game => ({ ...game, creatures: [] });
-  const healed = (game: Game): Game => ({
-    ...game,
-    player: { ...game.player, hp: MAX_HP },
-  });
+describe("monster abilities", () => {
+  const leveled = (kind: Parameters<typeof creature>[1], level: number) =>
+    creature(east, kind, "nw", undefined, level);
+  const alone = (game: Game): Game => withCreatures(game, []);
+  const healed = (game: Game): Game => withPlayer(game, { hp: MAX_HP });
   /** Waits, healed each turn, through `turns` turns. */
   const enduring = (game: Game, turns: number, action: Intent = WAIT) =>
     Array.from({ length: turns }).reduce<Game[]>(
       (games) => [...games, act(healed(games.at(-1)!), action)],
       [game],
     );
-  const has = (kind: GameEvent["kind"]) => (game: Game) =>
+  const happened = (kind: GameEvent["kind"]) => (game: Game) =>
     game.events.some((event) => event.kind === kind);
-  const firstAfflicted = (kind: Parameters<typeof creature>[1], level = 1) =>
-    enduring(gameWith([leveled(kind, level)]), 200).find(has("afflicted"))!;
+  const firstConditioned = (kind: Parameters<typeof creature>[1], level = 1) =>
+    enduring(gameWith([leveled(kind, level)]), 200).find(
+      happened("conditioned"),
+    )!;
 
-  test("afflictions ride on only some landed hits, at their chance", () => {
+  test("conditions ride on only some landed hits, at their chance", () => {
     const games = enduring(gameWith([leveled("goblin", 1)]), 300);
-    const hits = games.filter(has("hit")).length;
-    const afflictions = games.filter(has("afflicted")).length;
-    expect(afflictions).toBeGreaterThan(0);
-    expect(afflictions).toBeLessThan(hits / 3);
+    const hits = games.filter(happened("hurt")).length;
+    const conditioned = games.filter(happened("conditioned")).length;
+    expect(conditioned).toBeGreaterThan(0);
+    expect(conditioned).toBeLessThan(hits / 3);
   });
 
-  test("bandits inflict up to a turn of bleeding per level", () => {
-    const bleeding = firstAfflicted("bandit", 2);
-    expect(bleeding.events).toContainEqual({
-      kind: "afflicted",
-      actor: who(leveled("bandit", 2)),
+  test("bandits inflict up to a turn of bleeding per level, each bleed credited to them", () => {
+    const bandit = leveled("bandit", 2);
+    const bleeding = firstConditioned("bandit", 2);
+    expect(eventsOf(bleeding)).toContainEqual({
+      kind: "conditioned",
+      source: who(bandit),
       target: ADVENTURER,
-      affliction: "bleed",
+      condition: "bleed",
       turns: 2,
     });
     const after = historyOf(alone(bleeding), 3);
-    const bleeds = after.filter(has("bled")).length;
-    expect(bleeds).toBeGreaterThanOrEqual(1);
-    expect(bleeds).toBeLessThanOrEqual(2);
-    expect(after.at(-1)!.player.afflictions.size).toBe(0);
+    const bleeds = after.flatMap(({ events }) =>
+      events.filter(
+        (event) =>
+          event.kind === "hurt" &&
+          event.cause?.kind === "condition" &&
+          event.cause.condition === "bleed",
+      ),
+    );
+    expect(bleeds.length).toBeGreaterThanOrEqual(1);
+    expect(bleeds.length).toBeLessThanOrEqual(2);
+    for (const bleed of bleeds)
+      expect(bleed).toMatchObject({ source: who(bandit) });
+    expect(playerOf(after.at(-1)!).conditions.has("bleed")).toBe(false);
   });
 
   test("stun allows only waiting; anything else is a turn lost struggling", () => {
-    const stunned = alone(firstAfflicted("troll", 2));
+    const stunned = alone(firstConditioned("troll", 2));
     const struggling = act(stunned, step("n"));
     expect(struggling.turn).toBe(stunned.turn + 1);
-    expect(struggling.player.at).toEqual(stunned.player.at);
-    expect(struggling.events).toContainEqual({
+    expect(playerOf(struggling).at).toEqual(playerOf(stunned).at);
+    expect(eventsOf(struggling)).toContainEqual({
       kind: "struggled",
-      actor: ADVENTURER,
-      affliction: "stun",
+      source: ADVENTURER,
+      condition: "stun",
     });
   });
 
   test("paralysis stops turning and stepping, as a turn lost struggling, but not attacking", () => {
-    const paralyzed = firstAfflicted("goblin", 3);
+    const paralyzed = firstConditioned("goblin", 3);
     const struggling = act(paralyzed, step("n"));
     expect(struggling.turn).toBe(paralyzed.turn + 1);
-    expect(struggling.events).toContainEqual({
+    expect(eventsOf(struggling)).toContainEqual({
       kind: "struggled",
-      actor: ADVENTURER,
-      affliction: "paralysis",
+      source: ADVENTURER,
+      condition: "paralysis",
     });
-    expect(act(paralyzed, step("se")).events).toContainEqual({
-      kind: "hit",
-      actor: ADVENTURER,
+    expect(eventsOf(act(paralyzed, step("se")))).toContainEqual({
+      kind: "hurt",
+      source: ADVENTURER,
       target: who(leveled("goblin", 3)),
+      amount: PLAYER_DAMAGE,
     });
   });
 
-  test("afflictions wait out their cooldown before recurring", () => {
-    const spell = CREATURE_SPELLS.goblin;
-    if (spell?.kind !== "afflict") throw new Error("goblins afflict");
+  test("abilities wait out their cooldown before recurring", () => {
+    const cooldown = ABILITIES.paralyze.cooldown as number;
     const turns = enduring(gameWith([leveled("goblin", 2)]), 300)
-      .filter(has("afflicted"))
+      .filter(happened("conditioned"))
       .map(({ turn }) => turn);
     expect(turns.length).toBeGreaterThan(1);
     turns.slice(1).forEach((turn, i) => {
-      expect(turn - turns[i]!).toBeGreaterThanOrEqual(2 + spell.cooldown);
+      expect(turn - turns[i]!).toBeGreaterThan(cooldown);
     });
   });
 
-  test("however strong the caster, an affliction is shaken off before long", () => {
-    const { shakeOff } = AFFLICTIONS.stun;
+  test("however strong the caster, a condition is shaken off before long", () => {
+    const { shakeOff } = CONDITIONS.stun;
     const elder = { ...leveled("troll", 6), hp: 10_000 };
     const games = enduring(gameWith([elder]), 300, step("se"));
     const streaks = games
@@ -1209,24 +1238,46 @@ describe("monster spells", () => {
   test("hostile wolves summon a cub per level beside themselves", () => {
     const at = { q: 3, r: 0 };
     const wolf = {
-      ...creature(at, "wolf", "nw"),
-      level: 2,
+      ...creature(at, "wolf", "nw", undefined, 2),
       mind: hostileAt(at, origin),
     };
     const games = enduring(gameWith([wolf]), 50);
-    const index = games.findIndex(has("summoned"));
+    const index = games.findIndex(happened("summoned"));
     const next = games[index]!;
-    const cubs = next.creatures.filter(({ kind }) => kind === "cub");
+    const cubs = creaturesOf(next).filter(({ kind }) => kind === "cub");
     expect(cubs).toHaveLength(2);
-    for (const cub of cubs) expect(cub.level).toBe(2);
-    expect(next.events).toContainEqual({
+    for (const cub of cubs) expect(cub.power).toBe(2);
+    expect(eventsOf(next)).toContainEqual({
       kind: "summoned",
-      actor: who(wolf),
+      source: who(wolf),
       summoned: "cub",
       count: 2,
     });
     expect(
       games[index + 1]!.events.some(({ kind }) => kind === "summoned"),
     ).toBe(false);
+  });
+});
+
+describe("conditions", () => {
+  test("the player regenerates by permanent conditions, which never wear off", () => {
+    const drained = withPlayer(facingEast(), { hp: 1, mp: 0 });
+    const history = historyOf(drained, 100);
+    expect(playerOf(history.at(-1)!)).toMatchObject({ hp: 11, mp: MAX_MP });
+    expect([...playerOf(history.at(-1)!).conditions.keys()]).toEqual([
+      "vigor",
+      "focus",
+    ]);
+  });
+
+  test("events carry their cause", () => {
+    const next = act(gameWith([creature(east, "troll")]), step("se"));
+    expect(next.events).toContainEqual(
+      expect.objectContaining({
+        kind: "hurt",
+        source: ADVENTURER,
+        cause: { kind: "deed", deed: "attack" },
+      }),
+    );
   });
 });

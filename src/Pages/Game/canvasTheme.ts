@@ -1,6 +1,6 @@
 import type { Vec2 } from "procgen";
 import type { Creature } from "../../game/game";
-import type { CreatureKind, SpawnerKind } from "../../game/creatures";
+import type { CreatureKind, SpawnerKind } from "../../game/content/creatures";
 import type { Biome, Tile } from "../../game/terrain";
 import type { ThemeId } from "../../theme";
 import type { Hsl, Tint } from "./paint";

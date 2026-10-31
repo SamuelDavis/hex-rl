@@ -13,7 +13,7 @@ test("rejections name the actor, the action and the reason", () => {
   expect(
     narrationOf({
       kind: "rejected",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       action: { kind: "use", ability: "strike" },
       reason: "out-of-reach",
     }),
@@ -21,7 +21,7 @@ test("rejections name the actor, the action and the reason", () => {
   expect(
     narrationOf({
       kind: "rejected",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       action: { kind: "move", direction: "n" },
       reason: "blocked",
     }),
@@ -29,28 +29,38 @@ test("rejections name the actor, the action and the reason", () => {
 });
 
 test("events are told in the third person", () => {
-  expect(narrationOf({ kind: "prepared", actor: ADVENTURER })).toBe(
+  expect(narrationOf({ kind: "prepared", source: ADVENTURER })).toBe(
     "The adventurer prepares themselves.",
   );
-  expect(narrationOf({ kind: "hit", actor: troll, target: ADVENTURER })).toBe(
-    "The troll hits the adventurer.",
-  );
+  expect(
+    narrationOf({ kind: "hurt", source: troll, target: ADVENTURER, amount: 3 }),
+  ).toBe("The troll hits the adventurer.");
+  expect(
+    narrationOf({
+      kind: "hurt",
+      source: troll,
+      target: ADVENTURER,
+      amount: 1,
+      cause: { kind: "condition", condition: "bleed" },
+    }),
+  ).toBe("The adventurer bleeds.");
 });
 
 test("spawners are named for what they are", () => {
+  const den = { id: "spawner:0,0", kind: "den", faction: "wild" } as const;
   expect(
-    narrationOf({ kind: "wrecked", actor: ADVENTURER, spawner: "den" }),
-  ).toMatch(/^The adventurer wrecks the /);
+    narrationOf({ kind: "wrecked", source: ADVENTURER, target: den }),
+  ).toBe("The adventurer wrecks the wolf den.");
 });
 
 test("monsters are named by kind, and steps and turns by direction", () => {
-  expect(narrationOf({ kind: "turned", actor: goblin, facing: "nw" })).toBe(
+  expect(narrationOf({ kind: "turned", source: goblin, facing: "nw" })).toBe(
     "The goblin turns north-west.",
   );
   expect(
     narrationOf({
       kind: "stepped",
-      actor: ADVENTURER,
+      source: ADVENTURER,
       direction: "s",
       to: { q: 0, r: 1 },
     }),
@@ -58,7 +68,7 @@ test("monsters are named by kind, and steps and turns by direction", () => {
   expect(
     narrationOf({
       kind: "rejected",
-      actor: troll,
+      source: troll,
       action: { kind: "attack", at: { q: 0, r: 1 } },
       reason: "no-target",
     }),
@@ -66,39 +76,39 @@ test("monsters are named by kind, and steps and turns by direction", () => {
 });
 
 test("townsfolk are named for their town's biome", () => {
-  expect(narrationOf({ kind: "restocked", actor: reeve })).toBe(
+  expect(narrationOf({ kind: "restocked", source: reeve })).toBe(
     "The coastal reeve restocks their wares.",
   );
   expect(
-    narrationOf({ kind: "interacted", actor: ADVENTURER, target: reeve }),
+    narrationOf({ kind: "interacted", source: ADVENTURER, target: reeve }),
   ).toBe("The adventurer hails the coastal reeve.");
 });
 
-test("summons and afflictions are counted", () => {
+test("summons and conditions are counted", () => {
   expect(
-    narrationOf({ kind: "summoned", actor: wolf, summoned: "cub", count: 2 }),
+    narrationOf({ kind: "summoned", source: wolf, summoned: "cub", count: 2 }),
   ).toBe("The wolf summons 2 cubs.");
   expect(
     narrationOf({
-      kind: "afflicted",
-      actor: troll,
+      kind: "conditioned",
+      source: troll,
       target: ADVENTURER,
-      affliction: "stun",
+      condition: "stun",
       turns: 1,
     }),
   ).toBe("The adventurer is stunned for up to 1 turn.");
 });
 
-test("struggles and recoveries name the affliction", () => {
+test("struggles and recoveries name the condition", () => {
   expect(
     narrationOf({
       kind: "struggled",
-      actor: ADVENTURER,
-      affliction: "paralysis",
+      source: ADVENTURER,
+      condition: "paralysis",
     }),
   ).toBe("The adventurer struggles against paralysis.");
   expect(
-    narrationOf({ kind: "recovered", actor: ADVENTURER, affliction: "stun" }),
+    narrationOf({ kind: "recovered", source: ADVENTURER, condition: "stun" }),
   ).toBe("The adventurer shakes off the stun.");
 });
 

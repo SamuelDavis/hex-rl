@@ -1,44 +1,43 @@
 # Action Pipeline
 
-Contract for turning any actor's choice into authoritative game events. One vocabulary, one execution path, for the player and monsters alike. The pipeline starts at the game's `Intent`: UI messages, aiming and bindings are UI ([ui-architecture.md](ui-architecture.md)) and never enter the game. Scoped to today's game (hex movement, bump combat, abilities, potions, inventory); extension points are named, not built.
+Contract for turning any agent's choice into authoritative game events. One vocabulary, one execution path, for the player and monsters alike. Entities, components and the turn loop: [architecture.md](architecture.md). The pipeline starts at the game's `Intent`: UI messages, aiming and bindings are UI ([ui-architecture.md](ui-architecture.md)) and never enter the game. Scoped to today's game (hex movement, bump combat, abilities, potions, inventory); extension points are named, not built.
 
 ## Vocabulary
 
 | Term | Meaning | In code (`src/game/`) |
 |---|---|---|
-| Actor | Takes turns: the player or a creature (a wild monster or townsfolk, [towns.md](towns.md)). All share `Actor` (id, position, facing, hit points). | `Actor`, `Player`, `Creature`; `Who` names it in events |
+| Agent | An entity that takes turns: a seat (the player) or a mind (a wild monster or townsfolk, [towns.md](towns.md)). Rules act on its components, never its kind. | `Entity` with `agent`; `Who` names it in events |
 | Intent | What an actor wants: a Deed, or `move` (go a direction). The pipeline's sole input. | `Intent` |
 | Deed | Something a Rule can perform, dispatchable alone: `turn`, `step`, `attack`, `wait`, `use`, ... | `Deed` |
 | Rule | One Deed's checks and effects; knows no other Deed. | `RULES`, `Rule` |
 | Outcome | A Rule's verdict: performed (and whether a turn passes) or rejected. | `Outcome` |
 | Rejection | Typed reason a Deed did nothing. | `Rejection` |
 | Plan | The actor's decision tree for an Intent: a Deed to attempt, and per rejection reason the Plan to try next. | `Plan`, `planOf` |
-| Policy | How an actor turns an Intent into a Plan. Situational choice lives here, per actor, not in Rules. | `bold`, `courteous` |
-| Ability | Data row: MP, cooldown, whether it spends a turn, item consumed, aim, effects. Spells and potions alike. | `ABILITIES`, `abilities.ts` |
-| Effect | Primitive state change: face, damage over an `Area`, restore. One applier. | `Effect`, `applied` |
-| Event | Authoritative record of one consequence. The pipeline's sole output. | `GameEvent` |
-| Turn | The player's Action, then each monster's, then upkeep. | `endTurn` |
+| Policy | How an agent turns an Intent into a Plan. Situational choice lives here, per agent, not in Rules. | `bold`, `courteous` |
+| Ability | Data row: MP, cooldown, whether it spends a turn, item consumed, aim, effects, trigger. Spells, potions and creatures' knacks alike. | `ABILITIES`, `content/abilities.ts` |
+| Effect | Primitive state change; one applier. | `Effect`, `applied` (`effects.ts`) |
+| Event | Authoritative record of one consequence, with source, target and cause. The pipeline's sole output. | `GameEvent` |
+| Tick | Every active agent's turn in spawn order, then upkeep. | `tick` |
 
 ## Contract
 
 ```
-Intent ─planOf(actor)→ Plan ─attempted→ Rule ─┬─ performed → Events; the player's: endTurn if it spends a turn
+Intent ─planOf(actor)→ Plan ─attempted→ Rule ─┬─ performed (and not gated) → Events, caused by the Deed
                          ▲                     └─ rejected(reason) → Plan.otherwise[reason]?
                          └──────────────────────────────── yes ───────┘   no → `rejected` Event, nothing spent
 ```
 
-- `act(game, intent)` is the only entry; the UI only ever sends the player's Intent. `endTurn` runs each monster's Intent through the same `settled`.
+- `tick(game, intents)` runs every agent's Plan through the same `settled`; `act(game, intent)` is the UI's turn-based entry for the player's Intent (`src/game/actions/pipeline.ts`, `src/game/tick.ts`).
 - `RULES` is a mapped type over `Deed["kind"]`: a Deed without a Rule, or a narration verb or rejection reason without text, is a type error.
 - Rules are isolated: `turn` only faces, `step` only moves the way faced (rejecting `not-facing`, `blocked`, `occupied`), `attack` only hits a faced, adjacent foe. Combined behaviours are Abilities (strike faces and attacks in one turn).
 - Alternatives belong to the actor, not to Deeds or the pipeline: `planOf` builds the actor's Plan; `attempted` walks it generically and knows no Deed. A Plan is a finite tree value, so walking it always ends. A Deed alone is a one-node Plan. [Behavior-tree fallback node; contrast Hauberk, where the Action returns its alternate: [hauberk-actions.md](hauberk-actions.md)]
 - Every actor's `move` steps; on `not-facing`, turns; on `occupied`, bumps by its policy. Monsters are `bold`: `attack` that hex. The player is `courteous`: `attack`, and on `friendly`, `interact`.
 - One rule set for every actor. Creature Minds choose Intents (`move` toward a goal, or `wait`), as the player does.
-- A rejected Plan spends nothing, for any actor (except a struggle against an affliction, below); it records one `rejected` Event naming the last Deed attempted and its reason. A monster decides once per world turn, so a rejected Plan leaves it idle that turn.
-- Every consequence is an Event naming its `actor`, and its `target` if it has one, as a `Who` snapshot (id, kind, faction, home biome): enough for narration to name and tell actors apart without the game state. The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
+- A rejected Plan spends nothing, for any agent (except a struggle against a condition, below); it records one `rejected` Event naming the last Deed attempted and its reason. A monster decides once per tick, so a rejected Plan leaves it idle that turn.
+- Every consequence is an Event naming its `source`, its `target` if it has one, as `Who` snapshots (id, kind, faction, home biome), and its `cause`: enough for narration to name and tell entities apart without the game state. The UI derives state from Events (`stepped` onto a chest opens the inventory), never by re-deriving rules. Every Event is logged.
 - `use` pays its Ability's costs (MP, cooldown, item) itself; only it has costs beyond the turn.
-- Player-only for now: `use`, `transfer`, `prepare`, `destroy`, `learn`, `interact`, `trade` act on the player's resources. Creature-only: `summon` (hostile, falling back to its move when `blocked`) and `restock` (idle, falling back when `full`), attempted first by a ready caster's Plan. Foes are actors of different factions; only the player attacks spawners, and only lairs.
-- Afflictions are `Actor` state, not Deeds (`src/game/afflictions.ts`): each lasts at most the turns inflicted, and each upkeep may be shaken off at a chance growing by its `shakeOff` per turn suffered, so none lasts long whatever the caster's level. Stun lets a Plan attempt only `wait`; paralysis is a rejection inside `turn` and `step`, after their own checks, so a bump attack still lands. Either way the actor loses the turn struggling (`struggled`), which counts toward recovery; this is the one rejection that spends a turn.
-- Creature spells trigger at their `chance` when ready: each turn for summons and restocks, each landed hit for afflictions, which any creature may inflict on any foe.
+- Rules need components, not kinds: `use` any caster, `transfer`/`take-all`/`trade` any carrier with a purse, `learn` any caster that progresses, `attack` anything hostile with health (spawners included). A creature's knacks (summon, restock) are `use`, attempted first in its Plan when its state triggers them, falling back to its move on `blocked` or `full`; hit-triggered knacks (bleed, stun, paralyze) are cast by a landed attack.
+- Conditions are entity state, not Deeds (`src/game/conditions.ts`, rows in `content/conditions.ts`). A Rule's performed outcome is rejected as `gated` when a current condition `forbids` the Deed or `allows` only others; checked after the Rule's own checks, so a paralysed bump attack still lands. A gated agent loses the turn struggling (`struggled`), which counts toward recovery; this is the one rejection that spends a turn.
 
 ## Extension points
 
