@@ -480,9 +480,7 @@ function SpellSlots(props: {
                     <span class="absolute inset-x-0 bottom-0.5 text-center">
                       {bound()}
                     </span>
-                    <span class="absolute top-0.5 right-1">
-                      {tallyOf(props.game, bound())}
-                    </span>
+                    <Count>{tallyOf(props.game, bound())}</Count>
                   </>
                 )}
               </Show>
@@ -539,32 +537,22 @@ function AbilityPicker(props: {
   bound: AbilityId | undefined;
   bind: (ability: AbilityId | undefined) => void;
 }) {
-  const option = (ability: AbilityId, detail: JSX.Element) => (
-    <button
-      type="button"
-      class="block w-full text-left"
-      classList={{ outline: props.bound !== ability }}
-      onClick={() => props.bind(ability)}
-    >
-      {detail}
-    </button>
-  );
   return (
     <article>
       <header>
         <h3>Slot {props.slot + 1}</h3>
       </header>
       <For each={ABILITY_IDS.filter((ability) => isKnown(props.game, ability))}>
-        {(ability) =>
-          option(
-            ability,
-            <>
-              <strong>{abilityNameOf(ability)}</strong> · {costOf(ability)}
-              <br />
-              <small>{abilityOf(ability).summary}</small>
-            </>,
-          )
-        }
+        {(ability) => (
+          <button
+            type="button"
+            class="w-full text-left"
+            classList={{ outline: props.bound !== ability }}
+            onClick={() => props.bind(ability)}
+          >
+            <AbilityCard ability={ability} />
+          </button>
+        )}
       </For>
       <footer>
         <small>Changing a slot spends a turn.</small>
@@ -604,20 +592,15 @@ function SpellsPanel(props: {
           return (
             <button
               type="button"
-              class="flex w-full items-center gap-(--pico-spacing) text-left outline"
+              class="w-full text-left outline"
               classList={{ "opacity-40 grayscale": getUnlocks() === 0 }}
               onClick={() => props.dispatch({ kind: "learn", spell })}
             >
-              <AbilityIcon ability={spell} />
-              <span class="grow">
-                <strong>{spell}</strong> · {costOf(spell)}
-                <br />
-                <small>{abilityOf(spell).summary}</small>
-              </span>
-              <strong class="whitespace-nowrap">
-                Level {getLevel()}
-                <Show when={getUnlocks() > 0}> → {getLevel() + 1}</Show>
-              </strong>
+              <AbilityCard ability={spell}>
+                {" "}
+                · {getLevel() > 0 ? `Level ${getLevel()}` : "Unlearned"}
+                <Show when={getUnlocks() > 0}> → Level {getLevel() + 1}</Show>
+              </AbilityCard>
             </button>
           );
         }}
@@ -791,14 +774,35 @@ const ABILITY_ICONS: Record<AbilityId, string> = {
   mana: "science",
 };
 
-function AbilityIcon(props: { ability: AbilityId }) {
-  return <HTMLIcon type={ABILITY_ICONS[props.ability]} class="text-2xl" />;
+function AbilityIcon(props: { ability: AbilityId; cap?: "start" }) {
+  return (
+    <HTMLIcon
+      type={ABILITY_ICONS[props.ability]}
+      class="text-2xl"
+      data-cap={props.cap}
+    />
+  );
 }
 
-function Count(props: { children: number }) {
+/** An ability's list entry, its icon the left cap; `children` follow the name. */
+function AbilityCard(props: { ability: AbilityId; children?: JSX.Element }) {
   return (
-    <span class="absolute right-1 bottom-0.5 text-xs">{props.children}</span>
+    <>
+      <AbilityIcon ability={props.ability} cap="start" />
+      <span>
+        <strong>{abilityNameOf(props.ability)}</strong>
+        {props.children}
+        <br />
+        <small>{abilityOf(props.ability).summary}</small>
+        <br />
+        <small>{costOf(props.ability)}</small>
+      </span>
+    </>
   );
+}
+
+function Count(props: { children: JSX.Element }) {
+  return <span class="absolute top-0.5 right-1 text-xs">{props.children}</span>;
 }
 
 function Hotkey(props: { children: string }) {
