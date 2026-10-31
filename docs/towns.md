@@ -22,7 +22,7 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 
 ## Rules
 
-- Minds notice the nearest foe (`mindOf`), so townsfolk and wild monsters hunt each other; townsfolk never target the player. Kills by townsfolk grant the player nothing.
+- Minds notice the nearest foe (`mindOf`): any hostile entity with hit points, spawners included, but foes that can fight back (with `stats`) before spawners. So townsfolk and wild monsters hunt each other and, with no fighter in sight, each other's spawners; nobody attacks its own faction's. Townsfolk never target the player. A wrecked spawner without a boss (a town) just heals and spawns again. Kills by townsfolk grant the player nothing.
 - Idle townsfolk beside the player wait (`isAttending`), so trading isn't interrupted by wandering.
 - The player's damage (bump, spells) only hurts foes.
 - `interact` (player-only, adjacent, facing irrelevant) spends a turn only when the creature has a Service. The player's `move` policy is `courteous`: `bold`, but an `attack` rejected as `friendly` falls back to `interact`.

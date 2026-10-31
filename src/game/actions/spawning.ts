@@ -72,12 +72,13 @@ const quarryOf = (game: Game, spawner: SpawnerEntity) =>
       (a, b) => hexDistance(a.at, spawner.at) - hexDistance(b.at, spawner.at),
     )[0];
 
-/** Its boss emerges, hostile toward the nearest foe, once a hex beside it is free. */
+/** Its boss, if it has one, emerges hostile toward the nearest fighting foe once a hex beside it is free. */
 const unleashBoss = (game: Game, spawner: SpawnerEntity): Game => {
   const home = spawnerOfEntity(spawner);
   const boss = bossOf(home.kind);
+  if (!boss) return updated(game, spawner.id, { isBossDue: false });
   const site = spawnSiteOf(game, home.at);
-  if (!boss || !site) return game;
+  if (!site) return game;
   const creature = spawned(game, home, boss, site);
   const quarry = quarryOf(game, spawner);
   const hostile = quarry

@@ -97,23 +97,19 @@ const wander = (
   return rng.weighted(options, game.turn, 1);
 };
 
-/** Standing fighters hostile to `creature`. */
+/** Hostile entities with hit points left. */
 const foesOf = (game: Game, creature: Creature) =>
-  entitiesWith(
-    game,
-    "agent",
-    "stats",
-    "position",
-    "health",
-    "allegiance",
-  ).filter(
+  entitiesWith(game, "position", "health", "allegiance").filter(
     ({ faction, hp, id }) =>
       id !== creature.id &&
       hp > 0 &&
       relationOf(faction, creature.faction) === "hostile",
   );
 
-/** Notices the nearest foe it can, else loses track. */
+/** Foes that can deal damage come before those that can't, such as spawners. */
+const threatOf = (foe: Entity): number => (has(foe, "stats") ? 0 : 1);
+
+/** Notices the most threatening foe it can, nearest first, else loses track. */
 const mindOf = (game: Game, creature: Creature): Mind => {
   const { at, facing, mind } = creature;
   const distanceOf = (foe: { readonly at: Hex }) => hexDistance(foe.at, at);
@@ -123,7 +119,9 @@ const mindOf = (game: Game, creature: Creature): Mind => {
         distanceOf(foe) <= SIGHT &&
         canNotice(game.land.tileAt, at, facing, foe.at),
     )
-    .sort((a, b) => distanceOf(a) - distanceOf(b))[0];
+    .sort(
+      (a, b) => threatOf(a) - threatOf(b) || distanceOf(a) - distanceOf(b),
+    )[0];
   return quarry ? sighted(mind, at, quarry) : unsighted(mind, at);
 };
 

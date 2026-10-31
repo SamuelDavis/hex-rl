@@ -62,7 +62,7 @@ An entity's turn is `TURN` (`systems/turns.ts`), the single ordered list of per-
 | Phase | Module | Does |
 |---|---|---|
 | suffering | `systems/conditions.ts` | its conditions suffered a turn longer; due `every` effects applied, credited to whoever inflicted them |
-| acting | `systems/turns.ts`, `systems/minds.ts` | an agent's Plan: a seat's given Intent, or a mind's choice (`minded`): a creature's perception and move, a spawner's `spawn` (`actions/spawning.ts`, falling back to `wait`) |
+| acting | `systems/turns.ts`, `systems/minds.ts` | an agent's Plan: a seat's given Intent, or a mind's choice (`minded`): a creature's perception (hostile fighters before hostile spawners, nearest first) and move, a spawner's `spawn` (`actions/spawning.ts`, falling back to `wait`) |
 | recovering | `systems/conditions.ts` | its timed conditions run down, and may be shaken off |
 
 `UPKEEP` (`tick.ts`) is the single ordered list of world-level systems after every turn: `chunks` (the active set; materialises spawners of newly active chunks), then `vision` (the player's seen hexes). Every phase and system stamps its events' `cause`.

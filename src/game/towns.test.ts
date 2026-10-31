@@ -15,6 +15,8 @@ import { ABILITIES } from "./content/abilities";
 import { offerOf, priceOf, type Item } from "./items";
 import { dangerOf, type Spawner } from "./terrain";
 import { sighted } from "./mind";
+import { spawnerIdOf } from "./archetypes";
+import { updated } from "./world";
 import {
   east,
   gameWith,
@@ -90,6 +92,59 @@ describe("towns", () => {
 });
 
 describe("factions", () => {
+  describe("spawners", () => {
+    const camp = { kind: "town", at: { q: 16, r: 0 } } as const;
+    const lair = { kind: "village", at: { q: 16, r: 0 } } as const;
+    const beside = { q: 15, r: 0 };
+    /** Out of the player's sight, its spawner idle, with `creatures`. */
+    const near = (spawner: Spawner, creatures: Creature[]) =>
+      withCreatures(
+        updated(gameWith([], landOf({}, [spawner])), spawnerIdOf(spawner.at), {
+          spawnsAt: Infinity,
+        }),
+        creatures,
+      );
+
+    test("monsters attack a hostile spawner they notice", () => {
+      const goblin = creature(beside, "goblin", "se", lair);
+      const next = act(near(camp, [goblin]), WAIT);
+      expect(eventsOf(next)).toContainEqual(
+        expect.objectContaining({
+          kind: "hurt",
+          source: who(goblin),
+          target: expect.objectContaining({ id: spawnerIdOf(camp.at) }),
+        }),
+      );
+    });
+
+    test("monsters never attack their own faction's spawners", () => {
+      const goblin = creature(beside, "goblin", "se", lair);
+      const games = historyOf(near(lair, [goblin]), 10);
+      for (const game of games)
+        expect(game.events.filter(({ kind }) => kind === "hurt")).toEqual([]);
+    });
+
+    test("monsters go after foes that can fight back before spawners", () => {
+      const goblin = creature(beside, "goblin", "se", lair);
+      const peasant = townsfolk({ q: 15, r: -2 }, "peasant", "s");
+      const next = act(near(camp, [goblin, peasant]), WAIT);
+      expect(
+        creaturesOf(next).find(({ kind }) => kind === "goblin")!.mind,
+      ).toMatchObject({ state: "hostile", lastSeen: peasant.at });
+    });
+
+    test("a spawner without a boss, wrecked, spawns again once healed", () => {
+      const wrecked = updated(near(camp, []), spawnerIdOf(camp.at), {
+        hp: 0,
+        isWrecked: true,
+        isBossDue: true,
+        spawnsAt: 0,
+      });
+      const games = historyOf(wrecked, 400);
+      expect(creaturesOf(games.at(-1)!).length).toBeGreaterThan(0);
+    });
+  });
+
   test("townsfolk and monsters that notice each other fight", () => {
     const at = { q: 4, r: 0 };
     const goblin = creature(at, "goblin", "n");
