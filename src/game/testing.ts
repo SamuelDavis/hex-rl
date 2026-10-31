@@ -46,6 +46,7 @@ export const monster = (
   mind: IDLE,
   level: 1,
   readyAt: 0,
+  wares: [],
 });
 
 const EVERY_SPELL = new Map(SPELL_IDS.map((spell) => [spell, 1]));

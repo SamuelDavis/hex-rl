@@ -131,6 +131,16 @@ const HABITAT: Record<
     },
   },
   cave: { minDanger: 3, biomes: { [Biome.Marsh]: 3 }, wet: 3 },
+  town: {
+    minDanger: 1,
+    biomes: {
+      [Biome.Beach]: 1,
+      [Biome.Plains]: 3,
+      [Biome.Forest]: 1,
+      [Biome.Taiga]: 1,
+    },
+    wet: 2,
+  },
 };
 
 export const habitatWeightOf = (

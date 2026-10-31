@@ -40,6 +40,7 @@ import {
 } from "./hex";
 import {
   MONSTER_SPELLS,
+  membersOf,
   MONSTERS,
   SPAWNERS,
   spawnerHpOf,
@@ -236,7 +237,7 @@ describe("spawners", () => {
 
   test("have more hit points than the monsters they spawn", () => {
     for (const kind of Object.keys(SPAWNERS) as SpawnerKind[])
-      for (const [spawned] of SPAWNERS[kind].pool)
+      for (const spawned of membersOf(kind))
         expect(spawnerHpOf(kind)).toBeGreaterThan(MONSTERS[spawned].hp);
   });
 
@@ -267,9 +268,10 @@ describe("spawners", () => {
   });
 
   test("have bosses stronger and richer than the monsters they spawn", () => {
-    for (const kind of Object.keys(SPAWNERS) as SpawnerKind[]) {
-      const boss = MONSTERS[SPAWNERS[kind].boss];
-      for (const [spawned] of SPAWNERS[kind].pool) {
+    for (const type of Object.values(SPAWNERS)) {
+      if (type.faction !== "wild") continue;
+      const boss = MONSTERS[type.boss];
+      for (const [spawned] of type.pool) {
         const { hp, damage, gold } = MONSTERS[spawned];
         expect(boss.hp).toBeGreaterThan(hp);
         expect(boss.damage).toBeGreaterThanOrEqual(damage);
@@ -1121,12 +1123,14 @@ describe("monster spells", () => {
     ]);
     expect(act(paralyzed, step("se")).events).toContainEqual({
       kind: "hitMonster",
+      actor: "player",
       monster: "goblin",
     });
   });
 
   test("afflictions wait out their cooldown before recurring", () => {
-    const spell = MONSTER_SPELLS.goblin!;
+    const spell = MONSTER_SPELLS.goblin;
+    if (spell?.kind !== "afflict") throw new Error("goblins afflict");
     const games = historyOf(
       gameWith([leveled("goblin", 1)]),
       2 + spell.cooldown,

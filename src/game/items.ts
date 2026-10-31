@@ -199,9 +199,34 @@ const ITEM_WEIGHTS: readonly (readonly [PotionKind | GearKind, number])[] = [
   ["large bag", 0.1],
 ];
 
+/** What a trader asks for an item; it pays `SELL_RATE` of this. */
+const PRICES: Readonly<Record<PotionKind | GearKind, number>> = {
+  health: 10,
+  mana: 10,
+  helm: 15,
+  chest: 30,
+  pants: 20,
+  boots: 15,
+  gloves: 15,
+  "small bag": 20,
+  bag: 40,
+  "large bag": 80,
+};
+
+const SELL_RATE = 0.5;
+
+const kindOf = (item: Item): PotionKind | GearKind =>
+  item.kind === "potion" ? item.potion : item.gear;
+
+export const priceOf = (item: Item): number => PRICES[kindOf(item)];
+
+export const offerOf = (item: Item): number =>
+  Math.floor(priceOf(item) * SELL_RATE);
+
 const PREFIX_CHANCE = 0.75;
 
-const itemOf = (rng: Rng, id: string, source: MonsterKind): Item => {
+/** `source` names the gear: "… of the wolf". */
+const itemOf = (rng: Rng, id: string, source?: MonsterKind): Item => {
   const kind = rng.weighted(ITEM_WEIGHTS, 0);
   if (isPotion(kind)) return { id, kind: "potion", potion: kind };
   const { bases, materials } = GEAR[kind];
@@ -215,7 +240,7 @@ const itemOf = (rng: Rng, id: string, source: MonsterKind): Item => {
     name: {
       ...(prefix && { prefix }),
       base: rng.pick(bases, 3),
-      suffix: `of the ${source}`,
+      ...(source && { suffix: `of the ${source}` }),
     },
   };
 };
@@ -234,4 +259,17 @@ export const lootOf = (
     .map((roll) => itemOf(rng.child(roll), `${id}/${roll}`, kind));
   if (amount === 0 && dropped.length === 0) return undefined;
   return { gold: amount, items: dropped };
+};
+
+/** Fresh wares stocked by trader `id` on `turn`, ids unique per stocking. */
+export const waresOf = (
+  seed: number,
+  id: string,
+  turn: number,
+  count: number,
+): readonly Item[] => {
+  const rng = rngOf(seed, "wares").child(id).child(turn);
+  return Array.from({ length: count }, (_, i) =>
+    itemOf(rng.child(i), `${id}/${turn}/${i}`),
+  );
 };

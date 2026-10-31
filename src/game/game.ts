@@ -1,4 +1,4 @@
-import { findPath, rngOf, type Bounds } from "procgen";
+import { findPath, rngOf, type Bounds, type Rng } from "procgen";
 import { canStep } from "./explorer";
 import {
   add,
@@ -15,12 +15,15 @@ import {
 } from "./hex";
 import { IDLE, sighted, tetherOf, unsighted, type Mind } from "./mind";
 import {
+  bossOf,
   MONSTER_SPELLS,
   MONSTERS,
   potencyOf,
-  SPAWNERS,
+  SERVICES,
   spawnerHpOf,
+  spawnerOf,
   type Affliction,
+  type Faction,
   type MonsterKind,
   type SpawnerKind,
 } from "./monsters";
@@ -41,8 +44,12 @@ import {
   fits,
   loadOf,
   lootOf,
+  offerOf,
   overflowOf,
+  priceOf,
+  sizeOf,
   takenOf,
+  waresOf,
   PLACE_NAMES,
   PLACES,
   type Chest,
@@ -62,6 +69,9 @@ const HP_REGEN_INTERVAL = 10;
 const MP_REGEN_INTERVAL = 2;
 const PATH_BUDGET = 200;
 export const XP_PER_LEVEL = 10;
+export const BOUNTY_GOLD_PER_LEVEL = 25;
+/** Widening radii the bailiff searches for a lair to post as a bounty. */
+const BOUNTY_SEARCH = [16, 32, 64, 128] as const;
 
 export interface Land {
   readonly seed: number;
@@ -85,6 +95,17 @@ export interface Player {
   readonly spells: ReadonlyMap<SpellId, number>;
   /** The turn each affliction suffered wears off. */
   readonly afflictions: ReadonlyMap<Affliction, number>;
+  readonly bounty: Bounty | undefined;
+  /** Level of the last bounty claimed; each new one is posted at a higher level. */
+  readonly bountyLevel: number;
+}
+
+/** A bailiff's charge: slay the boss of the lair at `at`, then return to any bailiff. */
+export interface Bounty {
+  readonly kind: SpawnerKind;
+  readonly at: Hex;
+  readonly level: number;
+  readonly isSlain: boolean;
 }
 
 export const PLAYER = "player";
@@ -110,6 +131,8 @@ export interface Monster {
   readonly level: number;
   /** The turn its spell, if any, is ready again. */
   readonly readyAt: number;
+  /** What it sells, if a trader. */
+  readonly wares: readonly Item[];
 }
 
 export interface SpawnerState {
@@ -201,6 +224,22 @@ export interface Summon {
   readonly kind: "summon";
 }
 
+export interface Restock {
+  readonly kind: "restock";
+}
+
+export interface Interact {
+  readonly kind: "interact";
+  readonly at: Hex;
+}
+
+/** Sells `item` from the pack to `trader`, or buys it from the trader's wares. */
+export interface Trade {
+  readonly kind: "trade";
+  readonly trader: Monster["id"];
+  readonly item: Item["id"];
+}
+
 type Deed =
   | Turn
   | Step
@@ -212,7 +251,10 @@ type Deed =
   | Prepare
   | Destroy
   | Learn
-  | Summon;
+  | Summon
+  | Restock
+  | Interact
+  | Trade;
 
 export type Intent = Move | Deed;
 
@@ -259,6 +301,9 @@ export type Rejection =
   | "no-unlocks"
   | "stunned"
   | "paralyzed"
+  | "friendly"
+  | "uninterested"
+  | "no-gold"
   | "unable";
 
 export type GameEvent =
@@ -281,8 +326,16 @@ export type GameEvent =
       readonly to: Hex;
     }
   | { readonly kind: "used"; readonly ability: AbilityId }
-  | { readonly kind: "hitMonster"; readonly monster: MonsterKind }
-  | { readonly kind: "killed"; readonly monster: MonsterKind }
+  | {
+      readonly kind: "hitMonster";
+      readonly actor: ActorKind;
+      readonly monster: MonsterKind;
+    }
+  | {
+      readonly kind: "killed";
+      readonly actor: ActorKind;
+      readonly monster: MonsterKind;
+    }
   | { readonly kind: "dropped"; readonly monster: MonsterKind }
   | {
       readonly kind: "moved";
@@ -316,7 +369,23 @@ export type GameEvent =
       readonly turns: number;
     }
   | { readonly kind: "bled" }
-  | { readonly kind: "died" };
+  | { readonly kind: "died" }
+  | { readonly kind: "restocked"; readonly monster: MonsterKind }
+  | {
+      readonly kind: "interacted";
+      readonly monster: MonsterKind;
+      readonly id: Monster["id"];
+    }
+  | { readonly kind: "bought"; readonly item: Item; readonly price: number }
+  | { readonly kind: "sold"; readonly item: Item; readonly price: number }
+  | {
+      readonly kind: "bountied";
+      readonly spawner: SpawnerKind;
+      readonly at: Hex;
+      readonly level: number;
+    }
+  | { readonly kind: "bountySlain"; readonly monster: MonsterKind }
+  | { readonly kind: "rewarded"; readonly gold: number };
 
 export const isOver = (game: Game): boolean => game.player.hp <= 0;
 
@@ -395,6 +464,15 @@ const bodyOf = (game: Game, actor: ActorId): Body =>
 const kindOf = (game: Game, actor: ActorId): ActorKind =>
   actor === PLAYER ? PLAYER : monsterOf(game, actor).kind;
 
+export const factionOfMonster = ({ home }: Monster): Faction =>
+  spawnerOf(home.kind).faction;
+
+const factionOf = (game: Game, actor: ActorId): Faction =>
+  actor === PLAYER ? "town" : factionOfMonster(monsterOf(game, actor));
+
+const areFoes = (game: Game, a: ActorId, b: ActorId): boolean =>
+  factionOf(game, a) !== factionOf(game, b);
+
 export const visibleOf = ({ land, player }: Game): Set<string> =>
   visibleFrom(land.tileAt, player.at, player.facing);
 
@@ -406,8 +484,11 @@ const withSight = (game: Game): Game => ({
 const monsterAt = (game: Game, hex: Hex) =>
   game.monsters.find(({ at }) => sameHex(at, hex));
 
+const occupantAt = (game: Game, hex: Hex): ActorId | undefined =>
+  sameHex(hex, game.player.at) ? PLAYER : monsterAt(game, hex)?.id;
+
 const isOccupied = (game: Game, hex: Hex) =>
-  sameHex(hex, game.player.at) || monsterAt(game, hex) !== undefined;
+  occupantAt(game, hex) !== undefined;
 
 const spawnerAt = (game: Game, hex: Hex) =>
   game.land.spawnersIn(boundsAround(hex, 1)).find(({ at }) => sameHex(at, hex));
@@ -453,12 +534,13 @@ const spawnedFrom = (
   mind: IDLE,
   level: dangerOf(spawner.at, land.spawn),
   readyAt: 0,
+  wares: [],
 });
 
 const unleashBoss = (game: Game, spawner: Spawner): Game => {
-  const { boss } = SPAWNERS[spawner.kind];
+  const boss = bossOf(spawner.kind);
   const site = spawnSiteOf(game, spawner);
-  if (!site) return game;
+  if (!boss || !site) return game;
   const monster = spawnedFrom(game, spawner, boss, site);
   return recorded(
     withSpawner(
@@ -476,32 +558,41 @@ const unleashBoss = (game: Game, spawner: Spawner): Game => {
   );
 };
 
+/** The kind `spawner` would spawn now, if it has room for one. */
+const recruitOf = (
+  { monsters, turn }: Game,
+  { kind, at }: Spawner,
+  rng: Rng,
+): MonsterKind | undefined => {
+  const members = monsters.filter(({ home }) => sameHex(home.at, at));
+  const type = spawnerOf(kind);
+  if (type.faction === "wild")
+    return members.length < type.cap
+      ? rng.weighted(type.pool, at.q, at.r, turn, 1)
+      : undefined;
+  return type.roster.find(
+    ([recruit, count]) =>
+      members.filter((member) => member.kind === recruit).length < count,
+  )?.[0];
+};
+
 const spawnFrom = (game: Game, spawner: Spawner): Game => {
   const { land, monsters, turn } = game;
   const { kind, at } = spawner;
-  const { pool, cap, interval, chance } = SPAWNERS[kind];
+  const { interval, chance } = spawnerOf(kind);
   const state = stateOf(game, spawner);
   if (state.isBossDue) return unleashBoss(game, spawner);
   const rng = rngOf(land.seed, "spawns");
   const site = spawnSiteOf(game, spawner);
-  if (
-    isWrecked(game, spawner) ||
-    !site ||
-    monsters.filter(({ home }) => sameHex(home.at, at)).length >= cap
-  )
-    return game;
+  const recruit = recruitOf(game, spawner, rng);
+  if (isWrecked(game, spawner) || !site || !recruit) return game;
   const isRevived = state.isWrecked;
   if (
     !isRevived &&
     (turn < state.readyAt || !rng.chance(chance, at.q, at.r, turn))
   )
     return game;
-  const monster = spawnedFrom(
-    game,
-    spawner,
-    rng.weighted(pool, at.q, at.r, turn, 1),
-    site,
-  );
+  const monster = spawnedFrom(game, spawner, recruit, site);
   return withSpawner({ ...game, monsters: [...monsters, monster] }, spawner, {
     ...state,
     readyAt: turn + interval,
@@ -536,6 +627,8 @@ export const newGame = (land: Land): Game =>
         xp: 0,
         spells: new Map(),
         afflictions: new Map(),
+        bounty: undefined,
+        bountyLevel: 0,
       },
       monsters: [],
       spawners: new Map(),
@@ -715,30 +808,49 @@ const destroy: Rule<Destroy> = (game) => {
   );
 };
 
-const attackMonster = (game: Game, target: Monster, damage: number): Game => {
+const attackMonster = (
+  game: Game,
+  by: ActorId,
+  target: Monster,
+  damage: number,
+): Game => {
+  const actor = kindOf(game, by);
   const hp = target.hp - damage;
   if (hp > 0)
-    return recorded(
-      {
-        ...game,
-        monsters: game.monsters.map((m) => (m === target ? { ...m, hp } : m)),
-      },
-      { kind: "hitMonster", monster: target.kind },
-    );
-  return dropLoot(
-    experienced(
-      recorded(
-        {
-          ...game,
-          monsters: game.monsters.filter((m) => m !== target),
-          kills: game.kills + 1,
-        },
-        { kind: "killed", monster: target.kind },
-      ),
-      MONSTERS[target.kind].hp * target.level,
-    ),
-    target,
+    return recorded(updated(game, target.id, { hp }), {
+      kind: "hitMonster",
+      actor,
+      monster: target.kind,
+    });
+  const slain = recorded(
+    { ...game, monsters: game.monsters.filter((m) => m !== target) },
+    { kind: "killed", actor, monster: target.kind },
   );
+  return dropLoot(by === PLAYER ? credited(slain, target) : slain, target);
+};
+
+const credited = (game: Game, slain: Monster): Game =>
+  bountyHunted(
+    experienced(
+      { ...game, kills: game.kills + 1 },
+      MONSTERS[slain.kind].hp * slain.level,
+    ),
+    slain,
+  );
+
+const bountyHunted = (game: Game, { kind, home }: Monster): Game => {
+  const { bounty } = game.player;
+  if (
+    !bounty ||
+    bounty.isSlain ||
+    !sameHex(bounty.at, home.at) ||
+    bossOf(bounty.kind) !== kind
+  )
+    return game;
+  return recorded(withPlayer(game, { bounty: { ...bounty, isSlain: true } }), {
+    kind: "bountySlain",
+    monster: kind,
+  });
 };
 
 const experienced = (game: Game, xp: number): Game => {
@@ -805,11 +917,16 @@ const struck = (game: Game, monster: Monster): Game =>
     monster,
   );
 
-const hit = (game: Game, at: Hex, damage: number): Game => {
-  const target = monsterAt(game, at);
-  if (target) return attackMonster(game, target, damage);
-  const spawner = spawnerAt(game, at);
-  if (spawner) return attackSpawner(game, spawner, damage);
+/** Hurts `by`'s foe at `at`, if any; only the player hurts spawners. */
+const hit = (game: Game, by: ActorId, at: Hex, damage: number): Game => {
+  const target = occupantAt(game, at);
+  if (target && areFoes(game, by, target))
+    return target === PLAYER
+      ? struck(game, monsterOf(game, by))
+      : attackMonster(game, by, monsterOf(game, target), damage);
+  const spawner = by === PLAYER ? spawnerAt(game, at) : undefined;
+  if (spawner && spawnerOf(spawner.kind).faction === "wild")
+    return attackSpawner(game, spawner, damage);
   return game;
 };
 
@@ -832,7 +949,10 @@ const applied = (
           (hex) =>
             !MELEE_AREAS.has(effect.area) || isInReach(game, player.at, hex),
         )
-        .reduce((state, hex) => hit(state, hex, effect.amount * mastery), game);
+        .reduce(
+          (state, hex) => hit(state, PLAYER, hex, effect.amount * mastery),
+          game,
+        );
     case "restore": {
       const max = effect.stat === "hp" ? MAX_HP : MAX_MP;
       const amount = effect.amount * mastery;
@@ -970,6 +1090,28 @@ const summon: Rule<Summon> = (game, _, actor) => {
   );
 };
 
+const restock: Rule<Restock> = (game, _, actor) => {
+  if (actor === PLAYER) return refused("unable");
+  const trader = monsterOf(game, actor);
+  const spell = MONSTER_SPELLS[trader.kind];
+  if (spell?.kind !== "restock") return refused("unable");
+  const { land, turn } = game;
+  if (trader.readyAt > turn) return refused("not-ready");
+  const missing = spell.stock - trader.wares.length;
+  if (missing <= 0) return refused("full");
+  const [min, max] = spell.cooldown;
+  const cooldown = rngOf(land.seed, "restock").child(actor).int(min, max, turn);
+  return performed(
+    recorded(
+      updated(game, actor, {
+        wares: [...trader.wares, ...waresOf(land.seed, actor, turn, missing)],
+        readyAt: turn + cooldown,
+      }),
+      { kind: "restocked", monster: trader.kind },
+    ),
+  );
+};
+
 const stepToward = (
   game: Game,
   monster: Monster,
@@ -1011,7 +1153,7 @@ interface Leash {
 
 const leashOf = ({ home, mind }: Monster): Leash => ({
   center: tetherOf(mind, home.at),
-  radius: SPAWNERS[home.kind].leash,
+  radius: spawnerOf(home.kind).leash,
 });
 
 const isWithin = (hex: Hex, { center, radius }: Leash) =>
@@ -1049,10 +1191,27 @@ const wander = (
   return rng.weighted(options, game.turn, 1);
 };
 
-const mindOf = ({ land, player }: Game, { at, facing, mind }: Monster): Mind =>
-  canNotice(land.tileAt, at, facing, player.at)
-    ? sighted(mind, at, player)
-    : unsighted(mind, at);
+const foesOf = (game: Game, monster: Monster): readonly Body[] => {
+  const faction = factionOfMonster(monster);
+  return [
+    ...(faction === "town" ? [] : [game.player]),
+    ...game.monsters.filter((other) => factionOfMonster(other) !== faction),
+  ];
+};
+
+/** Notices the nearest foe it can, else loses track. */
+const mindOf = (game: Game, monster: Monster): Mind => {
+  const { at, facing, mind } = monster;
+  const distanceOf = (foe: Body) => hexDistance(foe.at, at);
+  const quarry = foesOf(game, monster)
+    .filter(
+      (foe) =>
+        distanceOf(foe) <= SIGHT &&
+        canNotice(game.land.tileAt, at, facing, foe.at),
+    )
+    .sort((a, b) => distanceOf(a) - distanceOf(b))[0];
+  return quarry ? sighted(mind, at, quarry) : unsighted(mind, at);
+};
 
 const approach = (
   game: Game,
@@ -1094,25 +1253,42 @@ const toward = ({ at }: Monster, to: Hex | undefined): Intent => {
   return direction ? { kind: "move", direction } : { kind: "wait" };
 };
 
+const isBeside = ({ land }: Game, from: Hex, to: Hex): boolean =>
+  directionBetween(from, to) !== undefined && canStep(land.tileAt, from, to);
+
+/** Idle townsfolk beside the player stand still to deal with them. */
+const isAttending = (game: Game, monster: Monster): boolean =>
+  monster.mind.state === "idle" &&
+  factionOfMonster(monster) === "town" &&
+  isBeside(game, monster.at, game.player.at);
+
 const choiceOf = (game: Game, monster: Monster): Intent => {
-  const { land, player } = game;
-  const isBeside =
-    directionBetween(monster.at, player.at) !== undefined &&
-    canStep(land.tileAt, monster.at, player.at);
-  return monster.mind.state === "hostile" && isBeside
-    ? toward(monster, player.at)
-    : toward(monster, destinationOf(game, monster));
+  const { mind } = monster;
+  if (mind.state === "hostile" && isBeside(game, monster.at, mind.lastSeen))
+    return toward(monster, mind.lastSeen);
+  if (isAttending(game, monster)) return { kind: "wait" };
+  return toward(monster, destinationOf(game, monster));
 };
 
-const isSummoner = ({ kind, mind, readyAt }: Monster, { turn }: Game) =>
-  MONSTER_SPELLS[kind]?.kind === "summon" &&
-  mind.state === "hostile" &&
-  readyAt <= turn;
+/** Its spell's Deed, when ready and in the state it's cast in. */
+const castOf = (
+  { kind, mind, readyAt }: Monster,
+  { turn }: Game,
+): Summon | Restock | undefined => {
+  const spell = MONSTER_SPELLS[kind];
+  if (!spell || readyAt > turn) return undefined;
+  if (spell.kind === "summon" && mind.state === "hostile")
+    return { kind: "summon" };
+  if (spell.kind === "restock" && mind.state === "idle")
+    return { kind: "restock" };
+  return undefined;
+};
 
 const monsterPlanOf = (game: Game, monster: Monster): Plan => {
   const plan = planOf(game, monster.id, choiceOf(game, monster));
-  return isSummoner(monster, game)
-    ? { attempt: { kind: "summon" }, otherwise: { blocked: plan } }
+  const cast = castOf(monster, game);
+  return cast
+    ? { attempt: cast, otherwise: { blocked: plan, full: plan } }
     : plan;
 };
 
@@ -1191,22 +1367,146 @@ const step: Rule<Step> = (game, { direction }, actor) => {
   );
 };
 
-const isFoeAt = (game: Game, actor: ActorId, at: Hex): boolean =>
-  actor === PLAYER
-    ? monsterAt(game, at) !== undefined || spawnerAt(game, at) !== undefined
-    : sameHex(at, game.player.at);
+const foeProblemOf = (
+  game: Game,
+  actor: ActorId,
+  at: Hex,
+): Rejection | undefined => {
+  const occupant = occupantAt(game, at);
+  if (occupant) return areFoes(game, actor, occupant) ? undefined : "friendly";
+  const spawner = actor === PLAYER ? spawnerAt(game, at) : undefined;
+  if (!spawner) return "no-target";
+  return spawnerOf(spawner.kind).faction === "wild" ? undefined : "friendly";
+};
+
+const damageOf = (game: Game, actor: ActorId): number => {
+  if (actor === PLAYER) return PLAYER_DAMAGE;
+  const { kind, level } = monsterOf(game, actor);
+  return MONSTERS[kind].damage * level;
+};
 
 const attack: Rule<Attack> = (game, { at }, actor) => {
-  if (!isFoeAt(game, actor, at)) return refused("no-target");
+  const foeProblem = foeProblemOf(game, actor, at);
+  if (foeProblem) return refused(foeProblem);
   const { at: from, facing } = bodyOf(game, actor);
   const problem = reachProblemOf(game, from, at);
   if (problem) return refused(problem);
   if (directionBetween(from, at) !== facing) return refused("not-facing");
-  return performed(
-    actor === PLAYER
-      ? hit(game, at, PLAYER_DAMAGE)
-      : struck(game, monsterOf(game, actor)),
+  return performed(hit(game, actor, at, damageOf(game, actor)));
+};
+
+const interact: Rule<Interact> = (game, { at }, actor) => {
+  if (actor !== PLAYER) return refused("unable");
+  const problem = reachProblemOf(game, game.player.at, at);
+  if (problem) return refused(problem);
+  const npc = monsterAt(game, at);
+  if (!npc) return refused("no-target");
+  const service = SERVICES[npc.kind];
+  if (!service) return refused("uninterested");
+  const met = recorded(game, {
+    kind: "interacted",
+    monster: npc.kind,
+    id: npc.id,
+  });
+  return performed(service === "bounty" ? bountied(met, npc.at) : met);
+};
+
+const rewarded = (game: Game, bounty: Bounty): Game => {
+  const gold = BOUNTY_GOLD_PER_LEVEL * bounty.level;
+  return recorded(
+    withPlayer(game, {
+      gold: game.player.gold + gold,
+      bounty: undefined,
+      bountyLevel: bounty.level,
+    }),
+    { kind: "rewarded", gold },
   );
+};
+
+/** The nearest lair to `from` above `level`, searched in widening rings. */
+const lairAbove = (game: Game, from: Hex, level: number) => {
+  const { land } = game;
+  for (const radius of BOUNTY_SEARCH) {
+    const lair = land
+      .spawnersIn(boundsAround(from, radius))
+      .filter(
+        ({ kind, at }) =>
+          spawnerOf(kind).faction === "wild" &&
+          dangerOf(at, land.spawn) > level &&
+          hexDistance(at, from) <= radius,
+      )
+      .sort((a, b) => hexDistance(a.at, from) - hexDistance(b.at, from))[0];
+    if (lair) return lair;
+  }
+  return undefined;
+};
+
+/** Pays a slain bounty, then posts the next if none is outstanding. */
+const bountied = (game: Game, from: Hex): Game => {
+  const { bounty } = game.player;
+  if (bounty && !bounty.isSlain) return game;
+  const paid = bounty ? rewarded(game, bounty) : game;
+  const lair = lairAbove(paid, from, paid.player.bountyLevel);
+  if (!lair) return paid;
+  const level = dangerOf(lair.at, game.land.spawn);
+  return recorded(
+    withPlayer(paid, {
+      bounty: { kind: lair.kind, at: lair.at, level, isSlain: false },
+    }),
+    { kind: "bountied", spawner: lair.kind, at: lair.at, level },
+  );
+};
+
+const traderOf = (game: Game, id: Monster["id"]): Monster | undefined =>
+  game.monsters.find(
+    (monster) => monster.id === id && SERVICES[monster.kind] === "trade",
+  );
+
+const sell = (game: Game, trader: Monster, item: Item): Game => {
+  const price = offerOf(item);
+  const { pack, gold } = game.player;
+  return recorded(
+    updated(
+      withPlayer(game, {
+        pack: pack.filter((held) => held !== item),
+        gold: gold + price,
+      }),
+      trader.id,
+      { wares: [...trader.wares, item] },
+    ),
+    { kind: "sold", item, price },
+  );
+};
+
+const buy = (game: Game, trader: Monster, item: Item): Outcome => {
+  const price = priceOf(item);
+  const { pack, gold, equipment } = game.player;
+  if (gold < price) return refused("no-gold");
+  if (loadOf(pack) + sizeOf(item) > capacityOf(equipment))
+    return refused("full");
+  return performed(
+    recorded(
+      updated(
+        withPlayer(game, { pack: [...pack, item], gold: gold - price }),
+        trader.id,
+        { wares: trader.wares.filter((ware) => ware !== item) },
+      ),
+      { kind: "bought", item, price },
+    ),
+  );
+};
+
+const trade: Rule<Trade> = (game, action, actor) => {
+  if (actor !== PLAYER) return refused("unable");
+  const trader = traderOf(game, action.trader);
+  if (!trader) return refused("no-target");
+  const problem = reachProblemOf(game, game.player.at, trader.at);
+  if (problem) return refused(problem);
+  const isIt = ({ id }: Item) => id === action.item;
+  const sold = game.player.pack.find(isIt);
+  if (sold) return performed(sell(game, trader, sold));
+  const bought = trader.wares.find(isIt);
+  return bought ? buy(game, trader, bought) : refused("no-item");
 };
 
 const RULES: {
@@ -1223,6 +1523,9 @@ const RULES: {
   destroy,
   learn,
   summon,
+  restock,
+  interact,
+  trade,
 };
 
 interface Settlement {
@@ -1236,20 +1539,29 @@ const outcomeOf = <A extends Deed>(
   actor: ActorId,
 ): Outcome => (RULES[action.kind] as Rule<A>)(game, action, actor);
 
-const bold = (direction: Direction, from: Hex): Plan => ({
+/** Step the way faced, else turn that way, else `bump` whoever is in the way. */
+const moving = (direction: Direction, bump: Plan): Plan => ({
   attempt: { kind: "step", direction },
   otherwise: {
     "not-facing": { attempt: { kind: "turn", direction } },
-    occupied: {
-      attempt: { kind: "attack", at: add(from, DIRECTIONS[direction]) },
-    },
+    occupied: bump,
   },
 });
 
-const planOf = (game: Game, actor: ActorId, intent: Intent): Plan =>
-  intent.kind === "move"
-    ? bold(intent.direction, bodyOf(game, actor).at)
-    : { attempt: intent };
+const bold = (ahead: Hex): Plan => ({ attempt: { kind: "attack", at: ahead } });
+
+/** Bold toward foes; interacts with friends. */
+const courteous = (ahead: Hex): Plan => ({
+  attempt: { kind: "attack", at: ahead },
+  otherwise: { friendly: { attempt: { kind: "interact", at: ahead } } },
+});
+
+const planOf = (game: Game, actor: ActorId, intent: Intent): Plan => {
+  if (intent.kind !== "move") return { attempt: intent };
+  const ahead = add(bodyOf(game, actor).at, DIRECTIONS[intent.direction]);
+  const policy = actor === PLAYER ? courteous : bold;
+  return moving(intent.direction, policy(ahead));
+};
 
 interface Attempt {
   readonly deed: Deed;
