@@ -19,6 +19,7 @@ Personal starting point for SolidJS SPAs: classless semantic HTML styled by Pico
 - Monster AI state machines, prior art, and refactor recommendations: [docs/monster-ai.md](docs/monster-ai.md).
 - UI/game separation contract (session, modes, events) and prior art: [docs/ui-architecture.md](docs/ui-architecture.md).
 - Inventory, loot, and paper-doll equipment decisions and prior art: [docs/inventory.md](docs/inventory.md).
+- Architecture: ECS type system (components, entities, systems), ticks, effects, conditions, events, recipes for extending, migration: [docs/architecture.md](docs/architecture.md).
 - Action pipeline contract (intent → action → events, shared by player and monsters), vocabulary and prior art: [docs/action-pipeline.md](docs/action-pipeline.md).
 - Towns, factions, interaction, trade, restocking and bounties: [docs/towns.md](docs/towns.md).
 - Hauberk's action, alternative and event system, cited, contrasted with hexrl's per-actor Plans: [docs/hauberk-actions.md](docs/hauberk-actions.md).
