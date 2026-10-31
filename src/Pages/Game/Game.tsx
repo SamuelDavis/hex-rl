@@ -30,6 +30,8 @@ import {
   type Loadout,
 } from "./loadout";
 import { drawScene, groundOffsetOf, screenRadiusOf } from "./draw";
+import { CANVAS_THEMES } from "./canvasTheme";
+import { useAppState } from "../../AppState";
 import {
   cooldownOf,
   GOLD,
@@ -86,6 +88,7 @@ const BIOME_NAMES = Object.fromEntries(
 const randomSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
 export default function Game() {
+  const { getTheme } = useAppState();
   const [getSession, setSession] = createSignal(newSession(randomSeed(), 0));
   const [getTab, setTab] = createSignal<Tab>("Play");
   const [getSize, setSize] = createSignal({ width: 0, height: 0 });
@@ -189,6 +192,7 @@ export default function Game() {
     const context = canvas.getContext("2d")!;
     context.scale(ratio, ratio);
     drawScene(context, {
+      theme: CANVAS_THEMES[getTheme()],
       tileAt: land.tileAt,
       spawnersIn: land.spawnersIn,
       isWrecked: (spawner) => isWrecked(game, spawner),
@@ -217,7 +221,7 @@ export default function Game() {
         </div>
         <progress value={Math.max(0, getGame().player.hp)} max={MAX_HP} />
         <progress
-          class="[--pico-progress-color:hsl(205_30%_50%)]"
+          class="[--pico-progress-color:var(--mana-color)]"
           value={getGame().player.mp}
           max={MAX_MP}
         />

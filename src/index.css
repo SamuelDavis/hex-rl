@@ -3,6 +3,11 @@
 
 @layer theme {
   :root {
+    --mana-color: hsl(215 85% 55%);
+  }
+
+  [data-app-theme="woodcut"] {
+    --mana-color: hsl(205 30% 50%);
     --ink: #1b1411;
     --soot: #16110e;
     --char: #1f1813;
@@ -102,12 +107,12 @@
     --pico-tooltip-color: var(--pico-contrast-inverse);
   }
 
-  :is(h1, h2, h3, h4, h5, h6, legend, summary, th) {
+  [data-app-theme="woodcut"] :is(h1, h2, h3, h4, h5, h6, legend, summary, th) {
     font-family: "IM Fell English SC", var(--font-woodcut);
     letter-spacing: 0.02em;
   }
 
-  article {
+  [data-app-theme="woodcut"] article {
     border: var(--pico-border-width) solid var(--pico-card-border-color);
   }
 }

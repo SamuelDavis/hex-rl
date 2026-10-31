@@ -49,6 +49,12 @@ export const Biome = {
 } as const;
 export type Biome = (typeof Biome)[keyof typeof Biome];
 
+export const CONIFEROUS: ReadonlySet<Biome> = new Set([
+  Biome.Taiga,
+  Biome.Tundra,
+  Biome.Mountain,
+]);
+
 export interface Spawner {
   readonly kind: SpawnerKind;
   readonly at: Hex;
