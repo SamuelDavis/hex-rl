@@ -1,3 +1,4 @@
+import type { Affliction } from "./afflictions";
 export const CREATURES = {
   wolf: {
     hp: 3,
@@ -96,10 +97,8 @@ export type CreatureKind = keyof typeof CREATURES;
 /** Creatures of different factions fight; the player is `town`. */
 export type Faction = "wild" | "town";
 
-export type Affliction = "bleed" | "stun" | "paralysis";
-
-/** `perLevel` scales potency (cubs summoned, turns afflicted) linearly with the caster's level, rounded down. */
-export type CreatureSpell =
+/** `perLevel` scales potency (cubs summoned, turns afflicted) linearly with the caster's level, rounded down. `chance` is how likely it triggers when ready: each turn for summons and restocks, each landed hit for afflictions. */
+export type CreatureSpell = { readonly chance: number } & (
   | {
       /** Refills wares to `stock` items and its purse to `purse` gold while idle. */
       readonly kind: "restock";
@@ -119,33 +118,38 @@ export type CreatureSpell =
       readonly kind: "afflict";
       readonly affliction: Affliction;
       readonly perLevel: number;
-      /** Turns after the affliction wears off before it can be inflicted again. */
+      /** Turns after the affliction would wear off before it can be inflicted again. */
       readonly cooldown: number;
-    };
+    }
+);
 
 const SUMMON_CUBS: CreatureSpell = {
   kind: "summon",
   creature: "cub",
   perLevel: 1,
   cooldown: 15,
+  chance: 0.3,
 };
 const BLEED: CreatureSpell = {
   kind: "afflict",
   affliction: "bleed",
   perLevel: 1,
   cooldown: 3,
+  chance: 0.35,
 };
 const STUN: CreatureSpell = {
   kind: "afflict",
   affliction: "stun",
   perLevel: 0.5,
   cooldown: 4,
+  chance: 0.15,
 };
 const PARALYZE: CreatureSpell = {
   kind: "afflict",
   affliction: "paralysis",
   perLevel: 1,
   cooldown: 4,
+  chance: 0.15,
 };
 
 /** Summons are cast while hostile, restocks while idle; afflictions ride on a landed attack. */
@@ -158,7 +162,13 @@ export const CREATURE_SPELLS: Partial<Record<CreatureKind, CreatureSpell>> = {
   "goblin chief": PARALYZE,
   troll: STUN,
   "troll elder": STUN,
-  reeve: { kind: "restock", stock: 6, purse: 60, cooldown: [100, 200] },
+  reeve: {
+    kind: "restock",
+    stock: 6,
+    purse: 60,
+    cooldown: [100, 200],
+    chance: 0.2,
+  },
 };
 
 export type Service = "trade" | "bounty";

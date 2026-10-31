@@ -86,7 +86,20 @@ test("summons and afflictions are counted", () => {
       affliction: "stun",
       turns: 1,
     }),
-  ).toBe("The adventurer is stunned for 1 turn.");
+  ).toBe("The adventurer is stunned for up to 1 turn.");
+});
+
+test("struggles and recoveries name the affliction", () => {
+  expect(
+    narrationOf({
+      kind: "struggled",
+      actor: ADVENTURER,
+      affliction: "paralysis",
+    }),
+  ).toBe("The adventurer struggles against paralysis.");
+  expect(
+    narrationOf({ kind: "recovered", actor: ADVENTURER, affliction: "stun" }),
+  ).toBe("The adventurer shakes off the stun.");
 });
 
 describe("whoNameOf", () => {

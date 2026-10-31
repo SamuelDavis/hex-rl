@@ -10,13 +10,9 @@ import {
   type Who,
 } from "../../game/game";
 import { nameOf, type Item } from "../../game/items";
-import {
-  bossOf,
-  SPAWNERS,
-  type Affliction,
-  type SpawnerKind,
-} from "../../game/creatures";
+import { bossOf, SPAWNERS, type SpawnerKind } from "../../game/creatures";
 import type { Hex } from "../../game/hex";
+import type { Affliction } from "../../game/afflictions";
 import { Biome } from "../../game/terrain";
 
 const REASONS: Record<Rejection, string> = {
@@ -37,7 +33,6 @@ const REASONS: Record<Rejection, string> = {
   "no-chest": "there is no chest here",
   unlearned: "not learned",
   "no-unlocks": "no level to spend",
-  stunned: "stunned",
   paralyzed: "paralyzed",
   friendly: "they are a friend",
   uninterested: "they have nothing to offer",
@@ -79,6 +74,12 @@ const DIRECTION_NAMES: Record<Direction, string> = {
   sw: "south-west",
   s: "south",
   se: "south-east",
+};
+
+const AFFLICTION_NOUNS: Record<Affliction, string> = {
+  bleed: "bleeding",
+  stun: "the stun",
+  paralysis: "paralysis",
 };
 
 const AFFLICTION_VERBS: Record<Affliction, string> = {
@@ -179,9 +180,13 @@ export const narrationOf = (event: GameEvent): string => {
     case "summoned":
       return `${actor} summons ${counted(event.count, event.summoned)}.`;
     case "afflicted":
-      return `${The(event.target)} ${AFFLICTION_VERBS[event.affliction]} for ${counted(event.turns, "turn")}.`;
+      return `${The(event.target)} ${AFFLICTION_VERBS[event.affliction]} for up to ${counted(event.turns, "turn")}.`;
     case "bled":
       return `${actor} bleeds.`;
+    case "struggled":
+      return `${actor} struggles against ${AFFLICTION_NOUNS[event.affliction]}.`;
+    case "recovered":
+      return `${actor} shakes off ${AFFLICTION_NOUNS[event.affliction]}.`;
     case "died":
       return `${actor} dies.`;
     case "restocked":

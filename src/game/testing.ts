@@ -9,6 +9,7 @@ import {
   type Creature,
 } from "./game";
 import { IDLE } from "./mind";
+import { NONE } from "./afflictions";
 import { hexKey, type Direction, type Hex } from "./hex";
 import { CREATURES } from "./creatures";
 import { SPELL_IDS } from "./abilities";
@@ -51,6 +52,7 @@ export const creature = (
   readyAt: 0,
   wares: [],
   purse: 0,
+  afflictions: NONE,
 });
 
 const EVERY_SPELL = new Map(SPELL_IDS.map((spell) => [spell, 1]));

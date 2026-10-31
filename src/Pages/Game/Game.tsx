@@ -74,7 +74,8 @@ import {
   SPELL_IDS,
   type AbilityId,
 } from "../../game/abilities";
-import { SERVICES, type Affliction } from "../../game/creatures";
+import { SERVICES } from "../../game/creatures";
+import type { Affliction } from "../../game/afflictions";
 import { sightOf, targetInView } from "./target";
 import { Biome, SEA_LEVEL, surfaceOf } from "../../game/terrain";
 

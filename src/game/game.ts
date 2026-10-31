@@ -1,4 +1,12 @@
 import { findPath, rngOf, type Bounds, type Rng } from "procgen";
+import {
+  inflicted,
+  NONE,
+  recovered,
+  remainingOf,
+  type Affliction,
+  type Afflictions,
+} from "./afflictions";
 import { canStep } from "./explorer";
 import {
   add,
@@ -22,7 +30,6 @@ import {
   SERVICES,
   spawnerHpOf,
   spawnerOf,
-  type Affliction,
   type Faction,
   type CreatureKind,
   type SpawnerKind,
@@ -93,6 +100,7 @@ export interface Actor {
   readonly at: Hex;
   readonly facing: Direction;
   readonly hp: number;
+  readonly afflictions: Afflictions;
 }
 
 export interface Player extends Actor {
@@ -106,8 +114,6 @@ export interface Player extends Actor {
   readonly xp: number;
   /** Level of each spell learned; unlearned spells are absent. */
   readonly spells: ReadonlyMap<SpellId, number>;
-  /** The turn each affliction suffered wears off. */
-  readonly afflictions: ReadonlyMap<Affliction, number>;
   readonly bounty: Bounty | undefined;
   /** Level of the last bounty claimed; each new one is posted at a higher level. */
   readonly bountyLevel: number;
@@ -300,7 +306,6 @@ export type Rejection =
   | "no-chest"
   | "unlearned"
   | "no-unlocks"
-  | "stunned"
   | "paralyzed"
   | "friendly"
   | "uninterested"
@@ -386,6 +391,16 @@ export type GameEvent =
       readonly turns: number;
     }
   | { readonly kind: "bled"; readonly actor: Who }
+  | {
+      readonly kind: "struggled";
+      readonly actor: Who;
+      readonly affliction: Affliction;
+    }
+  | {
+      readonly kind: "recovered";
+      readonly actor: Who;
+      readonly affliction: Affliction;
+    }
   | { readonly kind: "died"; readonly actor: Who }
   | { readonly kind: "restocked"; readonly actor: Who }
   | { readonly kind: "interacted"; readonly actor: Who; readonly target: Who }
@@ -430,13 +445,16 @@ export const unlocksOf = (player: Player): number =>
 const masteryOf = (player: Player, id: AbilityId): number =>
   isSpell(id) ? spellLevelOf(player, id) : 1;
 
+/** Turns `actor`, the player by default, suffers `affliction` at most. */
 export const afflictionOf = (
-  { player, turn }: Game,
+  game: Game,
   affliction: Affliction,
-): number => Math.max(0, (player.afflictions.get(affliction) ?? 0) - turn);
+  actor: ActorId = PLAYER,
+): number =>
+  remainingOf(actorOf(game, actor).afflictions, affliction, game.turn);
 
 const isAfflicted = (game: Game, actor: ActorId, affliction: Affliction) =>
-  actor === PLAYER && afflictionOf(game, affliction) > 0;
+  afflictionOf(game, affliction, actor) > 0;
 
 export const cooldownOf = (
   { player, turn }: Game,
@@ -573,6 +591,7 @@ const spawnedFrom = (
   readyAt: 0,
   wares: [],
   purse: 0,
+  afflictions: NONE,
 });
 
 const unleashBoss = (game: Game, spawner: Spawner): Game => {
@@ -673,7 +692,7 @@ export const newGame = (land: Land, start: Hex = land.spawn): Game =>
         equipment: {},
         xp: 0,
         spells: new Map(),
-        afflictions: new Map(),
+        afflictions: NONE,
         bounty: undefined,
         bountyLevel: 0,
       },
@@ -959,53 +978,77 @@ const hurt = (game: Game, damage: number): Game => {
   return hp > 0 ? next : recorded(next, { kind: "died", actor: THE_PLAYER });
 };
 
-const afflicted = (game: Game, creature: Creature): Game => {
+/** Whether `creature`'s spell, ready, triggers this turn, at its `chance`. */
+const isCast = ({ land, turn }: Game, creature: Creature): boolean => {
   const spell = CREATURE_SPELLS[creature.kind];
-  if (spell?.kind !== "afflict" || isOver(game) || creature.readyAt > game.turn)
+  return (
+    spell !== undefined &&
+    creature.readyAt <= turn &&
+    rngOf(land.seed, "cast").child(creature.id).chance(spell.chance, turn)
+  );
+};
+
+/** `caster`'s affliction, riding on a landed hit, if its spell triggers and `target` lives. */
+const afflicted = (game: Game, caster: Creature, target: ActorId): Game => {
+  const spell = CREATURE_SPELLS[caster.kind];
+  const victim = actorIfAlive(game, target);
+  if (spell?.kind !== "afflict" || !victim || !isCast(game, caster))
     return game;
-  const turns = potencyOf(spell, creature.level);
+  const turns = potencyOf(spell, caster.level);
   if (turns === 0) return game;
   const { affliction, cooldown } = spell;
-  const { afflictions } = game.player;
-  const until = Math.max(afflictions.get(affliction) ?? 0, game.turn + turns);
+  const afflictions = inflicted(
+    victim.afflictions,
+    affliction,
+    game.turn,
+    turns,
+  );
   return recorded(
-    updated(
-      withPlayer(game, {
-        afflictions: new Map([...afflictions, [affliction, until]]),
-      }),
-      creature.id,
-      { readyAt: game.turn + turns + cooldown },
-    ),
+    updated(withActor(game, target, { afflictions }), caster.id, {
+      readyAt: game.turn + turns + cooldown,
+    }),
     {
       kind: "afflicted",
-      actor: whoIs(game, creature),
-      target: THE_PLAYER,
+      actor: whoIs(game, caster),
+      target: whoIs(game, victim),
       affliction,
       turns,
     },
   );
 };
 
+const actorIfAlive = (
+  game: Game,
+  actor: ActorId,
+): Player | Creature | undefined =>
+  actor === PLAYER
+    ? isOver(game)
+      ? undefined
+      : game.player
+    : game.creatures.find(({ id }) => id === actor);
+
 const struck = (game: Game, creature: Creature): Game =>
-  afflicted(
-    hurt(
-      recorded(game, {
-        kind: "hit",
-        actor: whoIs(game, creature),
-        target: THE_PLAYER,
-      }),
-      CREATURES[creature.kind].damage * creature.level,
-    ),
-    creature,
+  hurt(
+    recorded(game, {
+      kind: "hit",
+      actor: whoIs(game, creature),
+      target: THE_PLAYER,
+    }),
+    CREATURES[creature.kind].damage * creature.level,
   );
 
 /** Hurts `by`'s foe at `at`, if any; only the player hurts spawners. */
 const hit = (game: Game, by: ActorId, at: Hex, damage: number): Game => {
   const target = occupantAt(game, at);
-  if (target && areFoes(game, by, target))
-    return target === PLAYER
-      ? struck(game, creatureOf(game, by))
-      : attackCreature(game, by, creatureOf(game, target), damage);
+  if (target && areFoes(game, by, target)) {
+    const harmed =
+      target === PLAYER
+        ? struck(game, creatureOf(game, by))
+        : attackCreature(game, by, creatureOf(game, target), damage);
+    return by === PLAYER
+      ? harmed
+      : afflicted(harmed, creatureOf(harmed, by), target);
+  }
   const spawner = by === PLAYER ? spawnerAt(game, at) : undefined;
   if (spawner && spawnerOf(spawner.kind).faction === "wild")
     return attackSpawner(game, spawner, damage);
@@ -1230,7 +1273,7 @@ const updated = (
 const withActor = (
   game: Game,
   actor: ActorId,
-  change: Partial<Pick<Actor, "at" | "facing">>,
+  change: Partial<Pick<Actor, "at" | "facing" | "afflictions">>,
 ): Game =>
   actor === PLAYER ? withPlayer(game, change) : updated(game, actor, change);
 
@@ -1360,11 +1403,12 @@ const choiceOf = (game: Game, creature: Creature): Intent => {
 
 /** Its spell's Deed, when ready and in the state it's cast in. */
 const castOf = (
-  { kind, mind, readyAt }: Creature,
-  { turn }: Game,
+  creature: Creature,
+  game: Game,
 ): Summon | Restock | undefined => {
-  const spell = CREATURE_SPELLS[kind];
-  if (!spell || readyAt > turn) return undefined;
+  const spell = CREATURE_SPELLS[creature.kind];
+  const { mind } = creature;
+  if (!spell || !isCast(game, creature)) return undefined;
   if (spell.kind === "summon" && mind.state === "hostile")
     return { kind: "summon" };
   if (spell.kind === "restock" && mind.state === "idle")
@@ -1414,15 +1458,61 @@ const regenerate = (game: Game): Game => {
   };
 };
 
-const bleed = (game: Game): Game =>
-  isOver(game) || afflictionOf(game, "bleed") === 0
-    ? game
-    : hurt(recorded(game, { kind: "bled", actor: THE_PLAYER }), 1);
+const BLEED_DAMAGE = 1;
+
+/** Hurts any actor outside combat; a creature brought to 0 hit points dies, dropping its loot. */
+const wounded = (game: Game, actor: ActorId, damage: number): Game => {
+  if (actor === PLAYER) return hurt(game, damage);
+  const creature = creatureOf(game, actor);
+  const hp = creature.hp - damage;
+  if (hp > 0) return updated(game, actor, { hp });
+  return dropLoot(
+    recorded(
+      { ...game, creatures: game.creatures.filter((c) => c !== creature) },
+      { kind: "died", actor: whoIs(game, creature) },
+    ),
+    creature,
+  );
+};
+
+const bled = (game: Game, actor: ActorId): Game =>
+  isAfflicted(game, actor, "bleed")
+    ? wounded(
+        recorded(game, { kind: "bled", actor: whoOf(game, actor) }),
+        actor,
+        BLEED_DAMAGE,
+      )
+    : game;
+
+/** Drops what wore off or was shaken off this turn. */
+const recover = (game: Game, actor: ActorId): Game => {
+  const { afflictions } = actorOf(game, actor);
+  const rng = rngOf(game.land.seed, "shake off").child(actor);
+  const { kept, lost } = recovered(
+    afflictions,
+    game.turn,
+    (affliction, chance) => rng.child(affliction).chance(chance, game.turn),
+  );
+  const who = whoOf(game, actor);
+  return lost.reduce(
+    (state, affliction) =>
+      recorded(state, { kind: "recovered", actor: who, affliction }),
+    lost.length > 0 ? withActor(game, actor, { afflictions: kept }) : game,
+  );
+};
+
+/** Each afflicted actor alive bleeds, then may recover. */
+const suffer = (game: Game): Game =>
+  [PLAYER, ...game.creatures.map(({ id }) => id)].reduce((state, actor) => {
+    if (!actorIfAlive(state, actor)) return state;
+    const bleeding = bled(state, actor);
+    return actorIfAlive(bleeding, actor) ? recover(bleeding, actor) : bleeding;
+  }, game);
 
 const endTurn = (acted: Game): Game =>
   withSight(
     populate(
-      regenerate(bleed(creaturesTurn({ ...acted, turn: acted.turn + 1 }))),
+      regenerate(suffer(creaturesTurn({ ...acted, turn: acted.turn + 1 }))),
     ),
   );
 
@@ -1700,9 +1790,28 @@ const attempted = (
   return next ? attempted(game, actor, next) : { deed: attempt, outcome };
 };
 
+/** An actor kept from acting by an affliction loses the turn struggling. */
+const struggled = (
+  game: Game,
+  actor: ActorId,
+  affliction: Affliction,
+): Settlement => ({
+  game: recorded(game, {
+    kind: "struggled",
+    actor: whoOf(game, actor),
+    affliction,
+  }),
+  spendsTurn: true,
+});
+
+/** Stun allows only waiting; paralysis rejects turning and stepping, inside their Rules. */
 const settled = (game: Game, actor: ActorId, plan: Plan): Settlement => {
+  if (plan.attempt.kind !== "wait" && isAfflicted(game, actor, "stun"))
+    return struggled(game, actor, "stun");
   const { deed, outcome } = attempted(game, actor, plan);
   if (outcome.kind === "performed") return outcome;
+  if (outcome.reason === "paralyzed")
+    return struggled(game, actor, "paralysis");
   return {
     game: rejected(game, actor, deed, outcome.reason),
     spendsTurn: false,
@@ -1715,17 +1824,9 @@ const resolve = (game: Game, intent: Intent): Game => {
   return spendsTurn ? endTurn(next) : next;
 };
 
-const incapacityOf = (game: Game, intent: Intent): Rejection | undefined => {
-  if (isOver(game)) return "over";
-  if (intent.kind !== "wait" && isAfflicted(game, PLAYER, "stun"))
-    return "stunned";
-  return undefined;
-};
-
 export const act = (game: Game, intent: Intent): Game => {
   const fresh = { ...game, events: [] };
-  const incapacity = incapacityOf(fresh, intent);
-  return incapacity
-    ? rejected(fresh, PLAYER, intent, incapacity)
+  return isOver(fresh)
+    ? rejected(fresh, PLAYER, intent, "over")
     : resolve(fresh, intent);
 };

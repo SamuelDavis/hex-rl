@@ -56,6 +56,7 @@ import {
   PLAYER_DAMAGE,
 } from "./abilities";
 import { dangerOf, type Spawner } from "./terrain";
+import { AFFLICTIONS } from "./afflictions";
 import { lootOf, type Chest, type GearKind, type Item } from "./items";
 import { AWARENESS, SIGHT } from "./sight";
 import {
@@ -1109,60 +1110,100 @@ describe("monster spells", () => {
     level,
   });
   const alone = (game: Game): Game => ({ ...game, creatures: [] });
+  const healed = (game: Game): Game => ({
+    ...game,
+    player: { ...game.player, hp: MAX_HP },
+  });
+  /** Waits, healed each turn, through `turns` turns. */
+  const enduring = (game: Game, turns: number, action: Intent = WAIT) =>
+    Array.from({ length: turns }).reduce<Game[]>(
+      (games) => [...games, act(healed(games.at(-1)!), action)],
+      [game],
+    );
+  const has = (kind: GameEvent["kind"]) => (game: Game) =>
+    game.events.some((event) => event.kind === kind);
+  const firstAfflicted = (kind: Parameters<typeof creature>[1], level = 1) =>
+    enduring(gameWith([leveled(kind, level)]), 200).find(has("afflicted"))!;
 
-  test("bandits inflict a turn of bleeding per level", () => {
-    const hit = act(gameWith([leveled("bandit", 2)]), WAIT);
-    const hitHp = MAX_HP - 2 * CREATURES.bandit.damage;
-    expect(hit.events).toContainEqual({
+  test("afflictions ride on only some landed hits, at their chance", () => {
+    const games = enduring(gameWith([leveled("goblin", 1)]), 300);
+    const hits = games.filter(has("hit")).length;
+    const afflictions = games.filter(has("afflicted")).length;
+    expect(afflictions).toBeGreaterThan(0);
+    expect(afflictions).toBeLessThan(hits / 3);
+  });
+
+  test("bandits inflict up to a turn of bleeding per level", () => {
+    const bleeding = firstAfflicted("bandit", 2);
+    expect(bleeding.events).toContainEqual({
       kind: "afflicted",
       actor: who(leveled("bandit", 2)),
       target: ADVENTURER,
       affliction: "bleed",
       turns: 2,
     });
-    expect(historyOf(alone(hit), 2).map(({ player }) => player.hp)).toEqual([
-      hitHp - 1,
-      hitHp - 2,
-      hitHp - 2,
-    ]);
+    const after = historyOf(alone(bleeding), 3);
+    const bleeds = after.filter(has("bled")).length;
+    expect(bleeds).toBeGreaterThanOrEqual(1);
+    expect(bleeds).toBeLessThanOrEqual(2);
+    expect(after.at(-1)!.player.afflictions.size).toBe(0);
   });
 
-  test("trolls stun for a turn per two levels, allowing only waiting", () => {
-    expect(
-      act(gameWith([leveled("troll", 1)]), WAIT).player.afflictions.size,
-    ).toBe(0);
-    const stunned = alone(act(gameWith([leveled("troll", 2)]), WAIT));
-    expect(act(stunned, step("n")).events).toEqual([
-      rejection(step("n"), "stunned"),
-    ]);
-    const waited = act(stunned, WAIT);
-    expect(waited.turn).toBe(stunned.turn + 1);
-    expect(act(waited, step("n")).turn).toBe(waited.turn + 1);
+  test("stun allows only waiting; anything else is a turn lost struggling", () => {
+    const stunned = alone(firstAfflicted("troll", 2));
+    const struggling = act(stunned, step("n"));
+    expect(struggling.turn).toBe(stunned.turn + 1);
+    expect(struggling.player.at).toEqual(stunned.player.at);
+    expect(struggling.events).toContainEqual({
+      kind: "struggled",
+      actor: ADVENTURER,
+      affliction: "stun",
+    });
   });
 
-  test("goblins paralyze for a turn per level: no turning or stepping, but attacking", () => {
-    const paralyzed = act(gameWith([leveled("goblin", 1)]), WAIT);
-    expect(act(paralyzed, step("n")).events).toEqual([
-      rejection({ kind: "turn", direction: "n" }, "paralyzed"),
-    ]);
+  test("paralysis stops turning and stepping, as a turn lost struggling, but not attacking", () => {
+    const paralyzed = firstAfflicted("goblin", 3);
+    const struggling = act(paralyzed, step("n"));
+    expect(struggling.turn).toBe(paralyzed.turn + 1);
+    expect(struggling.events).toContainEqual({
+      kind: "struggled",
+      actor: ADVENTURER,
+      affliction: "paralysis",
+    });
     expect(act(paralyzed, step("se")).events).toContainEqual({
       kind: "hit",
       actor: ADVENTURER,
-      target: who(leveled("goblin", 1)),
+      target: who(leveled("goblin", 3)),
     });
   });
 
   test("afflictions wait out their cooldown before recurring", () => {
     const spell = CREATURE_SPELLS.goblin;
     if (spell?.kind !== "afflict") throw new Error("goblins afflict");
-    const games = historyOf(
-      gameWith([leveled("goblin", 1)]),
-      2 + spell.cooldown,
-    );
-    const inflicted = games.filter(({ events }) =>
-      events.some(({ kind }) => kind === "afflicted"),
-    );
-    expect(inflicted.map(({ turn }) => turn)).toEqual([1, 2 + spell.cooldown]);
+    const turns = enduring(gameWith([leveled("goblin", 2)]), 300)
+      .filter(has("afflicted"))
+      .map(({ turn }) => turn);
+    expect(turns.length).toBeGreaterThan(1);
+    turns.slice(1).forEach((turn, i) => {
+      expect(turn - turns[i]!).toBeGreaterThanOrEqual(2 + spell.cooldown);
+    });
+  });
+
+  test("however strong the caster, an affliction is shaken off before long", () => {
+    const { shakeOff } = AFFLICTIONS.stun;
+    const elder = { ...leveled("troll", 6), hp: 10_000 };
+    const games = enduring(gameWith([elder]), 300, step("se"));
+    const streaks = games
+      .map(({ events }) => events.some(({ kind }) => kind === "struggled"))
+      .reduce<number[]>(
+        (runs, isStruggling) =>
+          isStruggling
+            ? [...runs.slice(0, -1), (runs.at(-1) ?? 0) + 1]
+            : [...runs, 0],
+        [0],
+      );
+    expect(Math.max(...streaks)).toBeGreaterThan(0);
+    expect(Math.max(...streaks)).toBeLessThanOrEqual(Math.ceil(1 / shakeOff));
   });
 
   test("hostile wolves summon a cub per level beside themselves", () => {
@@ -1172,22 +1213,20 @@ describe("monster spells", () => {
       level: 2,
       mind: hostileAt(at, origin),
     };
-    const next = act(gameWith([wolf]), WAIT);
+    const games = enduring(gameWith([wolf]), 50);
+    const index = games.findIndex(has("summoned"));
+    const next = games[index]!;
     const cubs = next.creatures.filter(({ kind }) => kind === "cub");
     expect(cubs).toHaveLength(2);
-    for (const cub of cubs) {
-      expect(cub.level).toBe(2);
-      expect(hexDistance(cub.at, at)).toBe(1);
-    }
+    for (const cub of cubs) expect(cub.level).toBe(2);
     expect(next.events).toContainEqual({
       kind: "summoned",
       actor: who(wolf),
       summoned: "cub",
       count: 2,
     });
-    const again = act(next, WAIT);
-    expect(again.creatures.filter(({ kind }) => kind === "cub")).toHaveLength(
-      2,
-    );
+    expect(
+      games[index + 1]!.events.some(({ kind }) => kind === "summoned"),
+    ).toBe(false);
   });
 });

@@ -277,26 +277,28 @@ describe("restock", () => {
   const spell = CREATURE_SPELLS.reeve;
   if (spell?.kind !== "restock") throw new Error("reeves restock");
   const far = { q: 5, r: 0 };
+  const restocking = (reeve: Creature) =>
+    historyOf(gameWith([reeve]), 100).find(({ events }) =>
+      events.some(({ kind }) => kind === "restocked"),
+    )!;
 
   test("an idle reeve fills its wares, then waits out a variable cooldown", () => {
-    const games = historyOf(gameWith([townsfolk(far, "reeve")]), 3);
-    const [, stocked] = games;
-    const reeve = stocked!.creatures[0]!;
+    const stocked = restocking(townsfolk(far, "reeve"));
+    const reeve = stocked.creatures[0]!;
     expect(reeve.wares).toHaveLength(spell.stock);
     expect(reeve.purse).toBe(spell.purse);
-    expect(stocked!.events).toContainEqual({
+    expect(stocked.events).toContainEqual({
       kind: "restocked",
       actor: who(reeve),
     });
     const [min, max] = spell.cooldown;
-    expect(reeve.readyAt - stocked!.turn + 1).toBeGreaterThanOrEqual(min);
-    expect(reeve.readyAt - stocked!.turn + 1).toBeLessThanOrEqual(max);
+    expect(reeve.readyAt - stocked.turn + 1).toBeGreaterThanOrEqual(min);
+    expect(reeve.readyAt - stocked.turn + 1).toBeLessThanOrEqual(max);
   });
 
   test("restocks a spent purse even with full wares", () => {
     const wares = Array.from({ length: spell.stock }, (_, i) => potion(`${i}`));
-    const broke = { ...townsfolk(far, "reeve"), wares };
-    const next = act(gameWith([broke]), WAIT);
+    const next = restocking({ ...townsfolk(far, "reeve"), wares });
     expect(next.creatures[0]!.purse).toBe(spell.purse);
     expect(next.creatures[0]!.wares).toEqual(wares);
   });
@@ -307,9 +309,9 @@ describe("restock", () => {
       wares: [potion("left")],
       readyAt: 5,
     };
-    const games = historyOf(gameWith([part]), 6);
-    expect(games[4]!.creatures[0]!.wares).toHaveLength(1);
-    const wares = games[5]!.creatures[0]!.wares;
+    const stocked = restocking(part);
+    expect(stocked.turn).toBeGreaterThan(part.readyAt);
+    const { wares } = stocked.creatures[0]!;
     expect(wares).toHaveLength(spell.stock);
     expect(wares[0]).toEqual(potion("left"));
     expect(new Set(wares.map(({ id }) => id)).size).toBe(spell.stock);
