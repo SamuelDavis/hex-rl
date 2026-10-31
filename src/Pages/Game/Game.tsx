@@ -39,6 +39,7 @@ import {
   levelOf,
   MAX_HP,
   MAX_MP,
+  spawnersOf,
   spellLevelOf,
   unlocksOf,
   visibleOf,
@@ -278,7 +279,7 @@ export default function Game() {
     drawScene(context, {
       theme: CANVAS_THEMES[getTheme()],
       tileAt: land.tileAt,
-      spawnersIn: land.spawnersIn,
+      spawnersIn: (bounds) => spawnersOf(game, bounds),
       isWrecked: (spawner) => isWrecked(game, spawner),
       player,
       creatures: creaturesOf(game),

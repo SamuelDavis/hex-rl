@@ -1,4 +1,5 @@
 import type { Vec2 } from "procgen";
+import { spawnerOf } from "../../../game/content/creatures";
 import { Biome, CONIFEROUS, SEA_LEVEL } from "../../../game/terrain";
 import type { CanvasTheme, Disposition } from "../canvasTheme";
 import {
@@ -71,7 +72,7 @@ const CANOPY: Record<Biome, Hsl> = {
   [Biome.Marsh]: [70, 20, 22],
 };
 
-/** Town roofs (the town sprite's `leaf`) take on their biome's look. */
+/** Town folk's roofs (their sprites' `leaf`) take on their biome's look. */
 const ROOFS: Record<Biome, Hsl> = {
   [Biome.Ocean]: [200, 20, 45],
   [Biome.Beach]: [200, 20, 45],
@@ -256,7 +257,9 @@ export const WOODCUT: CanvasTheme = {
       base,
       SPAWNER_SIZE,
       tinted(
-        kind === "town" ? { ...PALETTE, leaf: ROOFS[biome] } : PALETTE,
+        spawnerOf(kind).faction === "town"
+          ? { ...PALETTE, leaf: ROOFS[biome] }
+          : PALETTE,
         tint,
       ),
     ),

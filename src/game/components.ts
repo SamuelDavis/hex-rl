@@ -125,6 +125,16 @@ export interface Spawning {
   readonly isBossDue: boolean;
 }
 
+/** A settlement's growth: one level per bounty paid at its bailiffs; its tier and outposts follow (`settlements.ts`). */
+export interface Settlement {
+  readonly townLevel: number;
+}
+
+/** The settlement an outpost was founded by. */
+export interface Fealty {
+  readonly liege: Hex;
+}
+
 /** Every component by name. An entity has any subset; `With` and `has` select by these names. */
 export interface Components {
   position: Position;
@@ -143,6 +153,8 @@ export interface Components {
   progression: Progression;
   questing: Questing;
   spawning: Spawning;
+  settlement: Settlement;
+  fealty: Fealty;
 }
 
 export type ComponentName = keyof Components;
@@ -165,6 +177,8 @@ const MARKERS: { readonly [K in ComponentName]: keyof Components[K] } = {
   progression: "xp",
   questing: "bountyLevel",
   spawning: "spawnsAt",
+  settlement: "townLevel",
+  fealty: "liege",
 };
 
 type Intersection<U> = (U extends unknown ? (u: U) => void : never) extends (

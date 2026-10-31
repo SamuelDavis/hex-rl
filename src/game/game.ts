@@ -4,6 +4,7 @@ export {
   creaturesOf,
   isOver,
   playerOf,
+  spawnersOf,
   whoOf,
   type Creature,
   type Game,

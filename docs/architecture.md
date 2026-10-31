@@ -50,6 +50,8 @@ Each component is an interface of flat fields in `components.ts`, named in the `
 | progression | `xp`, `kills` | player |
 | questing | `bounty`, `bountyLevel` | player |
 | spawning | `spawnsAt`, `isWrecked`, `isBossDue` | spawners |
+| settlement | `townLevel` | towns, keeps, castles |
+| fealty | `liege` (its settlement's hex) | outposts |
 
 - Rules and systems state what they need with `With<...>` and narrow with `has`; a Rule whose actor lacks a component rejects `unable`.
 - Any entity may carry any component: spawners have `health` and `conditions`, so a burning condition would burn a camp with no new code.
@@ -130,11 +132,12 @@ src/game/
   health.ts       damage, depletion, loot
   progression.ts  levels, mastery, kill credit
   quests.ts       bounties
+  settlements.ts  settlement growth: levels, tiers, outposts
   chests.ts       ground chests
   tick.ts         tick, immediate, act, newGame, UPKEEP
   actions/        Deeds, Rules, Plans (one module per Rule family), pipeline
   systems/        one module per system
-  content/        abilities, conditions, creatures, factions: aesthetic terms
+  content/        abilities, conditions, creatures, factions, settlements: aesthetic terms
   hex.ts sight.ts terrain.ts mind.ts items.ts explorer.ts   pure helpers
 ```
 

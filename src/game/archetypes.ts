@@ -11,6 +11,7 @@ import {
   spawnerOf,
   type CreatureKind,
 } from "./content/creatures";
+import { isSettlement } from "./content/settlements";
 import type { Who } from "./events";
 import { HEADINGS, hexKey, type Direction, type Hex } from "./hex";
 import { IDLE, type Mind } from "./mind";
@@ -108,5 +109,11 @@ export const spawnerEntityOf = ({ kind, at }: Spawner): Unplaced => {
     spawnsAt: 0,
     isWrecked: false,
     isBossDue: false,
+    ...(isSettlement(kind) && { townLevel: 1 }),
   };
 };
+
+export const outpostOf = (outpost: Spawner, liege: Hex): Unplaced => ({
+  ...spawnerEntityOf(outpost),
+  liege,
+});

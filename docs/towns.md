@@ -1,6 +1,6 @@
 # Towns
 
-Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/game/content/creatures.ts` and `content/factions.ts`, rules in `src/game/actions/towns.ts` and `src/game/quests.ts`, tests in `src/game/towns.test.ts`.
+Contract for townsfolk, factions, interaction, trade, bounties and settlement growth. Data in `src/game/content/creatures.ts`, `content/factions.ts` and `content/settlements.ts`, rules in `src/game/actions/towns.ts`, `src/game/quests.ts` and `src/game/settlements.ts`, tests in `src/game/towns.test.ts` and `src/game/settlements.test.ts`.
 
 ## Vocabulary
 
@@ -10,7 +10,9 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 | Spawner strategy | How a spawner recruits (`pool`: weighted draws up to `cap`; `roster`: the first kind below its count) and when its `boss` appears (`wrecked`, or `always` kept alive, before any recruit). At most one boss is alive per spawner. | `SpawnerType`, `Recruiting`, `Boss` |
 | Lair | Wild spawner: a `pool`, its boss once `wrecked`. | `SPAWNERS` |
 | Town | Town spawner: its boss, the bailiff, `always` kept alive and so returned first, at once; then its `roster`, the reeve, then peasants. Wild monsters may wreck it; the player can't attack it. | `SPAWNERS.town` |
-| Townsfolk | Monsters from a town (`bailiff`, `reeve`, `peasant`). Same Minds, leash and rules as wild monsters. | `CREATURES` |
+| Settlement | A town, keep or castle: a town spawner that grows. Its `townLevel` sets its tier; its boss is its highest rank (bailiff, baron, duke), lower ranks join its roster, one of each. | `settlement` component, `TIERS` |
+| Outpost | A town spawner a settlement founds nearby (gold mine, sawmill, barracks, smithy, stables, farm, docks, bazaar), each keeping its own boss and workers. | `fealty` component (`liege`), `OUTPOSTS` |
+| Townsfolk | Monsters from a town spawner (`bailiff`, `reeve`, `peasant`, nobles, outposts' folk). Same Minds, leash and rules as wild monsters. | `CREATURES` |
 | Service | What interacting with a kind does: `trade` (reeve) or `bounty` (bailiff). No service: `uninterested`. | `SERVICES` |
 | Wares, purse | A trader's items and gold. | `wares`, `purse` components |
 | Bounty | A lair whose boss to slay, its level, whether slain. | `Bounty`, `questing` component |
@@ -30,6 +32,14 @@ Contract for townsfolk, factions, interaction, trade and bounties. Data in `src/
 - `trade` (player-only, adjacent reeve): a pack item sells for `offerOf`, paid from the reeve's purse, and joins the wares; a ware buys for `priceOf`, into the purse, if gold and pack room suffice. Each spends a turn.
 - `restock` (the reeve's knack, `ABILITIES.restock`, triggered while idle): when ready, tops wares up to `stock` with fresh `waresOf` and gold up to `gold`, then cools down for a random turn count in `cooldown`. Attempted first in the reeve's Plan, falling back to its move when `full`.
 - Bounties: interacting with any bailiff pays a slain bounty (`BOUNTY_GOLD_PER_LEVEL` × its level, recorded as `bountyLevel`), then, if none is outstanding, posts the nearest lair to the bailiff whose `dangerOf` exceeds `bountyLevel` (searched in widening `BOUNTY_SEARCH` rings). Only the player slaying that lair's boss fulfils it.
+
+## Growth
+
+- Paying a bounty grows the paying bailiff's home settlement (`grown`): one `townLevel`, recorded `grew`. A bailiff whose home isn't a settlement in play grows nothing.
+- Reaching a tier's `level` (`TIERS`: keep at 4, castle at 8) changes the spawner's kind (`rose`): its hit points rise by the difference, its folk are rehomed to the new kind, and its new boss emerges on its next turn.
+- Each level founds one outpost (`founded`) of a kind it lacks: on a free, dry, treeless hex within `OUTPOST_REACH`, not beside its settlement or any spawner, where its `OUTPOSTS` test passes on the site or a neighbour (docks by water, gold mine by mountains, sawmill by trees, bazaar by desert, stables and farm on plains; barracks and smithy anywhere). Kind and site are seeded by the settlement's hex and level. No suitable site, no outpost.
+- Barons, dukes and outposts' folk offer no Service yet.
+- Spawners in play may differ from terrain's (risen or founded); the UI reads `spawnersOf`.
 
 ## UI
 

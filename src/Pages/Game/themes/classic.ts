@@ -3,6 +3,7 @@ import type {
   CreatureKind,
   SpawnerKind,
 } from "../../../game/content/creatures";
+import { isSettlement } from "../../../game/content/settlements";
 import { Biome, CONIFEROUS, SEA_LEVEL } from "../../../game/terrain";
 import type { CanvasTheme, Disposition } from "../canvasTheme";
 import {
@@ -52,6 +53,24 @@ const TOKENS: Record<CreatureKind, { glyph: string; hue: number }> = {
   bailiff: { glyph: "§", hue: 220 },
   reeve: { glyph: "$", hue: 45 },
   peasant: { glyph: "p", hue: 140 },
+  baron: { glyph: "R", hue: 270 },
+  duke: { glyph: "D", hue: 290 },
+  miner: { glyph: "m", hue: 48 },
+  "mine captain": { glyph: "M", hue: 48 },
+  carpenter: { glyph: "j", hue: 28 },
+  "master carpenter": { glyph: "J", hue: 28 },
+  footman: { glyph: "f", hue: 210 },
+  sergeant: { glyph: "F", hue: 210 },
+  blacksmith: { glyph: "s", hue: 10 },
+  "master smith": { glyph: "S", hue: 10 },
+  knight: { glyph: "n", hue: 230 },
+  marshal: { glyph: "N", hue: 230 },
+  farmer: { glyph: "a", hue: 110 },
+  yeoman: { glyph: "Y", hue: 110 },
+  fisher: { glyph: "h", hue: 190 },
+  harbourmaster: { glyph: "H", hue: 190 },
+  merchant: { glyph: "e", hue: 330 },
+  "caravan master": { glyph: "C", hue: 330 },
 };
 
 const SPAWNER_HUES: Record<SpawnerKind, number> = {
@@ -61,6 +80,16 @@ const SPAWNER_HUES: Record<SpawnerKind, number> = {
   mine: 60,
   cave: 280,
   town: 210,
+  keep: 210,
+  castle: 210,
+  "gold mine": 48,
+  sawmill: 28,
+  barracks: 0,
+  smithy: 10,
+  stables: 230,
+  farm: 110,
+  docks: 190,
+  bazaar: 330,
 };
 
 /** Towns take on their biome's look. */
@@ -194,7 +223,7 @@ export const CLASSIC: CanvasTheme = {
   spawner: (context, { x, y }, kind, biome, tint) => {
     const size = PIXELS_PER_UNIT * 0.8;
     const color = tint(
-      kind === "town" ? TOWN_COLORS[biome] : [SPAWNER_HUES[kind], 35, 30],
+      isSettlement(kind) ? TOWN_COLORS[biome] : [SPAWNER_HUES[kind], 35, 30],
     );
     polyline(context, [
       { x: x - size, y },

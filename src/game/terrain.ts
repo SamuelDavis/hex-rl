@@ -92,15 +92,18 @@ const TOWN_RELIEF = 1;
 export const dangerOf = (at: Hex, spawn: Hex): number =>
   1 + Math.floor(hexDistance(at, spawn) / DANGER_RING);
 
-const HABITAT: Record<
-  SpawnerKind,
-  {
-    readonly minDanger: number;
-    readonly biomes: Partial<Record<Biome, number>>;
-    readonly wet?: number;
-    /** Needs dry ground within `TOWN_CLEARING` no more than `TOWN_RELIEF` off level. */
-    readonly isSettler?: boolean;
-  }
+/** Where terrain sites each wild spawner and town; others are founded in play. */
+const HABITAT: Partial<
+  Record<
+    SpawnerKind,
+    {
+      readonly minDanger: number;
+      readonly biomes: Partial<Record<Biome, number>>;
+      readonly wet?: number;
+      /** Needs dry ground within `TOWN_CLEARING` no more than `TOWN_RELIEF` off level. */
+      readonly isSettler?: boolean;
+    }
+  >
 > = {
   den: {
     minDanger: 1,
@@ -159,7 +162,9 @@ export const habitatWeightOf = (
   biome: Biome,
   isWet: boolean,
 ): number => {
-  const { biomes, wet = 0 } = HABITAT[kind];
+  const habitat = HABITAT[kind];
+  if (!habitat) return 0;
+  const { biomes, wet = 0 } = habitat;
   return (biomes[biome] ?? 0) + (isWet ? wet : 0);
 };
 
@@ -169,12 +174,12 @@ const habitatWeightsAt = (
   isLevel: boolean,
   danger: number,
 ) =>
-  (Object.keys(HABITAT) as SpawnerKind[])
+  Object.entries(HABITAT)
     .filter(
-      (kind) =>
-        HABITAT[kind].minDanger <= danger &&
-        (isLevel || !HABITAT[kind].isSettler),
+      ([, { minDanger, isSettler }]) =>
+        minDanger <= danger && (isLevel || !isSettler),
     )
+    .map(([kind]) => kind as SpawnerKind)
     .map((kind) => [kind, habitatWeightOf(kind, biome, isWet)] as const)
     .filter(([, weight]) => weight > 0);
 

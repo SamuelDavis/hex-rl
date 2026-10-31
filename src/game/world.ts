@@ -10,8 +10,14 @@ import {
 } from "./components";
 import type { Cause, GameEvent, Who } from "./events";
 import { canStep } from "./explorer";
-import { directionBetween, hexKey, neighborsOf, type Hex } from "./hex";
-import type { CreatureKind } from "./content/creatures";
+import {
+  centerOf,
+  directionBetween,
+  hexKey,
+  neighborsOf,
+  type Hex,
+} from "./hex";
+import type { CreatureKind, SpawnerKind } from "./content/creatures";
 import type { Chest } from "./items";
 import type { Spawner, Tile } from "./terrain";
 
@@ -69,6 +75,28 @@ export const entitiesWith = <K extends ComponentName>(
     has(entity, ...components),
   );
 
+const isWithin = (bounds: Bounds, hex: Hex): boolean => {
+  const { x, y } = centerOf(hex);
+  return (
+    x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY
+  );
+};
+
+/** Spawners in `bounds` as they now are: the terrain's, overridden by those in play, which may have risen or been founded. */
+export const spawnersOf = (game: Game, bounds: Bounds): readonly Spawner[] => {
+  const inPlay = entitiesWith(game, "spawning", "position")
+    .filter(({ at }) => isWithin(bounds, at))
+    .map(({ kind, at }) => ({ kind: kind as SpawnerKind, at }));
+  return [
+    ...new Map(
+      [...game.land.spawnersIn(bounds), ...inPlay].map((spawner) => [
+        hexKey(spawner.at),
+        spawner,
+      ]),
+    ).values(),
+  ];
+};
+
 export const occupantAt = (game: Game, hex: Hex): Entity | undefined => {
   const id = game.occupants.get(hexKey(hex));
   return id === undefined ? undefined : game.entities.get(id);
@@ -117,7 +145,7 @@ export const inserted = (game: Game, entity: Omit<Entity, "seq">): Game => {
 export const updated = (
   game: Game,
   id: EntityId,
-  change: Partial<Fields>,
+  change: Partial<Fields & Pick<Entity, "kind">>,
 ): Game => {
   const before = game.entities.get(id);
   if (!before) return game;

@@ -3,6 +3,7 @@ import type { Bounty, Entity } from "./components";
 import { bossOf, spawnerOf } from "./content/creatures";
 import { relationOf, type FactionId } from "./content/factions";
 import { centerOf, hexDistance, sameHex, type Hex } from "./hex";
+import { grown } from "./settlements";
 import { dangerOf } from "./terrain";
 import { recorded, updated, whoIs, withOf, type Game } from "./world";
 
@@ -66,6 +67,17 @@ const rewarded = (
   );
 };
 
+/** Pays `hunter`, and grows the bailiff's settlement. */
+const claimed = (
+  game: Game,
+  hunter: string,
+  bounty: Bounty,
+  bailiff: Entity,
+): Game => {
+  const paid = rewarded(game, hunter, bounty, bailiff);
+  return bailiff.home ? grown(paid, bailiff.home.at) : paid;
+};
+
 /** The nearest spawner hostile to `faction` around `from` above `level`, searched in widening rings. */
 const lairAbove = (
   { land }: Game,
@@ -88,7 +100,7 @@ const lairAbove = (
   return undefined;
 };
 
-/** Pays `hunter`'s slain bounty, then posts the next if none is outstanding. */
+/** Pays `hunter`'s slain bounty, growing the bailiff's settlement, then posts the next if none is outstanding. */
 export const bountied = (
   game: Game,
   hunter: string,
@@ -98,7 +110,7 @@ export const bountied = (
   if (!questing) return game;
   const { bounty } = questing;
   if (bounty && !bounty.isSlain) return game;
-  const paid = bounty ? rewarded(game, hunter, bounty, bailiff) : game;
+  const paid = bounty ? claimed(game, hunter, bounty, bailiff) : game;
   const { bountyLevel } = withOf(paid, hunter, "questing")!;
   const lair = lairAbove(paid, bailiff.at, bailiff.faction, bountyLevel);
   if (!lair) return paid;

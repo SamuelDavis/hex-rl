@@ -301,6 +301,108 @@ const CAVE: Sprite = [
 
 const EYES = "M17.2 12 h1.6 v1.4 h-1.6 Z M14 12 h1.6 v1.4 h-1.6 Z";
 
+/** Townsfolk: a hooded figure, its eyes, and what it carries. */
+const FOLK = (cloak: Tone, eyes: Tone, ...carried: Layer[]): Sprite => [
+  ...HOOD(cloak),
+  { tone: eyes, path: EYES },
+  ...carried,
+];
+
+const MINER = FOLK(
+  "ink",
+  "bone",
+  { tone: "bone", path: "M22.5 29 L27.5 7 L28.8 7.3 L23.8 29.3 Z" },
+  { tone: "blood", path: "M22 7.5 C25 4.5 30 5 32 8.5 C29.5 7 26 7 22 7.5 Z" },
+);
+
+const CARPENTER = FOLK(
+  "leaf",
+  "bone",
+  { tone: "bone", path: "M24 29 L26 8 L27.3 8.1 L25.3 29.1 Z" },
+  { tone: "blood", path: "M26.5 7 L31 6 L31.5 12.5 L26.3 11.5 Z" },
+);
+
+const FOOTMAN = FOLK(
+  "ink",
+  "bone",
+  { tone: "bone", path: "M25.5 30 L26.5 5 L27.7 5 L27 30 Z" },
+  { tone: "bone", path: "M27.1 1 L29 6 L25.4 6 Z" },
+  {
+    tone: "blood",
+    path: "M3.5 15 L11.5 15 L11.5 22 C11.5 26 7.5 28 7.5 28 C7.5 28 3.5 26 3.5 22 Z",
+  },
+  { tone: "etch", path: "M7.5 15.5 L7.5 27 M4 19.5 L11 19.5" },
+);
+
+const BLACKSMITH = FOLK(
+  "blood",
+  "bone",
+  { tone: "bone", path: "M24 29 L25.5 12 L26.8 12.1 L25.3 29.1 Z" },
+  { tone: "ink", path: "M22.5 8 L29.5 8.6 L29.2 12.6 L22.2 12 Z" },
+);
+
+const KNIGHT: Sprite = [
+  ...HOOD("bone"),
+  { tone: "ink", path: "M11.5 11.5 L20.5 11.5 L20.5 13.5 L11.5 13.5 Z" },
+  { tone: "blood", path: "M14 2.5 C15 0 17 0 18 2.5 L16 4 Z" },
+  { tone: "bone", path: "M22 22 L31 2 L32 2.6 L23.5 23 Z" },
+  { tone: "blood", path: "M21 20 L26 21.5 L24.5 25 L20 23.5 Z" },
+];
+
+const FARMER = FOLK(
+  "leaf",
+  "blood",
+  { tone: "bone", path: "M25 29.5 L26.5 6 L27.7 6.1 L26.3 29.6 Z" },
+  { tone: "bone", path: "M27 6 C22 3 15 4 13 8 C17 6 22 6 27 7.5 Z" },
+);
+
+const FISHER = FOLK(
+  "bone",
+  "leaf",
+  { tone: "bone", path: "M23 26 L30.5 2 L31.5 2.4 L24.2 26.4 Z" },
+  { tone: "etch", path: "M31 2.2 C31.5 10 30 16 29.5 20" },
+  { tone: "blood", path: "M28.5 20 L30.5 20 L30.2 23 L28.8 23 Z" },
+);
+
+const MERCHANT = FOLK(
+  "blood",
+  "leaf",
+  {
+    tone: "bone",
+    path: "M20 21 C20 18.5 25 18.5 25 21 L26 25 C26 27.5 19 27.5 19 25 Z",
+  },
+  { tone: "etch", path: "M20.5 20.5 L24.5 20.5 M22.5 22 L22.5 25" },
+);
+
+const BARON = FOLK(
+  "blood",
+  "bone",
+  {
+    tone: "bone",
+    path: "M10.5 5.5 L12.5 2.5 L14.5 5 L16 2 L17.5 5 L19.5 2.5 L21.5 5.5 L21 7 L11 7 Z",
+  },
+  { tone: "bone", path: "M24.5 24 L27 4 L28.5 4.2 L26 24.2 Z" },
+  { tone: "ink", path: "M23 21 L29.5 21.8 L29.3 23.2 L22.8 22.4 Z" },
+);
+
+const DUKE: Sprite = [
+  { tone: "blood", path: "M4 30 L9 12 L23 12 L28 30 L22 28 L16 30 L10 28 Z" },
+  ...FOLK(
+    "ink",
+    "blood",
+    {
+      tone: "blood",
+      path: "M10 6 L11 0.5 L13.5 4 L16 0 L18.5 4 L21 0.5 L22 6 L21.5 8 L10.5 8 Z",
+    },
+    {
+      tone: "bone",
+      path: "M12.5 6 h1.5 v1 h-1.5 Z M15.3 6 h1.5 v1 h-1.5 Z M18 6 h1.5 v1 h-1.5 Z",
+    },
+    { tone: "bone", path: "M24.5 26 L27 3 L28.5 3.2 L26 26.2 Z" },
+    { tone: "bone", path: "M23 22 L29.5 22.8 L29.3 24.2 L22.8 23.4 Z" },
+  ),
+];
+
 const PEASANT: Sprite = [
   ...HOOD("leaf"),
   { tone: "bone", path: EYES },
@@ -338,6 +440,137 @@ const TOWN: Sprite = [
     tone: "etch",
     path: "M7 14.5 L25 14.5 M10.5 11.5 L21.5 11.5 M14 8.5 L18 8.5",
   },
+];
+
+/** A building of town folk: walls, a door and a `leaf` roof, which themes tint by biome; then what marks its trade. */
+const HALL = (...marks: Layer[]): Sprite => [
+  { tone: "bone", path: "M5 18 L27 18 L27 30 L5 30 Z" },
+  { tone: "ink", path: "M14 30 L14 24 C14 22 18 22 18 24 L18 30 Z" },
+  { tone: "leaf", path: "M2 19.5 L8 10 L24 10 L30 19.5 Z" },
+  { tone: "etch", path: "M6 16.5 L26 16.5 M8 13 L24 13" },
+  ...marks,
+];
+
+const KEEP: Sprite = [
+  { tone: "bone", path: "M8 8 L24 8 L24 30 L8 30 Z" },
+  {
+    tone: "bone",
+    path: "M7 4 h3.5 v4.5 h-3.5 Z M12.25 4 h3.5 v4.5 h-3.5 Z M17.5 4 h3.5 v4.5 h-3.5 Z M22 4 h3 v4.5 h-3 Z",
+  },
+  { tone: "ink", path: "M13 30 L13 23 C13 20 19 20 19 23 L19 30 Z" },
+  { tone: "ink", path: "M11 12 h2 v4 h-2 Z M19 12 h2 v4 h-2 Z" },
+  { tone: "etch", path: "M8 18 L24 18 M8 25 L12 25 M20 25 L24 25" },
+  { tone: "leaf", path: "M16 4 L16 -3 L23 -1 L16 1 Z" },
+];
+
+const CASTLE: Sprite = [
+  { tone: "bone", path: "M8 14 L24 14 L24 30 L8 30 Z" },
+  {
+    tone: "bone",
+    path: "M1 6 L8 6 L8 30 L1 30 Z M24 6 L31 6 L31 30 L24 30 Z",
+  },
+  {
+    tone: "bone",
+    path: "M0.5 3 h2.5 v3.5 h-2.5 Z M4 3 h2.5 v3.5 h-2.5 Z M25.5 3 h2.5 v3.5 h-2.5 Z M29 3 h2.5 v3.5 h-2.5 Z M9 11 h3 v3.5 h-3 Z M14.5 11 h3 v3.5 h-3 Z M20 11 h3 v3.5 h-3 Z",
+  },
+  {
+    tone: "ink",
+    path: "M12.5 30 L12.5 22 C12.5 18 19.5 18 19.5 22 L19.5 30 Z",
+  },
+  {
+    tone: "etch",
+    path: "M13 23 L19 23 M13 26 L19 26 M14.5 21 L14.5 30 M17.5 21 L17.5 30",
+  },
+  { tone: "ink", path: "M3.5 12 h2 v4 h-2 Z M26.5 12 h2 v4 h-2 Z" },
+  {
+    tone: "leaf",
+    path: "M4.5 3 L4.5 -4 L10 -2 L4.5 0 Z M27.5 3 L27.5 -4 L22 -2 L27.5 0 Z",
+  },
+];
+
+const GOLD_MINE: Sprite = [
+  ...MINE,
+  { tone: "leaf", path: "M2 7.5 L16 1 L30 7.5 Z" },
+  { tone: "blood", path: "M14.5 27 L17.5 27 L18 29 L14 29 Z" },
+];
+
+const SAWMILL = HALL(
+  { tone: "blood", path: "M21 4 A5 5 0 1 0 21 14 A5 5 0 1 0 21 4 Z" },
+  {
+    tone: "etch",
+    path: "M21 4 L21 14 M16 9 L26 9 M17.5 5.5 L24.5 12.5 M24.5 5.5 L17.5 12.5",
+  },
+  { tone: "bone", path: "M1 27 h6 v3 h-6 Z M1.5 24 h5 v3 h-5 Z" },
+);
+
+const BARRACKS: Sprite = [
+  { tone: "bone", path: "M2 18 L30 18 L30 30 L2 30 Z" },
+  { tone: "ink", path: "M14 30 L14 24 C14 22 18 22 18 24 L18 30 Z" },
+  { tone: "ink", path: "M5 21 h3 v3 h-3 Z M24 21 h3 v3 h-3 Z" },
+  { tone: "leaf", path: "M0 19.5 L5 11 L27 11 L32 19.5 Z" },
+  { tone: "etch", path: "M3 15.5 L29 15.5" },
+  { tone: "blood", path: "M16 11 L16 2 L22 4 L16 6 Z" },
+];
+
+const SMITHY = HALL(
+  { tone: "ink", path: "M21 2 h4 v9 h-4 Z" },
+  { tone: "blood", path: "M22 2 C21 0 24 -1 24 1 C25 -1 26 1 25 2 Z" },
+  {
+    tone: "ink",
+    path: "M1 25 L8 25 L7 27 L5.5 27 L5.5 30 L3.5 30 L3.5 27 L2 27 Z",
+  },
+);
+
+const STABLES: Sprite = [
+  { tone: "bone", path: "M2 19 L30 19 L30 30 L2 30 Z" },
+  {
+    tone: "ink",
+    path: "M5 30 L5 23 L11 23 L11 30 Z M13 30 L13 23 L19 23 L19 30 Z M21 30 L21 23 L27 23 L27 30 Z",
+  },
+  {
+    tone: "etch",
+    path: "M5 26.5 L11 26.5 M13 26.5 L19 26.5 M21 26.5 L27 26.5",
+  },
+  { tone: "leaf", path: "M0 20 L4 13 L28 13 L32 20 Z" },
+  {
+    tone: "blood",
+    path: "M13.5 8 C13.5 4 18.5 4 18.5 8 L17.3 8 C17.3 5.6 14.7 5.6 14.7 8 Z",
+  },
+];
+
+const FARM = HALL(
+  { tone: "blood", path: "M23 30 C23 23 31 23 31 30 Z" },
+  { tone: "etch", path: "M24.5 27 L29.5 27 M25.5 25 L28.5 25" },
+  { tone: "etch", path: "M0.5 31 L8 31 M0.5 29 L4.5 29" },
+);
+
+const DOCKS: Sprite = [
+  { tone: "bone", path: "M1 22 L31 22 L31 24.5 L1 24.5 Z" },
+  {
+    tone: "bone",
+    path: "M3 24.5 h2 v6 h-2 Z M15 24.5 h2 v6 h-2 Z M27 24.5 h2 v6 h-2 Z",
+  },
+  { tone: "etch", path: "M1 23.2 L31 23.2 M8 22 L8 24.5 M22 22 L22 24.5" },
+  { tone: "blood", path: "M6 18 L26 18 L23 22 L9 22 Z" },
+  { tone: "bone", path: "M15.5 18 L15.5 3 L16.7 3 L16.7 18 Z" },
+  { tone: "leaf", path: "M17 4 L26 16 L17 16 Z" },
+];
+
+const BAZAAR: Sprite = [
+  { tone: "leaf", path: "M1 16 L9 6 L17 16 Z M15 16 L23 6 L31 16 Z" },
+  {
+    tone: "bone",
+    path: "M2 16 L16 16 L16 30 L2 30 Z M16 16 L30 16 L30 30 L16 30 Z",
+  },
+  {
+    tone: "blood",
+    path: "M2 16 L6.5 16 L6.5 20 L2 20 Z M11 16 L16 16 L16 20 L11 20 Z M20 16 L25 16 L25 20 L20 20 Z",
+  },
+  {
+    tone: "ink",
+    path: "M5 30 L5 23 L13 23 L13 30 Z M19 30 L19 23 L27 23 L27 30 Z",
+  },
+  { tone: "blood", path: "M7 26 h4 v2 h-4 Z M21 26 h4 v2 h-4 Z" },
 ];
 
 export const TREE: Sprite = [
@@ -398,6 +631,24 @@ export const CREATURE_FIGURES: Record<CreatureKind, Figure> = {
   bailiff: { sprite: BAILIFF, scale: 1.05 },
   reeve: { sprite: REEVE, scale: 0.95 },
   peasant: { sprite: PEASANT, scale: 0.9 },
+  baron: { sprite: BARON, scale: 1.15 },
+  duke: { sprite: DUKE, scale: 1.25 },
+  miner: { sprite: MINER, scale: 0.9 },
+  "mine captain": { sprite: MINER, scale: 1.1 },
+  carpenter: { sprite: CARPENTER, scale: 0.95 },
+  "master carpenter": { sprite: CARPENTER, scale: 1.1 },
+  footman: { sprite: FOOTMAN, scale: 1 },
+  sergeant: { sprite: FOOTMAN, scale: 1.15 },
+  blacksmith: { sprite: BLACKSMITH, scale: 1 },
+  "master smith": { sprite: BLACKSMITH, scale: 1.15 },
+  knight: { sprite: KNIGHT, scale: 1.05 },
+  marshal: { sprite: KNIGHT, scale: 1.2 },
+  farmer: { sprite: FARMER, scale: 0.9 },
+  yeoman: { sprite: FARMER, scale: 1.05 },
+  fisher: { sprite: FISHER, scale: 0.9 },
+  harbourmaster: { sprite: FISHER, scale: 1.05 },
+  merchant: { sprite: MERCHANT, scale: 0.95 },
+  "caravan master": { sprite: MERCHANT, scale: 1.1 },
 };
 
 export const SPAWNER_SPRITES: Record<SpawnerKind, Sprite> = {
@@ -407,4 +658,14 @@ export const SPAWNER_SPRITES: Record<SpawnerKind, Sprite> = {
   mine: MINE,
   cave: CAVE,
   town: TOWN,
+  keep: KEEP,
+  castle: CASTLE,
+  "gold mine": GOLD_MINE,
+  sawmill: SAWMILL,
+  barracks: BARRACKS,
+  smithy: SMITHY,
+  stables: STABLES,
+  farm: FARM,
+  docks: DOCKS,
+  bazaar: BAZAAR,
 };

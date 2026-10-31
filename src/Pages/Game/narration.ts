@@ -211,5 +211,11 @@ export const narrationOf = (event: GameEvent): string => {
       return `${actor} slays ${the(event.target)}; a bailiff will pay.`;
     case "rewarded":
       return `${actor} pays ${the(event.target)} ${event.gold} gold.`;
+    case "grew":
+      return `${actor} grows to level ${event.level}.`;
+    case "rose":
+      return `${actor} rises into a ${SPAWNERS[event.into].name}.`;
+    case "founded":
+      return `${actor} founds ${the(event.target)}.`;
   }
 };

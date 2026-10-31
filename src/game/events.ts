@@ -120,6 +120,9 @@ export type GameEvent = { readonly cause?: Cause } & (
       readonly level: number;
     }
   | { readonly kind: "bountySlain"; readonly source: Who; readonly target: Who }
+  | { readonly kind: "grew"; readonly source: Who; readonly level: number }
+  | { readonly kind: "rose"; readonly source: Who; readonly into: SpawnerKind }
+  | { readonly kind: "founded"; readonly source: Who; readonly target: Who }
   | {
       readonly kind: "rewarded";
       readonly source: Who;
